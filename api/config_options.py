@@ -1,8 +1,7 @@
 """Assembles the option set shown in the frontend config card."""
 
-from tradingagents.default_config import DEFAULT_CONFIG
-
 from api.schemas import ConfigOptions
+from tradingagents.default_config import DEFAULT_CONFIG
 
 _ANALYSTS = [
     {"value": "market", "label": "市场分析师"},

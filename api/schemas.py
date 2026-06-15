@@ -1,6 +1,6 @@
 """Pydantic request/response contracts for the WebUI API."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,9 +19,9 @@ class AnalysisRequest(BaseModel):
     )
     research_depth: Literal[1, 3, 5] = 3
     output_language: str = "Chinese"
-    llm_provider: Optional[str] = None
-    deep_think_llm: Optional[str] = None
-    quick_think_llm: Optional[str] = None
+    llm_provider: str | None = None
+    deep_think_llm: str | None = None
+    quick_think_llm: str | None = None
 
     @field_validator("analysts")
     @classmethod
@@ -35,7 +35,7 @@ class HistorySummary(BaseModel):
     run_id: str
     ticker: str
     trade_date: str
-    decision: Optional[Decision]
+    decision: Decision | None
     status: RunStatus
     created_at: str
 
@@ -45,18 +45,18 @@ class RunResult(BaseModel):
     ticker: str
     trade_date: str
     asset_type: str
-    decision: Optional[Decision]
+    decision: Decision | None
     status: RunStatus
     config: dict
-    result: Optional[dict]
+    result: dict | None
     created_at: str
-    completed_at: Optional[str]
+    completed_at: str | None
 
 
 class ConfigOptions(BaseModel):
     analysts: list[dict]
     research_depth: list[dict]
     languages: list[str]
-    configured_provider: Optional[str]
-    configured_deep_llm: Optional[str]
-    configured_quick_llm: Optional[str]
+    configured_provider: str | None
+    configured_deep_llm: str | None
+    configured_quick_llm: str | None

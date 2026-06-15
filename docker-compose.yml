@@ -30,6 +30,17 @@ services:
     profiles:
       - ollama
 
+  tradingagents-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/.tradingagents:/root/.tradingagents
+
 volumes:
   tradingagents_data:
   ollama_data:

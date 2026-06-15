@@ -1,6 +1,10 @@
 """Bridges TradingAgentsGraph.stream() to SSE events via a background thread."""
 
+import queue
 import time
+import traceback
+
+from api.store import Store
 
 # section field name -> (agent name, team)
 REPORT_SECTIONS: dict[str, tuple[str, str]] = {
@@ -42,12 +46,6 @@ def chunk_to_events(chunk: dict, seen: set[str]) -> list[dict]:
             }
         )
     return events
-
-
-import queue
-import traceback
-
-from api.store import Store
 
 
 class AnalysisRunner:
