@@ -25,3 +25,10 @@ def test_configured_provider_reflects_config(monkeypatch):
     opts = build_config_options()
     assert opts.configured_provider == "openai"
     assert opts.configured_deep_llm == "gpt-5.5"
+
+
+def test_get_config_options_route(client):
+    resp = client.get("/api/config/options")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "analysts" in body and "research_depth" in body
