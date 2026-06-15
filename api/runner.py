@@ -65,10 +65,20 @@ class AnalysisRunner:
 
     def run(self, run_id, graph, init_state, decision, final_state) -> None:
         seen: set[str] = set()
+        accumulated: dict = {}
+        stream_args = getattr(graph, "_stream_args", {}) or {}
         try:
-            for chunk in graph.graph.stream(init_state):
+            for chunk in graph.graph.stream(init_state, **stream_args):
+                if isinstance(chunk, dict):
+                    accumulated.update(chunk)
                 for event in chunk_to_events(chunk, seen):
                     self._q.put(event)
+
+            if final_state is None:
+                final_state = accumulated
+            if decision is None:
+                decision = _extract_decision(graph, final_state)
+
             self._store.complete_run(
                 run_id, decision=decision or "Hold", result=final_state or {}
             )
@@ -84,9 +94,28 @@ class AnalysisRunner:
                     },
                 }
             )
-        except Exception as exc:  # noqa: BLE001 - surface any failure to the client
+        except Exception as exc:  # noqa: BLE001
             traceback.print_exc()
             self._store.mark_error(run_id, str(exc))
             self._q.put({"event": "error", "data": {"message": str(exc)}})
         finally:
-            self._q.put(None)  # sentinel: stream finished
+            self._q.put(None)
+
+
+def _extract_decision(graph, final_state: dict) -> str | None:
+    """Best-effort: derive the 5-tier decision from final_trade_decision prose."""
+    text = (final_state or {}).get("final_trade_decision", "")
+    if not text:
+        return None
+    processor = getattr(graph, "process_signal", None)
+    if callable(processor):
+        try:
+            return processor(text)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        from tradingagents.agents.utils.rating import parse_rating
+
+        return parse_rating(text)
+    except Exception:  # noqa: BLE001
+        return None
