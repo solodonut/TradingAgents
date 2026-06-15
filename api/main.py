@@ -32,3 +32,7 @@ def get_store() -> Store:
 
 
 app.include_router(config_routes.router)
+
+from api.routes import history as history_routes  # noqa: E402
+
+app.include_router(history_routes.router)
