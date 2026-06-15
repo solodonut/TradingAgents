@@ -23,6 +23,8 @@ app.add_middleware(
 # Single-user invariant: only one analysis runs at a time.
 app.state.store = None
 app.state.run_lock = threading.Lock()
+app.state.queues = {}
+app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
 
 
 def get_store() -> Store:
@@ -36,3 +38,7 @@ app.include_router(config_routes.router)
 from api.routes import history as history_routes  # noqa: E402
 
 app.include_router(history_routes.router)
+
+from api.routes import analysis as analysis_routes  # noqa: E402
+
+app.include_router(analysis_routes.router)
