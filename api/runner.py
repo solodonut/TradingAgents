@@ -42,3 +42,51 @@ def chunk_to_events(chunk: dict, seen: set[str]) -> list[dict]:
             }
         )
     return events
+
+
+import queue
+import traceback
+
+from api.store import Store
+
+
+class AnalysisRunner:
+    """Runs a graph stream synchronously, pushing SSE events onto a queue.
+
+    Designed to be invoked inside a background thread. ``decision`` and
+    ``final_state`` are precomputed by the caller (the route handler), because
+    TradingAgentsGraph stores them on the instance after ``propagate``; here we
+    accept them explicitly so the runner stays testable with a fake graph.
+    """
+
+    def __init__(self, store: Store, event_queue: "queue.Queue"):
+        self._store = store
+        self._q = event_queue
+
+    def run(self, run_id, graph, init_state, decision, final_state) -> None:
+        seen: set[str] = set()
+        try:
+            for chunk in graph.graph.stream(init_state):
+                for event in chunk_to_events(chunk, seen):
+                    self._q.put(event)
+            self._store.complete_run(
+                run_id, decision=decision or "Hold", result=final_state or {}
+            )
+            self._q.put(
+                {
+                    "event": "done",
+                    "data": {
+                        "decision": decision or "Hold",
+                        "final_trade_decision": (final_state or {}).get(
+                            "final_trade_decision", ""
+                        ),
+                        "run_id": run_id,
+                    },
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - surface any failure to the client
+            traceback.print_exc()
+            self._store.mark_error(run_id, str(exc))
+            self._q.put({"event": "error", "data": {"message": str(exc)}})
+        finally:
+            self._q.put(None)  # sentinel: stream finished
