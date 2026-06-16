@@ -103,14 +103,14 @@ def no_proxy_session():
             os.environ["no_proxy"] = prior_no_proxy_lc
 
 
-def ak_retry(func, max_retries: int = 3, base_delay: float = 1.5):
+def ak_retry(func, max_retries: int = 6, base_delay: float = 1.0):
     """Run an AKShare call with proxy bypass and exponential backoff.
 
-    East Money intermittently drops connections (``RemoteDisconnected``), so a
-    single attempt is unreliable. This wraps the call in ``no_proxy_session``
-    and retries transient network errors with exponential backoff. Non-network
-    exceptions (bad symbol, parse errors) propagate immediately — retrying them
-    would only waste time.
+    East Money intermittently drops connections (``RemoteDisconnected``), often
+    several times in a row, so a small retry budget is unreliable. This wraps
+    the call in ``no_proxy_session`` and retries transient network errors with
+    capped exponential backoff. Non-network exceptions (bad symbol, parse
+    errors) propagate immediately — retrying them would only waste time.
     """
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
@@ -120,7 +120,7 @@ def ak_retry(func, max_retries: int = 3, base_delay: float = 1.5):
         except _RETRYABLE_EXCEPTIONS as exc:
             last_exc = exc
             if attempt < max_retries:
-                delay = base_delay * (2 ** attempt)
+                delay = min(base_delay * (2 ** attempt), 8.0)
                 logger.warning(
                     "AKShare network error (attempt %d/%d), retrying in %.1fs: %s",
                     attempt + 1, max_retries, delay, exc,
@@ -190,6 +190,16 @@ def _exchange_for_code(code: str) -> str:
     if code.startswith(("43", "83", "87", "88", "92")):
         return "BJ"
     return "SH"
+
+
+def is_etf_code(code: str) -> bool:
+    """True when a bare 6-digit code is a fund/ETF rather than a common stock.
+
+    Fund/ETF code ranges: Shenzhen 15/16/18, Shanghai 50/51/52/56/58. These
+    are served by East Money's ``fund_etf_hist_em`` endpoint, NOT the
+    ``stock_zh_a_hist`` endpoint that common stocks (60/68 SH, 00/30 SZ) use.
+    """
+    return code.startswith(("15", "16", "18", "50", "51", "52", "56", "58"))
 
 
 def is_a_share(symbol: str) -> bool:

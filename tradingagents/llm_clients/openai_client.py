@@ -197,10 +197,12 @@ OPENAI_COMPATIBLE_PROVIDERS: dict[str, ProviderSpec] = {
     "ollama":     ProviderSpec(base_url="http://localhost:11434/v1", base_url_env="OLLAMA_BASE_URL",
                                key_optional=True, placeholder_key="ollama"),
     # IBM ICA (Internal/Enterprise model gateway): OpenAI-compatible Chat
-    # Completions at the ICA endpoint, serving Claude / GPT / Gemini / Granite
-    # behind bare model IDs (claude-opus-4-8, gpt-5.4-gus, ...). Reachable via
-    # the corporate network, so it must NOT use the AKShare proxy bypass.
-    "ibm_ica":    ProviderSpec(base_url="https://api.nextgen-beta.ica.ibm.com/ica/v1",
+    # Completions at the ICA business-layer endpoint (/chat-models), serving
+    # Claude / GPT / Gemini / Granite behind bare model IDs (claude-opus-4-8,
+    # gpt-5.4-gus, ...) and authenticated with the long ICA REST API key.
+    # Reachable via the corporate network, so it must NOT use the AKShare proxy
+    # bypass. langchain appends /chat/completions -> .../ica/v1/chat-models/chat/completions.
+    "ibm_ica":    ProviderSpec(base_url="https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models",
                                base_url_env="IBM_ICA_BASE_URL"),
     # Generic endpoint: user supplies base_url; key optional (keyless local).
     "openai_compatible": ProviderSpec(require_base_url=True, key_optional=True),

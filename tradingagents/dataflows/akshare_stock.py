@@ -23,6 +23,7 @@ from .akshare_utils import (
     cached_call,
     display_symbol,
     is_a_share,
+    is_etf_code,
     to_bare_code,
 )
 from .errors import NoMarketDataError
@@ -56,8 +57,10 @@ def _fetch_hist(code: str, start: str, end: str, adjust: str = "qfq") -> pd.Data
     end_compact = end.replace("-", "")
     cache_key = f"hist_{code}_{adjust}_{start_compact}_{end_compact}"
 
+    endpoint = ak.fund_etf_hist_em if is_etf_code(code) else ak.stock_zh_a_hist
+
     def _fetch():
-        return ak_retry(lambda: ak.stock_zh_a_hist(
+        return ak_retry(lambda: endpoint(
             symbol=code,
             period="daily",
             start_date=start_compact,

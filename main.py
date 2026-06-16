@@ -12,7 +12,8 @@ config = DEFAULT_CONFIG.copy()
 ta = TradingAgentsGraph(debug=True, config=config)
 
 # forward propagate
-_, decision = ta.propagate("NVDA", "2024-05-10")
+# A股案例 159241.SZ（航空航天ETF天弘），经 akshare_auto_route 自动走 AKShare。
+_, decision = ta.propagate("159241.SZ", "2026-06-12")
 print(decision)
 
 # Memorize mistakes and reflect
