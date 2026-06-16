@@ -5,9 +5,11 @@ import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 export function ConfigCard({
   options,
   onStart,
+  running = false,
 }: {
   options: ConfigOptions;
   onStart: (req: AnalysisRequest) => void;
+  running?: boolean;
 }) {
   const [ticker, setTicker] = useState("NVDA");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -47,7 +49,7 @@ export function ConfigCard({
           <button
             key={t}
             onClick={() => setAssetType(t)}
-            className={`px-3 py-1 rounded text-xs font-mono uppercase tracking-wider transition-colors ${
+            className={`px-3 py-1 rounded text-xs font-mono uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
               assetType === t
                 ? "bg-emerald-600 text-black"
                 : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
@@ -67,7 +69,7 @@ export function ConfigCard({
               key={a.value}
               disabled={disabled}
               onClick={() => toggle(a.value)}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
+              className={`px-3 py-1 rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
                 on ? "bg-emerald-600 text-black" : "bg-zinc-800 text-zinc-300"
               } ${disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-zinc-700"}`}
             >
@@ -82,7 +84,7 @@ export function ConfigCard({
           <button
             key={d.value}
             onClick={() => setDepth(d.value as 1 | 3 | 5)}
-            className={`px-3 py-1 rounded text-sm transition-colors ${
+            className={`px-3 py-1 rounded text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
               depth === d.value
                 ? "bg-emerald-600 text-black"
                 : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
@@ -105,7 +107,8 @@ export function ConfigCard({
       </div>
 
       <button
-        className="w-full bg-emerald-500 text-black font-bold py-2 rounded hover:bg-emerald-400 transition-colors"
+        disabled={running}
+        className="w-full bg-emerald-500 text-black font-bold py-2 rounded transition-colors hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
         onClick={() =>
           onStart({
             ticker,
@@ -122,7 +125,9 @@ export function ConfigCard({
           })
         }
       >
-        🚀 开始分析
+        <span className="font-mono uppercase tracking-wider">
+          {running ? "分析进行中…" : "► 开始分析"}
+        </span>
       </button>
     </div>
   );

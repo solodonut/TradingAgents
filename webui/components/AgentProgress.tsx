@@ -20,10 +20,17 @@ export function AgentProgress({ statuses }: { statuses: Record<string, string> }
             : s === "working"
               ? "text-amber-400"
               : "text-zinc-600";
-        const mark = s === "done" ? "✓" : s === "working" ? "⟳" : "·";
+        const working = s === "working";
+        const mark = s === "done" ? "✓" : working ? "⟳" : "·";
         return (
           <span key={a.id} className={`${color} tabular-nums`}>
-            {mark} {a.label}
+            <span
+              className={`inline-block ${working ? "animate-spin motion-reduce:animate-none" : ""}`}
+              aria-hidden="true"
+            >
+              {mark}
+            </span>{" "}
+            {a.label}
           </span>
         );
       })}
