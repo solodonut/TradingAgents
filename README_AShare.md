@@ -176,11 +176,23 @@ ICA 是 OpenAI 兼容端点，已注册为命名 provider `ibm_ica`。
 | 配置项 | 值 |
 |---|---|
 | `llm_provider` | `ibm_ica` |
-| baseURL（默认，内置） | `https://api.nextgen-beta.ica.ibm.com/ica/v1` |
-| API key 环境变量 | `IBM_ICA_API_KEY` |
+| baseURL（默认，内置） | `https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models`（业务层端点） |
+| 最终推理 URL | `.../ica/v1/chat-models/chat/completions` |
+| API key 环境变量 | `IBM_ICA_API_KEY`（业务层长 key） |
 | baseURL 覆盖（可选） | `IBM_ICA_BASE_URL` |
 
-可用模型（实测）：
+### 当前启用的模型（默认配置）
+
+`default_config.py` 默认启用以下两个模型：
+
+| 角色 | 模型 ID | 描述 |
+|---|---|---|
+| **深思考** `deep_think_llm` | `claude-opus-4-8` | Claude 4.8 Opus，最新旗舰，用于复杂推理：研究员辩论、研究经理、交易决策、风控、组合经理最终决策 |
+| **快思考** `quick_think_llm` | `claude-haiku-4-5` | Claude 4.5 Haiku，快速且廉价，用于分析师的工具调用循环（行情/情绪/新闻/基本面取数与初步整理） |
+
+> ICA 走的是**业务层端点** `/chat-models`，由**长 key**（ICA REST API key）认证；langchain 会在 baseURL 后自动追加 `/chat/completions`。该端点实测支持 streaming 与 tool calling，满足 agent 的 ReAct 循环需求。
+
+### 可选模型（实测可用）
 
 - **深度推理**：`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`gpt-5.4-gus`、`gemini-3.1-pro-preview`
 - **快速任务**：`claude-haiku-4-5`、`claude-sonnet-4-6`、`gpt-5.1-chat-gus`、`ibm/granite-4-h-small`
