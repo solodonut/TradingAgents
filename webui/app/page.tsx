@@ -7,6 +7,7 @@ import { MessageBubble } from "@/components/MessageBubble";
 import { DecisionCard } from "@/components/DecisionCard";
 import { HistorySidebar } from "@/components/HistorySidebar";
 import { RunDetail } from "@/components/RunDetail";
+import { RuntimeStatusPanel } from "@/components/RuntimeStatusPanel";
 import {
   deleteHistory,
   getConfigOptions,
@@ -35,6 +36,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [liveRuntimeStatus, setLiveRuntimeStatus] = useState<RunStatusDetail | null>(null);
+  const [liveRuntimeError, setLiveRuntimeError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
@@ -53,6 +56,31 @@ export default function Home() {
     refreshHistory();
     return () => unsubscribeRef.current?.();
   }, []);
+
+  useEffect(() => {
+    if (!currentRunId || !running) return;
+    let alive = true;
+
+    const refreshRuntime = () => {
+      getAnalysisStatus(currentRunId)
+        .then((s) => {
+          if (!alive) return;
+          setLiveRuntimeStatus(s);
+          setLiveRuntimeError(null);
+        })
+        .catch((err) => {
+          if (!alive) return;
+          setLiveRuntimeError((err as Error).message);
+        });
+    };
+
+    refreshRuntime();
+    const timer = window.setInterval(refreshRuntime, 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [currentRunId, running]);
 
   const exitDetail = () => {
     setSelectedId(null);
@@ -117,6 +145,8 @@ export default function Home() {
     setDecision(null);
     setError(null);
     setRunning(true);
+    setLiveRuntimeStatus(null);
+    setLiveRuntimeError(null);
     setCanceling(false);
     try {
       const runId = await startAnalysis(req);
@@ -145,6 +175,8 @@ export default function Home() {
       setRunning(false);
       setCanceling(false);
       setCurrentRunId(null);
+      setLiveRuntimeStatus(null);
+      setLiveRuntimeError(null);
       const msg = (err as Error).message;
       setError(
         msg === "已有分析正在运行"
@@ -170,6 +202,10 @@ export default function Home() {
         setDetail(next);
         const status = await getAnalysisStatus(runId).catch(() => null);
         setRuntimeStatus(status);
+      }
+      if (currentRunId === runId) {
+        const status = await getAnalysisStatus(runId).catch(() => null);
+        setLiveRuntimeStatus(status);
       }
       setCanceling(false);
     } catch (err) {
@@ -302,6 +338,12 @@ export default function Home() {
                       停止分析
                     </button>
                   </div>
+                )}
+                {running && (
+                  <RuntimeStatusPanel
+                    runtime={liveRuntimeStatus}
+                    runtimeError={liveRuntimeError}
+                  />
                 )}
                 {messages.map((m, i) => (
                   <MessageBubble key={i} agent={m.agent} content={m.content} />
