@@ -33,11 +33,14 @@ export function RunDetail({ run }: { run: RunResult }) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-zinc-700/80 bg-zinc-900 px-3 py-2.5 font-mono text-sm">
-        <div className="text-zinc-200">
+      <div className="rounded-lg border border-border bg-card px-3 py-3 font-mono text-sm">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+          Archived Run
+        </div>
+        <div className="mt-1 text-foreground">
           {run.ticker} · {run.trade_date}
         </div>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+        <div className="mt-2 flex flex-wrap gap-1.5 text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
           <span>状态 {run.status}</span>
           <span>开始 {fmtTime(run.created_at)}</span>
           <span>结束 {fmtTime(run.completed_at)}</span>
@@ -45,19 +48,19 @@ export function RunDetail({ run }: { run: RunResult }) {
       </div>
 
       {run.status === "running" && (
-        <div className="rounded border border-amber-800/60 bg-amber-950/30 px-3 py-2 font-mono text-xs text-amber-400">
-          仍在进行 — 以下为目前已生成的部分
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs text-amber-300">
+          仍在进行，以下为目前已生成的部分
         </div>
       )}
 
       {run.status === "error" && (
-        <div className="rounded border border-red-800 bg-red-950/40 px-3 py-2 font-mono text-sm text-red-400">
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
           该分析以错误结束
         </div>
       )}
 
       {isEmpty && run.status !== "error" && (
-        <div className="rounded border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-500">
+        <div className="rounded-md border border-dashed border-border bg-card px-3 py-3 font-mono text-xs text-muted-foreground">
           暂无可显示的报告内容
         </div>
       )}

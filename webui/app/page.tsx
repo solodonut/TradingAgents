@@ -1,4 +1,5 @@
 "use client";
+import { ArrowLeft, Activity, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConfigCard } from "@/components/ConfigCard";
 import { AgentProgress } from "@/components/AgentProgress";
@@ -37,7 +38,7 @@ export default function Home() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const refreshHistory = () => getHistory().then(setHistory);
+  const refreshHistory = () => getHistory().then(setHistory).catch(() => setHistory([]));
 
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
@@ -112,77 +113,145 @@ export default function Home() {
     !inDetailMode &&
     !running &&
     messages.length === 0 &&
-    !decision &&
-    history.length === 0;
+    !decision;
+  const latestMessage = messages.at(-1);
+  const completedAgents = Object.values(statuses).filter((s) => s === "done").length;
+  const workingAgents = Object.values(statuses).filter((s) => s === "working").length;
 
   return (
-    <div className="flex h-screen bg-black text-zinc-200">
-      <HistorySidebar
-        items={history}
-        selectedId={selectedId}
-        onOpen={onOpenDetail}
-        onDelete={onDeleteHistory}
-      />
-      <main className="flex-1 overflow-y-auto p-4 space-y-3 max-w-3xl mx-auto">
-        <h1 className="font-mono text-emerald-400 text-lg tracking-tight uppercase">
-          TradingAgents 分析助手
-        </h1>
+    <div className="min-h-screen bg-background text-foreground lg:h-screen lg:overflow-hidden">
+      <div className="grid min-h-screen grid-cols-1 lg:h-screen lg:grid-cols-[18rem_minmax(0,1fr)_22rem]">
+        <div className="order-3 min-h-[18rem] lg:order-1 lg:min-h-0">
+          <HistorySidebar
+            items={history}
+            selectedId={selectedId}
+            onOpen={onOpenDetail}
+            onDelete={onDeleteHistory}
+          />
+        </div>
 
-        {inDetailMode ? (
-          <>
-            <button
-              onClick={exitDetail}
-              className="font-mono text-xs uppercase tracking-wider text-zinc-400 transition-colors hover:text-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded px-1 -mx-1"
-            >
-              ← 新分析
-            </button>
-            {detailLoading && (
-              <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                <div className="h-12 rounded-lg border border-zinc-800 bg-zinc-900" />
-                <div className="h-28 rounded-lg border border-zinc-800 bg-zinc-900" />
-                <div className="h-28 rounded-lg border border-zinc-800 bg-zinc-900" />
+        <main className="order-2 min-h-0 border-border lg:order-2 lg:h-screen lg:overflow-y-auto lg:border-r">
+          <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-4 lg:px-5">
+            <header className="mb-3 rounded-lg border border-border bg-card px-3 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+                    <Terminal className="size-3.5" aria-hidden="true" />
+                    TradingAgents WebUI
+                  </div>
+                  <h1 className="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                    研究工作台
+                  </h1>
+                </div>
+                <div className="flex flex-wrap gap-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
+                  <span className="rounded border border-border px-2 py-1">
+                    Done {completedAgents}
+                  </span>
+                  <span className="rounded border border-border px-2 py-1">
+                    Active {workingAgents}
+                  </span>
+                </div>
               </div>
+            </header>
+
+            {inDetailMode ? (
+              <section className="space-y-3">
+                <button
+                  type="button"
+                  onClick={exitDetail}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  新分析
+                </button>
+                {detailLoading && (
+                  <div className="space-y-3" aria-busy="true" aria-label="加载中">
+                    <div className="h-16 rounded-lg border border-border bg-card" />
+                    <div className="h-36 rounded-lg border border-border bg-card" />
+                    <div className="h-36 rounded-lg border border-border bg-card" />
+                  </div>
+                )}
+                {detailError && (
+                  <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
+                    {detailError}
+                  </div>
+                )}
+                {detail && <RunDetail run={detail} />}
+              </section>
+            ) : (
+              <section className="space-y-3">
+                {error && (
+                  <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
+                    {error}
+                  </div>
+                )}
+                {showEmptyState && (
+                  <div className="rounded-lg border border-dashed border-border bg-card px-4 py-5">
+                    <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+                      Waiting For Run
+                    </div>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground">
+                      输入代码与日期，配置分析师与研究深度后开始。报告会按 agent
+                      流式进入这里，最终由组合经理给出五档评级。
+                    </p>
+                    <p className="mt-2 font-mono text-xs text-muted-foreground">
+                      这是研究脚手架，不是投资建议。
+                    </p>
+                  </div>
+                )}
+                {running && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-amber-300">
+                    <Activity className="size-3.5" aria-hidden="true" />
+                    分析进行中
+                  </div>
+                )}
+                {messages.map((m, i) => (
+                  <MessageBubble key={i} agent={m.agent} content={m.content} />
+                ))}
+                {decision && <DecisionCard decision={decision.d} detail={decision.detail} />}
+              </section>
             )}
-            {detailError && (
-              <div className="rounded border border-red-800 bg-red-950/40 px-3 py-2 font-mono text-sm text-red-400">
-                {detailError}
+          </div>
+        </main>
+
+        <aside className="order-1 border-b border-border bg-background p-3 lg:order-3 lg:h-screen lg:overflow-y-auto lg:border-b-0">
+          <div className="space-y-3">
+            <div className="rounded-lg border border-border bg-card px-3 py-3">
+              <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+                Active Context
               </div>
-            )}
-            {detail && <RunDetail run={detail} />}
-          </>
-        ) : (
-          <>
+              <div className="mt-2 space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Mode</span>
+                  <span className="font-mono text-foreground">
+                    {inDetailMode ? "HISTORY" : running ? "LIVE" : "READY"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Latest</span>
+                  <span className="max-w-[12rem] truncate font-mono text-foreground">
+                    {latestMessage?.agent ?? (selectedId ? "DETAIL" : "NONE")}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {options && <ConfigCard options={options} onStart={onStart} running={running} />}
+
             {error && (
-              <div className="rounded border border-red-800 bg-red-950/40 px-3 py-2 text-red-400 font-mono text-sm">
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
                 {error}
               </div>
             )}
-            {showEmptyState && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 font-mono text-xs leading-relaxed text-zinc-400 space-y-1.5">
-                <p className="text-zinc-300">多智能体 LLM 分析 → 买入 / 持有 / 卖出</p>
-                <p>
-                  输入代码与日期，配置分析师与研究深度后开始。一组智能体将依次给出
-                  市场、情绪、新闻、基本面报告，经研究与风险辩论得出最终决策。
-                </p>
-                <p>分析将实时流式输出，通常需要几分钟。</p>
-              </div>
-            )}
-            {options && (
-              <ConfigCard options={options} onStart={onStart} running={running} />
-            )}
-            {running && (
-              <div className="rounded border border-amber-800/60 bg-amber-950/30 px-3 py-2 font-mono text-xs text-amber-400">
-                分析进行中…
-              </div>
-            )}
+
             <AgentProgress statuses={statuses} />
-            {messages.map((m, i) => (
-              <MessageBubble key={i} agent={m.agent} content={m.content} />
-            ))}
-            {decision && <DecisionCard decision={decision.d} detail={decision.detail} />}
-          </>
-        )}
-      </main>
+
+            {decision && (
+              <DecisionCard decision={decision.d} detail={decision.detail} compact />
+            )}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

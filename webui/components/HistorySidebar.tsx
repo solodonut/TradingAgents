@@ -1,5 +1,14 @@
 "use client";
+import { Trash2 } from "lucide-react";
 import type { HistorySummary } from "@/lib/types";
+
+const DECISION_TONE: Record<string, string> = {
+  Buy: "border-emerald-500/50 text-emerald-300",
+  Overweight: "border-emerald-500/40 text-emerald-200",
+  Hold: "border-border text-muted-foreground",
+  Underweight: "border-red-500/40 text-red-300",
+  Sell: "border-red-500/50 text-red-300",
+};
 
 export function HistorySidebar({
   items,
@@ -13,49 +22,78 @@ export function HistorySidebar({
   onDelete: (runId: string) => void;
 }) {
   return (
-    <aside className="w-64 shrink-0 border-r border-zinc-800 bg-zinc-950 p-2 space-y-1 overflow-y-auto">
-      <div className="text-xs text-zinc-500 font-mono uppercase tracking-wider px-2 py-1">
-        历史分析
+    <aside className="h-full overflow-y-auto border-border bg-sidebar text-sidebar-foreground lg:border-r">
+      <div className="sticky top-0 z-10 border-b border-sidebar-border bg-sidebar/95 px-3 py-3">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+          History Queue
+        </div>
+        <div className="mt-0.5 text-sm text-foreground">历史分析</div>
       </div>
-      {items.map((it) => {
-        const active = it.run_id === selectedId;
-        return (
-          <div
-            key={it.run_id}
-            role="button"
-            tabIndex={0}
-            aria-current={active ? "true" : undefined}
-            className={`group flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
-              active ? "bg-zinc-800" : "hover:bg-zinc-800"
-            }`}
-            onClick={() => onOpen(it.run_id)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onOpen(it.run_id);
-              }
-            }}
-          >
-            <span
-              className={`font-mono text-sm truncate ${
-                active ? "text-emerald-400" : "text-zinc-300"
+
+      <div className="space-y-1 p-2">
+        {items.length === 0 && (
+          <div className="rounded-md border border-dashed border-sidebar-border px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+            完成的分析会出现在这里。打开历史记录可以复盘每个 agent 的报告和最终决策。
+          </div>
+        )}
+
+        {items.map((it) => {
+          const active = it.run_id === selectedId;
+          const decisionTone = it.decision
+            ? DECISION_TONE[it.decision] ?? "border-border text-muted-foreground"
+            : "border-border text-muted-foreground";
+          return (
+            <div
+              key={it.run_id}
+              role="button"
+              tabIndex={0}
+              aria-current={active ? "true" : undefined}
+              className={`group rounded-md border px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                active
+                  ? "border-primary/60 bg-accent text-accent-foreground"
+                  : "border-transparent hover:border-sidebar-border hover:bg-sidebar-accent"
               }`}
-            >
-              {it.ticker} · {it.trade_date} · {it.decision ?? it.status}
-            </span>
-            <button
-              aria-label="删除该分析"
-              className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-red-400 text-xs shrink-0 ml-2 hover:text-red-300 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(it.run_id);
+              onClick={() => onOpen(it.run_id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpen(it.run_id);
+                }
               }}
             >
-              ✕
-            </button>
-          </div>
-        );
-      })}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate font-mono text-sm text-foreground">{it.ticker}</div>
+                  <div className="mt-0.5 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-muted-foreground">
+                    {it.trade_date}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label={`删除 ${it.ticker} ${it.trade_date} 分析`}
+                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-colors hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(it.run_id);
+                  }}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+              <div className="mt-2 flex items-center gap-1.5">
+                <span
+                  className={`rounded border px-1.5 py-0.5 font-mono text-[0.62rem] uppercase tracking-[0.12em] ${decisionTone}`}
+                >
+                  {it.decision ?? it.status}
+                </span>
+                <span className="truncate font-mono text-[0.62rem] uppercase tracking-[0.12em] text-muted-foreground">
+                  {it.status}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </aside>
   );
 }

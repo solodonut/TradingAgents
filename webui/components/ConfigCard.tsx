@@ -1,4 +1,5 @@
 "use client";
+import { LoaderCircle, Play } from "lucide-react";
 import { useState } from "react";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
@@ -26,109 +27,163 @@ export function ConfigCard({
   const toggle = (v: string) =>
     setAnalysts((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
 
+  const activeAnalysts = analysts.filter(
+    (a) => !(assetType === "crypto" && a === "fundamentals"),
+  );
+
   return (
-    <div className="rounded-lg border border-zinc-700/80 bg-zinc-900 p-4 space-y-3">
-      <div className="flex flex-wrap gap-2">
-        <input
-          className="flex-1 min-w-[180px] bg-zinc-800 px-2.5 py-1.5 rounded font-mono text-sm tracking-wide text-zinc-100 placeholder:text-zinc-500 border border-zinc-700 focus:border-emerald-500 focus:outline-none"
-          value={ticker}
-          onChange={(e) => setTicker(e.target.value.toUpperCase())}
-          placeholder="NVDA / 0700.HK / BTC-USD"
-        />
-        <input
-          type="date"
-          className="bg-zinc-800 px-2.5 py-1.5 rounded font-mono text-sm text-zinc-100 border border-zinc-700 focus:border-emerald-500 focus:outline-none"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+    <form
+      className="rounded-lg border border-border bg-card text-card-foreground"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onStart({
+          ticker,
+          trade_date: date,
+          asset_type: assetType,
+          analysts: activeAnalysts,
+          research_depth: depth,
+          output_language: language,
+          llm_provider: null,
+          deep_think_llm: null,
+          quick_think_llm: null,
+        });
+      }}
+    >
+      <div className="border-b border-border px-3 py-2">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+          Run Console
+        </div>
+        <div className="mt-0.5 text-sm text-foreground">新分析配置</div>
       </div>
 
-      {/* Asset type toggle */}
-      <div className="flex gap-1.5">
-        {(["stock", "crypto"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setAssetType(t)}
-            className={`px-3 py-1 rounded text-xs font-mono uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
-              assetType === t
-                ? "bg-emerald-600 text-black"
-                : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            {t === "stock" ? "股票" : "加密"}
-          </button>
-        ))}
-      </div>
+      <div className="space-y-4 p-3">
+        <fieldset className="space-y-2">
+          <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+            Instrument
+          </legend>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9.5rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_9.5rem]">
+            <label className="space-y-1">
+              <span className="sr-only">Ticker</span>
+              <input
+                className="h-9 w-full rounded-md border border-border bg-input px-2.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+                value={ticker}
+                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                placeholder="159241.SZ"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="sr-only">Trade date</span>
+              <input
+                type="date"
+                className="h-9 w-full rounded-md border border-border bg-input px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </label>
+          </div>
+        </fieldset>
 
-      <div className="flex flex-wrap gap-2">
-        {options.analysts.map((a) => {
-          const disabled = assetType === "crypto" && a.value === "fundamentals";
-          const on = analysts.includes(a.value) && !disabled;
-          return (
-            <button
-              key={a.value}
-              disabled={disabled}
-              onClick={() => toggle(a.value)}
-              className={`px-3 py-1 rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
-                on ? "bg-emerald-600 text-black" : "bg-zinc-800 text-zinc-300"
-              } ${disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-zinc-700"}`}
+        <fieldset className="space-y-2">
+          <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+            Scope
+          </legend>
+          <div className="grid grid-cols-2 rounded-md border border-border bg-background p-1">
+            {(["stock", "crypto"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setAssetType(t)}
+                aria-pressed={assetType === t}
+                className={`h-8 rounded-sm px-2 font-mono text-xs uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                  assetType === t
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {t === "stock" ? "股票" : "加密"}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+            Analysts
+          </legend>
+          <div className="grid grid-cols-2 gap-1.5">
+            {options.analysts.map((a) => {
+              const disabled = assetType === "crypto" && a.value === "fundamentals";
+              const on = analysts.includes(a.value) && !disabled;
+              return (
+                <button
+                  key={a.value}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggle(a.value)}
+                  aria-pressed={on}
+                  className={`min-h-8 rounded-md border px-2 py-1 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                    on
+                      ? "border-primary/70 bg-accent text-accent-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                  } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+                >
+                  {a.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+            Research
+          </legend>
+          <div className="grid grid-cols-3 gap-1.5">
+            {options.research_depth.map((d) => (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => setDepth(d.value as 1 | 3 | 5)}
+                aria-pressed={depth === d.value}
+                className={`h-8 rounded-md border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                  depth === d.value
+                    ? "border-primary/70 bg-accent text-accent-foreground"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <label className="block">
+            <span className="sr-only">Output language</span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="h-9 w-full rounded-md border border-border bg-input px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
             >
-              {a.label}
-            </button>
-          );
-        })}
-      </div>
+              {options.languages.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {options.research_depth.map((d) => (
-          <button
-            key={d.value}
-            onClick={() => setDepth(d.value as 1 | 3 | 5)}
-            className={`px-3 py-1 rounded text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
-              depth === d.value
-                ? "bg-emerald-600 text-black"
-                : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-            }`}
-          >
-            {d.label}
-          </button>
-        ))}
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="ml-auto bg-zinc-800 px-2.5 py-1.5 rounded font-mono text-sm text-zinc-100 border border-zinc-700 focus:border-emerald-500 focus:outline-none"
+        <button
+          type="submit"
+          disabled={running || activeAnalysts.length === 0}
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 font-mono text-xs font-bold uppercase tracking-[0.18em] text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
         >
-          {options.languages.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
+          {running ? (
+            <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Play className="size-4" />
+          )}
+          {running ? "分析进行中" : "开始分析"}
+        </button>
       </div>
-
-      <button
-        disabled={running}
-        className="w-full bg-emerald-500 text-black font-bold py-2 rounded transition-colors hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-        onClick={() =>
-          onStart({
-            ticker,
-            trade_date: date,
-            asset_type: assetType,
-            analysts: analysts.filter(
-              (a) => !(assetType === "crypto" && a === "fundamentals"),
-            ),
-            research_depth: depth,
-            output_language: language,
-            llm_provider: null,
-            deep_think_llm: null,
-            quick_think_llm: null,
-          })
-        }
-      >
-        <span className="font-mono uppercase tracking-wider">
-          {running ? "分析进行中…" : "► 开始分析"}
-        </span>
-      </button>
-    </div>
+    </form>
   );
 }
