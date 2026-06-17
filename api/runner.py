@@ -18,6 +18,8 @@ REPORT_SECTIONS: dict[str, tuple[str, str]] = {
     "final_trade_decision": ("portfolio_manager", "portfolio"),
 }
 
+REPORT_SECTION_KEYS = frozenset(REPORT_SECTIONS)
+
 
 def chunk_to_events(chunk: dict, seen: set[str]) -> list[dict]:
     """Translate one LangGraph stream chunk into SSE event dicts.
@@ -79,6 +81,13 @@ class AnalysisRunner:
                     return
                 if isinstance(chunk, dict):
                     accumulated.update(chunk)
+                    partial = {
+                        key: value
+                        for key, value in chunk.items()
+                        if key in REPORT_SECTION_KEYS and value
+                    }
+                    if partial:
+                        self._store.update_partial_result(run_id, partial)
                 for event in chunk_to_events(chunk, seen):
                     self._q.put(event)
                 if self._is_cancelled():

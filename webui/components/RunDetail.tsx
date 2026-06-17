@@ -65,7 +65,13 @@ export function RunDetail({ run }: { run: RunResult }) {
         </div>
       )}
 
-      {isEmpty && run.status !== "error" && run.status !== "cancelled" && (
+      {isEmpty && run.status === "running" && (
+        <div className="rounded-md border border-dashed border-border bg-card px-3 py-3 font-mono text-xs text-muted-foreground">
+          尚未生成可持久化的阶段报告
+        </div>
+      )}
+
+      {isEmpty && run.status !== "running" && run.status !== "error" && run.status !== "cancelled" && (
         <div className="rounded-md border border-dashed border-border bg-card px-3 py-3 font-mono text-xs text-muted-foreground">
           暂无可显示的报告内容
         </div>

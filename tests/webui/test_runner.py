@@ -87,6 +87,57 @@ def test_runner_emits_done_and_calls_store(tmp_path):
     assert store.get_run("r1").status == "completed"
 
 
+def test_runner_persists_partial_sections_while_running(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    fake = _FakeGraph(
+        chunks=[{"market_report": "m"}, {"news_report": "n"}],
+        final_state=None,
+        decision=None,
+    )
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q)
+
+    runner.run(run_id="r1", graph=fake, init_state={}, decision=None, final_state=None)
+
+    row = store.get_run("r1")
+    assert row.result["market_report"] == "m"
+    assert row.result["news_report"] == "n"
+
+
+def test_runner_persists_partial_sections_before_completion(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    emitted = threading.Event()
+    release = threading.Event()
+
+    def chunks():
+        yield {"market_report": "m"}
+        emitted.set()
+        release.wait(timeout=2)
+
+    fake = _FakeGraph(chunks=chunks(), final_state=None, decision=None)
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q)
+    thread = threading.Thread(
+        target=runner.run,
+        kwargs={"run_id": "r1", "graph": fake, "init_state": {}, "decision": None, "final_state": None},
+    )
+    thread.start()
+
+    assert emitted.wait(timeout=2)
+    row = store.get_run("r1")
+    assert row.status == "running"
+    assert row.result == {"market_report": "m"}
+
+    release.set()
+    thread.join(timeout=2)
+
+
 def test_runner_emits_error_on_exception(tmp_path):
     from api.store import Store
 

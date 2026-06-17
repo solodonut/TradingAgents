@@ -99,6 +99,22 @@ class Store:
             )
             return cur.rowcount > 0
 
+    def update_partial_result(self, run_id: str, partial: dict) -> bool:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT result_json FROM analysis_runs WHERE run_id=? AND status='running'",
+                (run_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            current = json.loads(row["result_json"]) if row["result_json"] else {}
+            current.update(partial)
+            cur = conn.execute(
+                "UPDATE analysis_runs SET result_json=? WHERE run_id=? AND status='running'",
+                (_dumps(current), run_id),
+            )
+            return cur.rowcount > 0
+
     def get_status(self, run_id: str) -> str | None:
         with self._connect() as conn:
             row = conn.execute(
