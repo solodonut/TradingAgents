@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# override the root .gitignore "lib/" Python rule for the app source dir
+!/lib
+!/lib/**

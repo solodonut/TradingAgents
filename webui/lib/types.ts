@@ -1,0 +1,107 @@
+export type AssetType = "stock" | "crypto";
+export type Decision = "Buy" | "Overweight" | "Hold" | "Underweight" | "Sell";
+export type RunStatus = "running" | "completed" | "error" | "cancelled";
+
+export interface AnalysisRequest {
+  ticker: string;
+  trade_date: string;
+  asset_type: AssetType;
+  analysts: string[];
+  research_depth: 1 | 3 | 5;
+  output_language: string;
+  llm_provider: string | null;
+  deep_think_llm: string | null;
+  quick_think_llm: string | null;
+}
+
+export interface ConfigOptions {
+  analysts: { value: string; label: string }[];
+  research_depth: { value: number; label: string }[];
+  languages: string[];
+  configured_provider: string | null;
+  configured_deep_llm: string | null;
+  configured_quick_llm: string | null;
+}
+
+export interface HistorySummary {
+  run_id: string;
+  ticker: string;
+  trade_date: string;
+  decision: Decision | null;
+  status: RunStatus;
+  created_at: string;
+}
+
+export interface RunResult {
+  run_id: string;
+  ticker: string;
+  trade_date: string;
+  asset_type: string;
+  decision: Decision | null;
+  status: RunStatus;
+  config: Record<string, unknown>;
+  result: Record<string, string> | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface RunStatusDetail {
+  run_id: string;
+  db_status: RunStatus;
+  process_alive: boolean;
+  llm_active: boolean;
+  active_llm_calls: number;
+  last_llm_start_at: string | null;
+  last_llm_end_at: string | null;
+  last_llm_error_at: string | null;
+  last_llm_error: string | null;
+  last_llm_model: string | null;
+  last_prompt_preview: string | null;
+  last_prompt_chars: number | null;
+  last_report_section: string | null;
+  last_report_at: string | null;
+  updated_at: string | null;
+}
+
+export type SSEEvent =
+  | { event: "agent_status"; data: { agent: string; team: string; status: string } }
+  | { event: "message"; data: { agent: string; team: string; content: string; ts: number } }
+  | { event: "report_section"; data: { section: string; content: string } }
+  | { event: "stats"; data: Record<string, number> }
+  | { event: "done"; data: { decision: Decision; final_trade_decision: string; run_id: string } }
+  | { event: "error"; data: { message: string } }
+  | { event: "cancelled"; data: { run_id: string; message: string } };
+
+export interface PortfolioHolding {
+  ticker: string;
+  name?: string | null;
+  shares?: number | null;
+  avg_cost?: number | null;
+  market_value?: number | null;
+  weight?: number | null;
+  action?: "buy" | "sell" | null;
+  trade_date?: string | null;
+}
+
+export interface ChatMessageT {
+  message_id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  tool_calls: Record<string, unknown>[];
+  created_at: string;
+}
+
+export interface ChatSessionT {
+  session_id: string;
+  run_id: string | null;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ChatSSEEvent =
+  | { event: "tool_call"; data: { tool: string; args: Record<string, unknown> } }
+  | { event: "token"; data: { content: string } }
+  | { event: "done"; data: { content: string; tool_calls: Record<string, unknown>[] } }
+  | { event: "error"; data: { message: string } };
