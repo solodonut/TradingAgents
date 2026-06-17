@@ -115,7 +115,9 @@ def analysis_status(run_id: str, request: Request) -> dict:
     if status is None:
         raise HTTPException(status_code=404, detail="run not found")
 
-    process_alive = run_id in request.app.state.queues or run_id in request.app.state.cancellations
+    process_alive = status == "running" and (
+        run_id in request.app.state.queues or run_id in request.app.state.cancellations
+    )
     telemetry = request.app.state.telemetry.get(run_id)
     if telemetry is None:
         return {
