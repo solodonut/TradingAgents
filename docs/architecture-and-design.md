@@ -351,10 +351,13 @@ flowchart TB
 Backend:
 
 ```bash
-uvicorn api.main:app --reload --port 8000
+# Easiest: scripts/dev.sh starts both with the right interpreters.
+# Manual — use the project venv explicitly (a bare uvicorn on PATH may be the
+# wrong Python with incompatible native wheels):
+.venv/bin/python -m uvicorn api.main:app --reload --port 8000
 ```
 
-Frontend:
+Frontend (needs Node >=20.9 for Next.js 16):
 
 ```bash
 cd webui

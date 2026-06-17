@@ -4,10 +4,15 @@ FastAPI backend for the conversational analysis assistant.
 
 ## Run (dev)
 
-    pip install -e ".[dev]"
-    uvicorn api.main:app --reload --port 8000
+Easiest: `scripts/dev.sh` starts both servers with the correct interpreters.
 
-Frontend (separate terminal):
+Manual (use the project venv explicitly — a bare `uvicorn`/`python3` on PATH may
+resolve to an unrelated Python with incompatible native wheels):
+
+    python3.10 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+    .venv/bin/python -m uvicorn api.main:app --reload --port 8000
+
+Frontend (separate terminal, needs Node >=20.9 for Next.js 16):
 
     cd webui && npm run dev   # http://localhost:3000
 

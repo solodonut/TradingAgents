@@ -84,7 +84,11 @@ package + Typer CLI + FastAPI backend (`api/`) + Next.js frontend (`webui/`).
 
 ## WebUI (`api/` + `webui/`)
 
-- API dev: `uvicorn api.main:app --reload --port 8000`. Entrypoint `api/main.py`; routes in
+- API dev: `scripts/dev.sh` (starts API+web with the correct interpreters), or manually
+  `.venv/bin/python -m uvicorn api.main:app --reload --port 8000`. Use the `.venv` binary
+  explicitly — a bare `uvicorn`/`python3` on PATH may resolve to an unrelated Python (e.g. a
+  Framework/conda env with NumPy-1.x wheels that crash against this project's NumPy 2.x).
+  Frontend needs Node >=20.9 (Next.js 16). Entrypoint `api/main.py`; routes in
   `api/routes/`; LangGraph→SSE bridge in `api/runner.py`; SQLite history in `api/store.py`
   (`~/.tradingagents/webui.db`). CORS allows `localhost:3000` only. Single-user invariant:
   one run at a time (409 if busy).
