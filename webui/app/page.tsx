@@ -121,21 +121,31 @@ export default function Home() {
     }
   };
 
-  const onCancel = async () => {
-    if (!currentRunId || canceling) return;
+  const cancelRun = async (runId: string) => {
+    if (canceling) return;
     setCanceling(true);
     try {
-      await cancelAnalysis(currentRunId);
+      await cancelAnalysis(runId);
       setError("分析已停止");
       setRunning(false);
-      setCurrentRunId(null);
+      if (currentRunId === runId) setCurrentRunId(null);
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       refreshHistory();
+      if (selectedId === runId) {
+        const next = await getHistoryDetail(runId);
+        setDetail(next);
+      }
+      setCanceling(false);
     } catch (err) {
       setCanceling(false);
       setError((err as Error).message);
     }
+  };
+
+  const onCancel = () => {
+    if (!currentRunId) return;
+    void cancelRun(currentRunId);
   };
 
   const inDetailMode = selectedId !== null;
@@ -206,7 +216,13 @@ export default function Home() {
                     {detailError}
                   </div>
                 )}
-                {detail && <RunDetail run={detail} />}
+                {detail && (
+                  <RunDetail
+                    run={detail}
+                    onCancel={detail.status === "running" ? cancelRun : undefined}
+                    canceling={canceling}
+                  />
+                )}
               </section>
             ) : (
               <section className="space-y-3">

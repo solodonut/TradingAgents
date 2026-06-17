@@ -1,4 +1,5 @@
 "use client";
+import { LoaderCircle, OctagonX } from "lucide-react";
 import { MessageBubble } from "@/components/MessageBubble";
 import { DecisionCard } from "@/components/DecisionCard";
 import type { RunResult } from "@/lib/types";
@@ -21,7 +22,15 @@ function fmtTime(iso: string | null): string {
   return d.toLocaleString();
 }
 
-export function RunDetail({ run }: { run: RunResult }) {
+export function RunDetail({
+  run,
+  onCancel,
+  canceling = false,
+}: {
+  run: RunResult;
+  onCancel?: (runId: string) => void;
+  canceling?: boolean;
+}) {
   const result = run.result ?? {};
   const sections = SECTIONS.filter((s) => {
     const v = result[s.field];
@@ -48,8 +57,25 @@ export function RunDetail({ run }: { run: RunResult }) {
       </div>
 
       {run.status === "running" && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs text-amber-300">
-          仍在进行，以下为目前已生成的部分
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+          <div className="font-mono text-xs text-amber-300">
+            仍在进行，以下为目前已生成的部分
+          </div>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={() => onCancel(run.run_id)}
+              disabled={canceling}
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-amber-500/50 px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-amber-100 transition-colors hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {canceling ? (
+                <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <OctagonX className="size-3.5" />
+              )}
+              停止分析
+            </button>
+          )}
         </div>
       )}
 
