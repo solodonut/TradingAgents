@@ -29,6 +29,7 @@ from tradingagents.agents.utils.agent_utils import (
 )
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.dataflows.config import set_config
+from tradingagents.dataflows.errors import VendorError
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients import create_llm_client
@@ -41,6 +42,22 @@ from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def _handle_vendor_tool_error(e: VendorError) -> str:
+    """Turn a data-vendor error into a tool message the analyst can reason about.
+
+    ``route_to_vendor`` deliberately raises ``VendorError`` (e.g. a missing
+    FRED_API_KEY) instead of fabricating values. Without this handler LangGraph's
+    ToolNode re-raises it and crashes the whole graph. Catching it here lets the
+    analyst see "this source is unavailable" and continue, matching the framework's
+    "report unavailability, don't fabricate" contract.
+    """
+    return (
+        f"DATA_SOURCE_UNAVAILABLE: {e}. This data source could not be reached "
+        f"(e.g. a missing API key or vendor outage). Continue your analysis "
+        f"without it and do not fabricate values for this indicator."
+    )
 
 
 class TradingAgentsGraph:
@@ -171,13 +188,15 @@ class TradingAgentsGraph:
                     # LLM and required by its prompt; must be executable here or
                     # the call fails and the model reports it "unavailable").
                     get_verified_market_snapshot,
-                ]
+                ],
+                handle_tool_errors=_handle_vendor_tool_error,
             ),
             "social": ToolNode(
                 [
                     # News tools for social media analysis
                     get_news,
-                ]
+                ],
+                handle_tool_errors=_handle_vendor_tool_error,
             ),
             "news": ToolNode(
                 [
@@ -187,7 +206,8 @@ class TradingAgentsGraph:
                     get_insider_transactions,
                     get_macro_indicators,
                     get_prediction_markets,
-                ]
+                ],
+                handle_tool_errors=_handle_vendor_tool_error,
             ),
             "fundamentals": ToolNode(
                 [
@@ -196,7 +216,8 @@ class TradingAgentsGraph:
                     get_balance_sheet,
                     get_cashflow,
                     get_income_statement,
-                ]
+                ],
+                handle_tool_errors=_handle_vendor_tool_error,
             ),
         }
 
