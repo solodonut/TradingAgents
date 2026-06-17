@@ -13,11 +13,13 @@ from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     resolve_instrument_identity,
 )
+from tradingagents.dataflows.config import set_config
 
 
 @pytest.mark.unit
 class ResolveInstrumentIdentityTests(unittest.TestCase):
     def setUp(self):
+        set_config({"domestic_china_only": False})
         resolve_instrument_identity.cache_clear()
 
     def test_resolves_company_metadata_from_yfinance(self):

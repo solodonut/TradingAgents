@@ -9,10 +9,12 @@ import pandas as pd
 
 import tradingagents.agents.utils.agent_utils as au
 import tradingagents.graph.trading_graph as tg
+from tradingagents.dataflows.config import set_config
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
 def test_identity_lookup_normalizes_symbol(monkeypatch):
+    set_config({"domestic_china_only": False})
     seen = {}
 
     class FakeTicker:

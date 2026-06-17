@@ -42,6 +42,8 @@ from .yfinance_news import get_global_news_yfinance, get_news_yfinance
 
 logger = logging.getLogger(__name__)
 
+DISABLED_VENDOR_SENTINELS = {"disabled", "none", "off"}
+
 # Tools organized by category
 TOOLS_CATEGORIES = {
     "core_stock_apis": {
@@ -192,6 +194,14 @@ def route_to_vendor(method: str, *args, **kwargs):
     # unexpected source and caused cross-vendor inconsistencies. For multi-vendor
     # fallback, list them in order, e.g. data_vendors="yfinance,alpha_vantage".
     # The "default" sentinel (no explicit config) uses all available vendors.
+    if any(v.lower() in DISABLED_VENDOR_SENTINELS for v in primary_vendors if v):
+        return (
+            f"DATA_SOURCE_DISABLED: Data source for '{method}' is disabled by "
+            f"configuration for category '{category}'. Do not estimate or fabricate "
+            "values — report that this data source is unavailable in the current "
+            "domestic China-only setup."
+        )
+
     explicit = [v for v in primary_vendors if v and v != "default"]
     if explicit:
         vendor_chain = [v for v in explicit if v in VENDOR_METHODS[method]]

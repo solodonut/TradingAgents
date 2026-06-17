@@ -49,6 +49,8 @@ class TestLoadOhlcvNoPoison(unittest.TestCase):
 @pytest.mark.unit
 class TestRouteToVendorSentinel(unittest.TestCase):
     def test_no_data_from_all_vendors_returns_sentinel(self):
+        set_config({"data_vendors": {"core_stock_apis": "default"}})
+
         def raises_no_data(symbol, *a, **k):
             raise NoMarketDataError(symbol, "GC=F", "no rows")
 
@@ -65,6 +67,8 @@ class TestRouteToVendorSentinel(unittest.TestCase):
         self.assertIn("Do not estimate", result)
 
     def test_unconfigured_fallback_does_not_mask_no_data(self):
+        set_config({"data_vendors": {"core_stock_apis": "default"}})
+
         # When the primary vendor reports no data and the fallback is simply
         # unavailable (e.g. missing API key -> raises), the no-data sentinel
         # must win rather than the fallback's incidental error crashing out.

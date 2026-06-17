@@ -18,6 +18,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
+    "TRADINGAGENTS_DOMESTIC_CHINA_ONLY":  "domestic_china_only",
 }
 
 
@@ -76,6 +77,11 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "Chinese",
+    # This deployment focuses on mainland China stocks and ETFs. Keep the
+    # default data path domestic-first and do not expose overseas-only sources
+    # such as Yahoo/FRED/Polymarket/StockTwits/Reddit unless explicitly
+    # re-enabled by configuration.
+    "domestic_china_only": True,
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
@@ -105,9 +111,9 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "core_stock_apis": "akshare",        # Options: alpha_vantage, yfinance, akshare
         "technical_indicators": "akshare",   # Options: alpha_vantage, yfinance, akshare
         "fundamental_data": "akshare",       # Options: alpha_vantage, yfinance, akshare
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance
-        "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
-        "prediction_markets": "polymarket",  # Options: polymarket (keyless)
+        "news_data": "akshare",              # Options: alpha_vantage, yfinance, akshare
+        "macro_data": "disabled",            # Options: fred, disabled
+        "prediction_markets": "disabled",    # Options: polymarket, disabled
     },
     # A-share auto-routing. When True, mainland A-share tickers (600519,
     # 600519.SS, sh600519, ...) are served by AKShare for price, indicator, and

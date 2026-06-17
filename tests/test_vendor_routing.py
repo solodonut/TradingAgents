@@ -89,6 +89,19 @@ class VendorRoutingTests(unittest.TestCase):
             interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
         self.assertIn("bogus_vendor", str(ctx.exception))
 
+    def test_disabled_vendor_returns_explicit_sentinel_without_calling_provider(self):
+        set_config({"data_vendors": {"macro_data": "disabled"}})
+        fred = mock.Mock(return_value="FRED_DATA")
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {"get_macro_indicators": {"fred": fred}},
+            clear=False,
+        ):
+            result = interface.route_to_vendor("get_macro_indicators", "cpi", "2026-06-01", 30)
+        self.assertIn("DATA_SOURCE_DISABLED", result)
+        self.assertIn("get_macro_indicators", result)
+        fred.assert_not_called()
+
     def test_default_sentinel_uses_all_vendors(self):
         # No explicit choice ("default") keeps the resilient full-chain behavior.
         set_config({"data_vendors": {"core_stock_apis": "default"}})

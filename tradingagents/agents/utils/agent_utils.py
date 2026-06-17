@@ -76,7 +76,7 @@ def _clean_identity_value(value: Any) -> str | None:
 
 
 @functools.lru_cache(maxsize=256)
-def resolve_instrument_identity(ticker: str) -> dict:
+def _resolve_instrument_identity_with_yfinance(ticker: str) -> dict:
     """Resolve deterministic identity metadata (company name, sector, …) for a ticker.
 
     This exists to stop the pipeline from hallucinating a *different* company
@@ -117,6 +117,24 @@ def resolve_instrument_identity(ticker: str) -> dict:
         if value:
             identity[target_key] = value
     return identity
+
+
+def resolve_instrument_identity(ticker: str) -> dict:
+    """Resolve deterministic identity metadata for a ticker when enabled.
+
+    Domestic China-only deployments deliberately skip the yfinance identity
+    lookup so a mainland stock/ETF run does not touch overseas data services
+    before analysis starts.
+    """
+    from tradingagents.dataflows.config import get_config
+
+    if get_config().get("domestic_china_only", False):
+        return {}
+    return _resolve_instrument_identity_with_yfinance(ticker)
+
+
+resolve_instrument_identity.cache_clear = _resolve_instrument_identity_with_yfinance.cache_clear
+resolve_instrument_identity.cache_info = _resolve_instrument_identity_with_yfinance.cache_info
 
 
 def build_instrument_context(
@@ -212,6 +230,5 @@ def create_msg_delete():
         return {"messages": removal_operations + [placeholder]}
 
     return delete_messages
-
 
 

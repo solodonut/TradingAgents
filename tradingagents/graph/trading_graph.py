@@ -177,6 +177,17 @@ class TradingAgentsGraph:
 
     def _create_tool_nodes(self) -> dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
+        if getattr(self, "config", {}).get("domestic_china_only", False):
+            news_tools = [get_news]
+        else:
+            news_tools = [
+                get_news,
+                get_global_news,
+                get_insider_transactions,
+                get_macro_indicators,
+                get_prediction_markets,
+            ]
+
         return {
             "market": ToolNode(
                 [
@@ -199,14 +210,7 @@ class TradingAgentsGraph:
                 handle_tool_errors=_handle_vendor_tool_error,
             ),
             "news": ToolNode(
-                [
-                    # News and insider information
-                    get_news,
-                    get_global_news,
-                    get_insider_transactions,
-                    get_macro_indicators,
-                    get_prediction_markets,
-                ],
+                news_tools,
                 handle_tool_errors=_handle_vendor_tool_error,
             ),
             "fundamentals": ToolNode(
@@ -253,6 +257,13 @@ class TradingAgentsGraph:
         actual_holding_days)`` or ``(None, None, None)`` if price data is
         unavailable (too recent, delisted, or network error).
         """
+        if getattr(self, "config", {}).get("domestic_china_only", False):
+            logger.info(
+                "Skipping yfinance outcome lookup for %s in domestic China-only mode.",
+                ticker,
+            )
+            return None, None, None
+
         from tradingagents.dataflows.symbol_utils import normalize_symbol
 
         try:
@@ -330,11 +341,11 @@ class TradingAgentsGraph:
     def resolve_instrument_context(self, ticker: str, asset_type: str = "stock") -> str:
         """Resolve ticker identity once and return the full instrument context.
 
-        Deterministic yfinance lookup (cached, fail-open) injected into a
-        context string so every agent anchors to the real company instead of
-        hallucinating one from the price chart (#814). Both the propagate()
-        path and the CLI call this so the resolved identity reaches the whole
-        graph regardless of entry point.
+        When enabled, deterministic yfinance lookup (cached, fail-open) is
+        injected into a context string so every agent anchors to the real
+        company instead of hallucinating one from the price chart (#814).
+        Domestic China-only mode skips that overseas lookup and falls back to
+        ticker-only context.
         """
         identity = resolve_instrument_identity(ticker)
         return build_instrument_context(ticker, asset_type, identity)

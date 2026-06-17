@@ -39,12 +39,17 @@ from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
+from tradingagents.dataflows.config import get_config
 from tradingagents.dataflows.reddit import fetch_reddit_posts
 from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
 
 
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+
+
+def _domestic_china_only() -> bool:
+    return bool(get_config().get("domestic_china_only", False))
 
 
 def create_sentiment_analyst(llm):
@@ -63,12 +68,16 @@ def create_sentiment_analyst(llm):
         start_date = _seven_days_back(end_date)
         instrument_context = get_instrument_context_from_state(state)
 
-        # Pre-fetch all three sources. Each fetcher degrades gracefully and
-        # returns a string (no exceptions surface from here), so the LLM
-        # always sees something — either real data or a clear placeholder.
+        # Pre-fetch allowed sources. In domestic China-only mode, do not touch
+        # overseas social/news services; those calls can be slow and are not
+        # relevant for mainland stock/ETF coverage.
         news_block = get_news.func(ticker, start_date, end_date)
-        stocktwits_block = fetch_stocktwits_messages(ticker, limit=30)
-        reddit_block = fetch_reddit_posts(ticker)
+        if _domestic_china_only():
+            stocktwits_block = "DATA_SOURCE_DISABLED: StockTwits is disabled in domestic China-only mode."
+            reddit_block = "DATA_SOURCE_DISABLED: Reddit is disabled in domestic China-only mode."
+        else:
+            stocktwits_block = fetch_stocktwits_messages(ticker, limit=30)
+            reddit_block = fetch_reddit_posts(ticker)
 
         system_message = _build_system_message(
             ticker=ticker,
@@ -128,6 +137,44 @@ def _build_system_message(
     reddit_block: str,
 ) -> str:
     """Assemble the sentiment-analyst system message with structured data blocks."""
+    if _domestic_china_only():
+        return f"""You are a China mainland financial market sentiment analyst. Your task is to produce a comprehensive sentiment report for {ticker} covering the period from {start_date} to {end_date}, drawing only on domestic China-market news that has already been collected for you.
+
+## Data sources (pre-fetched, in this prompt)
+
+### Domestic China-market news, past 7 days
+Fact-driven signal from China-market data providers. Overseas social sources are disabled for this deployment.
+
+<start_of_news>
+{news_block}
+<end_of_news>
+
+<disabled_sources>
+{stocktwits_block}
+{reddit_block}
+<end_disabled_sources>
+
+## How to analyze this data
+
+1. **Separate confirmed events from market interpretation.** Treat policy, exchange, issuer, sector, fund-flow, and regulator headlines as evidence; label weaker narrative claims as such.
+
+2. **Identify domestic narrative themes.** Summarize recurring themes around A-share/ETF flows, policy support, sector rotation, liquidity, and product-specific catalysts.
+
+3. **Be honest about data limits.** If the news block is unavailable or sparse, lower confidence and say so. Do not infer retail sentiment from disabled overseas social sources.
+
+4. **Frame sentiment as an input, not a price call.** The trader should weigh it alongside fundamentals and technicals.
+
+## Output fields
+
+Fill the following fields:
+
+- **overall_band**: Exactly one of Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish. Use Mixed when evidence points in clearly different directions; Neutral only when sources are genuinely silent.
+- **overall_score**: A number from 0 (maximally bearish) to 10 (maximally bullish); 5 is neutral. Keep it consistent with overall_band.
+- **confidence**: low / medium / high, based on data quality and sample size.
+- **narrative**: Full evidence breakdown, divergences, dominant narrative themes, catalysts and risks, and a markdown summary table of key sentiment signals (direction, source, supporting evidence).
+
+{get_language_instruction()}"""
+
     return f"""You are a financial market sentiment analyst. Your task is to produce a comprehensive sentiment report for {ticker} covering the period from {start_date} to {end_date}, drawing on three complementary data sources that have already been collected for you.
 
 ## Data sources (pre-fetched, in this prompt)

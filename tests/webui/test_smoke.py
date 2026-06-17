@@ -1,11 +1,12 @@
 import pytest
+from fastapi.testclient import TestClient
 
 
 @pytest.mark.smoke
 def test_app_imports_and_has_routes():
     from api.main import app
 
-    paths = {r.path for r in app.routes}
-    assert "/api/config/options" in paths
-    assert "/api/history" in paths
-    assert "/api/analysis" in paths
+    client = TestClient(app)
+    assert client.get("/api/config/options").status_code == 200
+    assert client.get("/api/history").status_code == 200
+    assert client.get("/api/analysis").status_code == 405
