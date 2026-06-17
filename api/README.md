@@ -22,5 +22,13 @@ Frontend (separate terminal):
 - `GET  /api/history` — list past runs
 - `GET  /api/history/{run_id}` — run detail
 - `DELETE /api/history/{run_id}` — delete a run
+- `POST   /api/chat/sessions` — create a chat session (optional `run_id`)
+- `GET    /api/chat/sessions` — list chat sessions
+- `GET    /api/chat/sessions/{id}` — session detail + messages
+- `DELETE /api/chat/sessions/{id}` — delete a chat session
+- `POST   /api/chat/sessions/{id}/portfolio` — extract holdings from a screenshot
+- `PUT    /api/chat/sessions/{id}/portfolio` — overwrite holdings (manual)
+- `GET    /api/chat/sessions/{id}/portfolio` — read current holdings
+- `POST   /api/chat/sessions/{id}/stream` — SSE chat (token / tool_call / done / error)
 
 History DB: `~/.tradingagents/webui.db`.
