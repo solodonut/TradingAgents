@@ -1,5 +1,5 @@
 "use client";
-import ReactMarkdown from "react-markdown";
+import { MarkdownContent } from "@/components/MarkdownContent";
 
 export function MessageBubble({ agent, content }: { agent: string; content: string }) {
   return (
@@ -16,7 +16,7 @@ export function MessageBubble({ agent, content }: { agent: string; content: stri
         </div>
       </header>
       <div className="ta-prose prose prose-invert prose-sm max-w-none px-3 py-3 prose-pre:border prose-pre:border-border prose-pre:bg-background prose-table:text-sm">
-        <ReactMarkdown>{content}</ReactMarkdown>
+        <MarkdownContent content={content} />
       </div>
     </article>
   );

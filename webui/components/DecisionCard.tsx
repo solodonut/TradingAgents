@@ -1,5 +1,5 @@
 "use client";
-import ReactMarkdown from "react-markdown";
+import { MarkdownContent } from "@/components/MarkdownContent";
 import type { Decision } from "@/lib/types";
 
 const COLORS: Record<string, string> = {
@@ -53,7 +53,7 @@ export function DecisionCard({
         </p>
       ) : (
         <div className="ta-prose prose prose-invert prose-sm mt-3 max-w-none prose-pre:border prose-pre:border-border prose-pre:bg-background">
-          <ReactMarkdown>{detail}</ReactMarkdown>
+          <MarkdownContent content={detail} />
         </div>
       )}
     </div>
