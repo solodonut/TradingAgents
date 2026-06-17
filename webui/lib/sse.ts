@@ -56,7 +56,9 @@ export async function streamChat(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    // Normalize CRLF (sse-starlette uses \r\n) so the framing below is
+    // line-ending agnostic. SSE separates events with a blank line.
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
     const blocks = buffer.split("\n\n");
     buffer = blocks.pop() ?? "";
     for (const block of blocks) {
@@ -64,7 +66,11 @@ export async function streamChat(
       let dataLine = "";
       for (const line of block.split("\n")) {
         if (line.startsWith("event:")) eventName = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+        // SSE allows multiple data: lines; join with \n per the spec so a
+        // payload containing newlines is reassembled, not truncated.
+        else if (line.startsWith("data:")) {
+          dataLine += (dataLine ? "\n" : "") + line.slice(5).trimStart();
+        }
       }
       if (!dataLine) continue;
       try {
