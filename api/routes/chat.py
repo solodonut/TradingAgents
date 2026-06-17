@@ -10,6 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from sse_starlette.sse import EventSourceResponse
 
 from api.schemas import (
+    ChatRequest,
     ChatSessionCreate,
     PortfolioExtractResponse,
     PortfolioHolding,
@@ -136,7 +137,7 @@ def get_portfolio(session_id: str) -> PortfolioExtractResponse:
 
 @router.post("/sessions/{session_id}/stream")
 async def stream_chat(
-    session_id: str, req_body: dict, request: Request
+    session_id: str, req: ChatRequest, request: Request
 ) -> EventSourceResponse:
     from api.main import get_store
 
@@ -145,7 +146,7 @@ async def stream_chat(
     if session is None:
         raise HTTPException(status_code=404, detail="session not found")
 
-    user_message = req_body.get("message", "")
+    user_message = req.message
 
     report_ctx = ""
     decision = None
