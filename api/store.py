@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from api.schemas import HistorySummary, RunResult
+from api.schemas import ChatMessage, ChatSession, HistorySummary, PortfolioHolding, RunResult
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS analysis_runs (
@@ -21,6 +21,30 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
     result_json   TEXT,
     created_at    TEXT NOT NULL,
     completed_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    session_id    TEXT PRIMARY KEY,
+    run_id        TEXT,
+    title         TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    message_id      TEXT PRIMARY KEY,
+    session_id      TEXT NOT NULL,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    tool_calls_json TEXT,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_portfolios (
+    session_id    TEXT PRIMARY KEY,
+    holdings_json TEXT NOT NULL,
+    source        TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
 );
 """
 
@@ -170,3 +194,128 @@ class Store:
                 "SELECT 1 FROM analysis_runs WHERE status='running' LIMIT 1"
             ).fetchone()
         return row is not None
+
+    # ---- chat sessions ----
+
+    def create_chat_session(
+        self, session_id: str, run_id: str | None, title: str | None
+    ) -> None:
+        now = _now()
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT INTO chat_sessions "
+                "(session_id, run_id, title, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (session_id, run_id, title, now, now),
+            )
+
+    def get_chat_session(self, session_id: str) -> ChatSession | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM chat_sessions WHERE session_id=?", (session_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return ChatSession(
+            session_id=row["session_id"],
+            run_id=row["run_id"],
+            title=row["title"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def list_chat_sessions(self) -> list[ChatSession]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM chat_sessions ORDER BY updated_at DESC, rowid DESC"
+            ).fetchall()
+        return [
+            ChatSession(
+                session_id=r["session_id"],
+                run_id=r["run_id"],
+                title=r["title"],
+                created_at=r["created_at"],
+                updated_at=r["updated_at"],
+            )
+            for r in rows
+        ]
+
+    def delete_chat_session(self, session_id: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute("DELETE FROM chat_messages WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM chat_portfolios WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM chat_sessions WHERE session_id=?", (session_id,))
+
+    def _touch_session(self, conn: sqlite3.Connection, session_id: str) -> None:
+        conn.execute(
+            "UPDATE chat_sessions SET updated_at=? WHERE session_id=?",
+            (_now(), session_id),
+        )
+
+    # ---- chat messages ----
+
+    def insert_chat_message(
+        self,
+        message_id: str,
+        session_id: str,
+        role: str,
+        content: str,
+        tool_calls: list[dict],
+    ) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT INTO chat_messages "
+                "(message_id, session_id, role, content, tool_calls_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (message_id, session_id, role, content, _dumps(tool_calls), _now()),
+            )
+            self._touch_session(conn, session_id)
+
+    def list_chat_messages(self, session_id: str) -> list[ChatMessage]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM chat_messages WHERE session_id=? "
+                "ORDER BY created_at ASC, rowid ASC",
+                (session_id,),
+            ).fetchall()
+        return [
+            ChatMessage(
+                message_id=r["message_id"],
+                session_id=r["session_id"],
+                role=r["role"],
+                content=r["content"],
+                tool_calls=json.loads(r["tool_calls_json"]) if r["tool_calls_json"] else [],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+
+    # ---- portfolio ----
+
+    def save_portfolio(
+        self, session_id: str, holdings: list[PortfolioHolding], source: str
+    ) -> None:
+        payload = [h.model_dump() for h in holdings]
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT INTO chat_portfolios (session_id, holdings_json, source, updated_at) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(session_id) DO UPDATE SET "
+                "holdings_json=excluded.holdings_json, source=excluded.source, "
+                "updated_at=excluded.updated_at",
+                (session_id, _dumps(payload), source, _now()),
+            )
+            self._touch_session(conn, session_id)
+
+    def get_portfolio(
+        self, session_id: str
+    ) -> tuple[list[PortfolioHolding], str | None]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT holdings_json, source FROM chat_portfolios WHERE session_id=?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return [], None
+        holdings = [PortfolioHolding(**h) for h in json.loads(row["holdings_json"])]
+        return holdings, row["source"]
