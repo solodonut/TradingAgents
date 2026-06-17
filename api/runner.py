@@ -6,6 +6,7 @@ import time
 import traceback
 
 from api.store import Store
+from api.telemetry import RunTelemetry
 
 # section field name -> (agent name, team)
 REPORT_SECTIONS: dict[str, tuple[str, str]] = {
@@ -65,10 +66,12 @@ class AnalysisRunner:
         store: Store,
         event_queue: "queue.Queue",
         cancel_event: threading.Event | None = None,
+        telemetry: RunTelemetry | None = None,
     ):
         self._store = store
         self._q = event_queue
         self._cancel_event = cancel_event
+        self._telemetry = telemetry
 
     def run(self, run_id, graph, init_state, decision, final_state) -> None:
         seen: set[str] = set()
@@ -88,6 +91,9 @@ class AnalysisRunner:
                     }
                     if partial:
                         self._store.update_partial_result(run_id, partial)
+                        if self._telemetry is not None:
+                            for section in partial:
+                                self._telemetry.mark_report(section)
                 for event in chunk_to_events(chunk, seen):
                     self._q.put(event)
                 if self._is_cancelled():

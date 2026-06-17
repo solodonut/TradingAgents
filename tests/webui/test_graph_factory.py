@@ -8,6 +8,7 @@ def test_real_graph_factory_builds_graph(monkeypatch):
         def __init__(self, selected_analysts, debug, config, **kwargs):
             captured["analysts"] = selected_analysts
             captured["config"] = config
+            captured["callbacks"] = kwargs.get("callbacks")
 
             class _Prop:
                 def create_initial_state(self, ticker, date, **kw):
@@ -32,6 +33,7 @@ def test_real_graph_factory_builds_graph(monkeypatch):
             return ""
 
     monkeypatch.setattr(main, "TradingAgentsGraph", _FakeTAG)
+    main.app.state.starting_telemetry = None
 
     req = AnalysisRequest(
         ticker="NVDA",
@@ -44,5 +46,40 @@ def test_real_graph_factory_builds_graph(monkeypatch):
     assert captured["analysts"] == ["market", "news"]
     assert captured["config"]["max_debate_rounds"] == 5
     assert captured["config"]["llm_provider"] == "openai"
+    assert captured["callbacks"] == []
     assert init_state["company_of_interest"] == "NVDA"
     assert decision is None and final_state is None
+
+
+def test_real_graph_factory_passes_telemetry_callback(monkeypatch):
+    import api.main as main
+    from api.schemas import AnalysisRequest
+    from api.telemetry import RunTelemetry
+
+    captured = {}
+
+    class _FakeTAG:
+        def __init__(self, selected_analysts, debug, config, **kwargs):
+            captured["callbacks"] = kwargs.get("callbacks")
+
+            class _Prop:
+                def create_initial_state(self, ticker, date, **kw):
+                    return {"company_of_interest": ticker, "trade_date": date}
+
+                def get_graph_args(self):
+                    return {}
+
+            self.propagator = _Prop()
+            self.memory_log = type("_ML", (), {"get_past_context": lambda self, t: ""})()
+            self.graph = type("_Inner", (), {"stream": lambda self, s, **k: iter(())})()
+
+        def resolve_instrument_context(self, ticker, asset_type):
+            return ""
+
+    monkeypatch.setattr(main, "TradingAgentsGraph", _FakeTAG)
+    main.app.state.starting_telemetry = RunTelemetry("r1")
+
+    req = AnalysisRequest(ticker="NVDA", trade_date="2024-05-10")
+    main.real_graph_factory(req)
+
+    assert len(captured["callbacks"]) == 1

@@ -31,6 +31,8 @@ app.state.store = None
 app.state.run_lock = threading.Lock()
 app.state.queues = {}
 app.state.cancellations = {}
+app.state.telemetry = {}
+app.state.starting_telemetry = None
 app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
 
 
@@ -70,8 +72,11 @@ def real_graph_factory(req):
     if req.quick_think_llm:
         config["quick_think_llm"] = req.quick_think_llm
 
+    telemetry = getattr(app.state, "starting_telemetry", None)
+    callbacks = [telemetry.callback_handler()] if telemetry is not None else []
+
     graph = TradingAgentsGraph(
-        selected_analysts=req.analysts, debug=False, config=config
+        selected_analysts=req.analysts, debug=False, config=config, callbacks=callbacks
     )
 
     past_context = graph.memory_log.get_past_context(req.ticker)

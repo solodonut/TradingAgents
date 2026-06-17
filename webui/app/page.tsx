@@ -12,6 +12,7 @@ import {
   getConfigOptions,
   getHistory,
   getHistoryDetail,
+  getAnalysisStatus,
   cancelAnalysis,
   startAnalysis,
 } from "@/lib/api";
@@ -21,6 +22,7 @@ import type {
   Decision,
   HistorySummary,
   RunResult,
+  RunStatusDetail,
   SSEEvent,
 } from "@/lib/types";
 
@@ -41,6 +43,8 @@ export default function Home() {
   const [detail, setDetail] = useState<RunResult | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<RunStatusDetail | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
   const refreshHistory = () => getHistory().then(setHistory).catch(() => setHistory([]));
 
@@ -55,12 +59,16 @@ export default function Home() {
     setDetail(null);
     setDetailError(null);
     setDetailLoading(false);
+    setRuntimeStatus(null);
+    setRuntimeError(null);
   };
 
   const onOpenDetail = async (runId: string) => {
     setSelectedId(runId);
     setDetail(null);
     setDetailError(null);
+    setRuntimeStatus(null);
+    setRuntimeError(null);
     setDetailLoading(true);
     try {
       const r = await getHistoryDetail(runId);
@@ -71,6 +79,31 @@ export default function Home() {
       setDetailLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!selectedId || detail?.status !== "running") return;
+    let alive = true;
+
+    const refreshRuntime = () => {
+      getAnalysisStatus(selectedId)
+        .then((s) => {
+          if (!alive) return;
+          setRuntimeStatus(s);
+          setRuntimeError(null);
+        })
+        .catch((err) => {
+          if (!alive) return;
+          setRuntimeError((err as Error).message);
+        });
+    };
+
+    refreshRuntime();
+    const timer = window.setInterval(refreshRuntime, 5000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [selectedId, detail?.status]);
 
   const onDeleteHistory = (id: string) => {
     if (id === selectedId) exitDetail();
@@ -135,6 +168,8 @@ export default function Home() {
       if (selectedId === runId) {
         const next = await getHistoryDetail(runId);
         setDetail(next);
+        const status = await getAnalysisStatus(runId).catch(() => null);
+        setRuntimeStatus(status);
       }
       setCanceling(false);
     } catch (err) {
@@ -219,6 +254,8 @@ export default function Home() {
                 {detail && (
                   <RunDetail
                     run={detail}
+                    runtime={runtimeStatus}
+                    runtimeError={runtimeError}
                     onCancel={detail.status === "running" ? cancelRun : undefined}
                     canceling={canceling}
                   />

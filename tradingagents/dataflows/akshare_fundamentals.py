@@ -21,8 +21,9 @@ Two A-share-specific concerns are handled here:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated, Callable
+from typing import Annotated
 
 import akshare as ak
 import pandas as pd

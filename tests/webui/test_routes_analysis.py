@@ -75,6 +75,44 @@ def test_cancel_completed_analysis_returns_409(client):
     assert resp.status_code == 409
 
 
+def test_analysis_status_returns_runtime_telemetry(client):
+    import api.main as main
+    from api.telemetry import RunTelemetry
+
+    store = main.get_store()
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    telemetry = RunTelemetry("r1")
+    telemetry.mark_llm_start(
+        model="claude-test",
+        prompt_preview="Research Manager prompt",
+        prompt_chars=23,
+    )
+    main.app.state.telemetry["r1"] = telemetry
+    main.app.state.queues["r1"] = object()
+
+    resp = client.get("/api/analysis/r1/status")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["db_status"] == "running"
+    assert body["process_alive"] is True
+    assert body["llm_active"] is True
+    assert body["last_llm_model"] == "claude-test"
+    assert body["last_prompt_preview"] == "Research Manager prompt"
+
+
+def test_analysis_status_falls_back_for_old_runs_without_telemetry(client):
+    import api.main as main
+
+    main.get_store().insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+
+    resp = client.get("/api/analysis/r1/status")
+
+    assert resp.status_code == 200
+    assert resp.json()["db_status"] == "running"
+    assert resp.json()["llm_active"] is False
+
+
 def test_report_download_returns_markdown(client):
     import api.main as main
 

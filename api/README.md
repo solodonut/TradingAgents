@@ -16,6 +16,7 @@ Frontend (separate terminal):
 - `GET  /api/config/options` — config card options
 - `POST /api/analysis` — start a run, returns `{run_id}` (409 if one is running)
 - `POST /api/analysis/{run_id}/cancel` — stop a running analysis
+- `GET  /api/analysis/{run_id}/status` — inspect in-memory runtime telemetry for a run
 - `GET  /api/analysis/{run_id}/stream` — SSE event stream
 - `GET  /api/analysis/{run_id}/report` — download Markdown report
 - `GET  /api/history` — list past runs
