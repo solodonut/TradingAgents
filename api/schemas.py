@@ -60,3 +60,48 @@ class ConfigOptions(BaseModel):
     configured_provider: str | None
     configured_deep_llm: str | None
     configured_quick_llm: str | None
+
+
+ChatRole = Literal["user", "assistant"]
+PortfolioSource = Literal["vision", "manual"]
+
+
+class PortfolioHolding(BaseModel):
+    ticker: str
+    name: str | None = None
+    shares: float | None = None
+    avg_cost: float | None = None
+    market_value: float | None = None
+    weight: float | None = None
+    action: Literal["buy", "sell"] | None = None
+    trade_date: str | None = None
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+class ChatSessionCreate(BaseModel):
+    run_id: str | None = None
+
+
+class ChatMessage(BaseModel):
+    message_id: str
+    session_id: str
+    role: ChatRole
+    content: str
+    tool_calls: list[dict] = Field(default_factory=list)
+    created_at: str
+
+
+class ChatSession(BaseModel):
+    session_id: str
+    run_id: str | None
+    title: str | None
+    created_at: str
+    updated_at: str
+
+
+class PortfolioExtractResponse(BaseModel):
+    holdings: list[PortfolioHolding] = Field(default_factory=list)
+    source: PortfolioSource
