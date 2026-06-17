@@ -5,7 +5,6 @@ import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createChatSession,
-  getChatSession,
   getPortfolio,
   savePortfolio,
   chatStreamUrl,
@@ -74,6 +73,14 @@ export default function ChatPage() {
               : msg,
           ),
         );
+      } else if (e.event === "error") {
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.message_id === assistantId
+              ? { ...msg, content: `⚠️ 出错了:${e.data.message}` }
+              : msg,
+          ),
+        );
       }
     });
     setStreaming(false);
@@ -114,12 +121,13 @@ export default function ChatPage() {
           <input
             className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
             placeholder="问问该如何操作…"
+            aria-label="对话输入"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             disabled={streaming}
           />
-          <Button onClick={send} disabled={streaming || !input.trim()}>
+          <Button onClick={send} disabled={streaming || !input.trim()} aria-label="发送">
             <Send className="h-4 w-4" />
           </Button>
         </div>
