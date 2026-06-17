@@ -78,7 +78,7 @@ class Store:
         with self._lock, self._connect() as conn:
             conn.execute(
                 "UPDATE analysis_runs SET status='completed', decision=?, "
-                "result_json=?, completed_at=? WHERE run_id=?",
+                "result_json=?, completed_at=? WHERE run_id=? AND status='running'",
                 (decision, _dumps(result), _now(), run_id),
             )
 
@@ -86,9 +86,25 @@ class Store:
         with self._lock, self._connect() as conn:
             conn.execute(
                 "UPDATE analysis_runs SET status='error', result_json=?, "
-                "completed_at=? WHERE run_id=?",
+                "completed_at=? WHERE run_id=? AND status='running'",
                 (_dumps({"error": message}), _now(), run_id),
             )
+
+    def cancel_run(self, run_id: str, reason: str = "cancelled by user") -> bool:
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE analysis_runs SET status='cancelled', result_json=?, "
+                "completed_at=? WHERE run_id=? AND status='running'",
+                (_dumps({"cancelled": True, "reason": reason}), _now(), run_id),
+            )
+            return cur.rowcount > 0
+
+    def get_status(self, run_id: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT status FROM analysis_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+        return None if row is None else row["status"]
 
     def get_run(self, run_id: str) -> RunResult | None:
         with self._connect() as conn:

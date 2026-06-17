@@ -1,6 +1,6 @@
 "use client";
-import { ArrowLeft, Activity, Terminal } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, Activity, LoaderCircle, OctagonX, Terminal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { ConfigCard } from "@/components/ConfigCard";
 import { AgentProgress } from "@/components/AgentProgress";
 import { MessageBubble } from "@/components/MessageBubble";
@@ -12,6 +12,7 @@ import {
   getConfigOptions,
   getHistory,
   getHistoryDetail,
+  cancelAnalysis,
   startAnalysis,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
@@ -31,6 +32,9 @@ export default function Home() {
   const [decision, setDecision] = useState<{ d: Decision; detail: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [canceling, setCanceling] = useState(false);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Detail (history replay) mode
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -43,6 +47,7 @@ export default function Home() {
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
     refreshHistory();
+    return () => unsubscribeRef.current?.();
   }, []);
 
   const exitDetail = () => {
@@ -79,9 +84,11 @@ export default function Home() {
     setDecision(null);
     setError(null);
     setRunning(true);
+    setCanceling(false);
     try {
       const runId = await startAnalysis(req);
-      subscribe(
+      setCurrentRunId(runId);
+      unsubscribeRef.current = subscribe(
         runId,
         (e: SSEEvent) => {
           if (e.event === "agent_status")
@@ -91,20 +98,43 @@ export default function Home() {
           else if (e.event === "done")
             setDecision({ d: e.data.decision, detail: e.data.final_trade_decision });
           else if (e.event === "error") setError(e.data.message);
+          else if (e.event === "cancelled") setError("分析已停止");
         },
         () => {
           setRunning(false);
+          setCanceling(false);
+          setCurrentRunId(null);
+          unsubscribeRef.current = null;
           refreshHistory();
         },
       );
     } catch (err) {
       setRunning(false);
+      setCanceling(false);
+      setCurrentRunId(null);
       const msg = (err as Error).message;
       setError(
         msg === "已有分析正在运行"
           ? "已有分析正在运行，请等待当前分析完成后再试。"
           : msg,
       );
+    }
+  };
+
+  const onCancel = async () => {
+    if (!currentRunId || canceling) return;
+    setCanceling(true);
+    try {
+      await cancelAnalysis(currentRunId);
+      setError("分析已停止");
+      setRunning(false);
+      setCurrentRunId(null);
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+      refreshHistory();
+    } catch (err) {
+      setCanceling(false);
+      setError((err as Error).message);
     }
   };
 
@@ -200,9 +230,24 @@ export default function Home() {
                   </div>
                 )}
                 {running && (
-                  <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs uppercase tracking-[0.14em] text-amber-300">
-                    <Activity className="size-3.5" aria-hidden="true" />
-                    分析进行中
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                    <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.14em] text-amber-300">
+                      <Activity className="size-3.5" aria-hidden="true" />
+                      分析进行中
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onCancel}
+                      disabled={canceling}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-md border border-amber-500/50 px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-amber-100 transition-colors hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {canceling ? (
+                        <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <OctagonX className="size-3.5" />
+                      )}
+                      停止分析
+                    </button>
                   </div>
                 )}
                 {messages.map((m, i) => (

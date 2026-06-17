@@ -30,6 +30,7 @@ app.add_middleware(
 app.state.store = None
 app.state.run_lock = threading.Lock()
 app.state.queues = {}
+app.state.cancellations = {}
 app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
 
 

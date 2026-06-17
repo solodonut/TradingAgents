@@ -1,4 +1,7 @@
-from api.runner import REPORT_SECTIONS, chunk_to_events
+import queue
+import threading
+
+from api.runner import REPORT_SECTIONS, AnalysisRunner, chunk_to_events
 
 
 def test_report_section_chunk_emits_report_event():
@@ -35,11 +38,6 @@ def test_all_known_sections_have_agent_mapping():
         assert section in REPORT_SECTIONS
         agent, team = REPORT_SECTIONS[section]
         assert isinstance(agent, str) and isinstance(team, str)
-
-
-import queue
-
-from api.runner import AnalysisRunner
 
 
 class _FakeGraph:
@@ -109,6 +107,29 @@ def test_runner_emits_error_on_exception(tmp_path):
     events = _drain(q)
     assert any(e["event"] == "error" for e in events)
     assert store.get_run("r1").status == "error"
+
+
+def test_runner_emits_cancelled_when_cancel_event_is_set(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    cancel_event = threading.Event()
+
+    def chunks():
+        yield {"market_report": "m"}
+        cancel_event.set()
+        yield {"final_trade_decision": "**Rating**: Buy"}
+
+    fake = _FakeGraph(chunks=chunks(), final_state=None, decision=None)
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q, cancel_event=cancel_event)
+
+    runner.run(run_id="r1", graph=fake, init_state={}, decision=None, final_state=None)
+
+    events = _drain(q)
+    assert any(e["event"] == "cancelled" for e in events)
+    assert store.get_run("r1").status == "cancelled"
 
 
 def _drain(q: queue.Queue) -> list:

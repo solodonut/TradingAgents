@@ -1,6 +1,7 @@
 """Bridges TradingAgentsGraph.stream() to SSE events via a background thread."""
 
 import queue
+import threading
 import time
 import traceback
 
@@ -57,9 +58,15 @@ class AnalysisRunner:
     accept them explicitly so the runner stays testable with a fake graph.
     """
 
-    def __init__(self, store: Store, event_queue: "queue.Queue"):
+    def __init__(
+        self,
+        store: Store,
+        event_queue: "queue.Queue",
+        cancel_event: threading.Event | None = None,
+    ):
         self._store = store
         self._q = event_queue
+        self._cancel_event = cancel_event
 
     def run(self, run_id, graph, init_state, decision, final_state) -> None:
         seen: set[str] = set()
@@ -67,10 +74,16 @@ class AnalysisRunner:
         stream_args = getattr(graph, "_stream_args", {}) or {}
         try:
             for chunk in graph.graph.stream(init_state, **stream_args):
+                if self._is_cancelled():
+                    self._emit_cancelled(run_id)
+                    return
                 if isinstance(chunk, dict):
                     accumulated.update(chunk)
                 for event in chunk_to_events(chunk, seen):
                     self._q.put(event)
+                if self._is_cancelled():
+                    self._emit_cancelled(run_id)
+                    return
 
             if final_state is None:
                 final_state = accumulated
@@ -98,6 +111,18 @@ class AnalysisRunner:
             self._q.put({"event": "error", "data": {"message": str(exc)}})
         finally:
             self._q.put(None)
+
+    def _is_cancelled(self) -> bool:
+        return bool(self._cancel_event and self._cancel_event.is_set())
+
+    def _emit_cancelled(self, run_id: str) -> None:
+        self._store.cancel_run(run_id)
+        self._q.put(
+            {
+                "event": "cancelled",
+                "data": {"run_id": run_id, "message": "analysis cancelled"},
+            }
+        )
 
 
 def _extract_decision(graph, final_state: dict) -> str | None:

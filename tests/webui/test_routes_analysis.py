@@ -49,6 +49,32 @@ def test_second_analysis_while_running_returns_409(client, monkeypatch):
     assert resp.status_code == 409
 
 
+def test_cancel_running_analysis_marks_cancelled(client):
+    import api.main as main
+
+    store = main.get_store()
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+
+    resp = client.post("/api/analysis/r1/cancel")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"run_id": "r1", "status": "cancelled"}
+    assert store.get_run("r1").status == "cancelled"
+    assert store.has_running_run() is False
+
+
+def test_cancel_completed_analysis_returns_409(client):
+    import api.main as main
+
+    store = main.get_store()
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    store.complete_run("r1", decision="Hold", result={})
+
+    resp = client.post("/api/analysis/r1/cancel")
+
+    assert resp.status_code == 409
+
+
 def test_report_download_returns_markdown(client):
     import api.main as main
 

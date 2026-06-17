@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 AssetType = Literal["stock", "crypto"]
 AnalystName = Literal["market", "social", "news", "fundamentals"]
 Decision = Literal["Buy", "Overweight", "Hold", "Underweight", "Sell"]
-RunStatus = Literal["running", "completed", "error"]
+RunStatus = Literal["running", "completed", "error", "cancelled"]
 
 
 class AnalysisRequest(BaseModel):

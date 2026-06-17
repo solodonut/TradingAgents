@@ -59,7 +59,13 @@ export function RunDetail({ run }: { run: RunResult }) {
         </div>
       )}
 
-      {isEmpty && run.status !== "error" && (
+      {run.status === "cancelled" && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs text-amber-300">
+          该分析已停止，以下为停止前已生成的部分
+        </div>
+      )}
+
+      {isEmpty && run.status !== "error" && run.status !== "cancelled" && (
         <div className="rounded-md border border-dashed border-border bg-card px-3 py-3 font-mono text-xs text-muted-foreground">
           暂无可显示的报告内容
         </div>

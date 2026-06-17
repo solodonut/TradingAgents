@@ -45,7 +45,9 @@ def start_analysis(req: AnalysisRequest, request: Request) -> dict:
 
     q: queue.Queue = queue.Queue()
     request.app.state.queues[run_id] = q
-    runner = AnalysisRunner(store=store, event_queue=q)
+    cancel_event = threading.Event()
+    request.app.state.cancellations[run_id] = cancel_event
+    runner = AnalysisRunner(store=store, event_queue=q, cancel_event=cancel_event)
 
     thread = threading.Thread(
         target=runner.run,
@@ -60,6 +62,36 @@ def start_analysis(req: AnalysisRequest, request: Request) -> dict:
     )
     thread.start()
     return {"run_id": run_id}
+
+
+@router.post("/{run_id}/cancel")
+def cancel_analysis(run_id: str, request: Request) -> dict:
+    from api.main import get_store
+
+    store = get_store()
+    status = store.get_status(run_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if status != "running":
+        raise HTTPException(status_code=409, detail=f"analysis is {status}")
+
+    cancel_event = request.app.state.cancellations.get(run_id)
+    if cancel_event is not None:
+        cancel_event.set()
+    store.cancel_run(run_id, "cancelled by user")
+
+    q = request.app.state.queues.get(run_id)
+    if q is not None:
+        q.put(
+            {
+                "event": "cancelled",
+                "data": {"run_id": run_id, "message": "analysis cancelled"},
+            }
+        )
+        q.put(None)
+
+    request.app.state.cancellations.pop(run_id, None)
+    return {"run_id": run_id, "status": "cancelled"}
 
 
 @router.get("/{run_id}/stream")
@@ -84,6 +116,7 @@ async def stream_analysis(run_id: str, request: Request) -> EventSourceResponse:
 
             yield {"event": item["event"], "data": json.dumps(item["data"])}
         request.app.state.queues.pop(run_id, None)
+        request.app.state.cancellations.pop(run_id, None)
 
     return EventSourceResponse(event_generator())
 

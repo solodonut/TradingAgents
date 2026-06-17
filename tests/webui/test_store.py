@@ -83,3 +83,20 @@ def test_has_running_run(tmp_path):
     assert store.has_running_run() is True
     store.complete_run("r1", decision="Hold", result={})
     assert store.has_running_run() is False
+
+
+def test_cancel_run_stops_running_gate_and_prevents_late_completion(tmp_path):
+    store = Store(tmp_path / "test.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+
+    store.cancel_run("r1", "stopped by user")
+
+    row = store.get_run("r1")
+    assert row.status == "cancelled"
+    assert row.result == {"cancelled": True, "reason": "stopped by user"}
+    assert store.has_running_run() is False
+
+    store.complete_run("r1", decision="Buy", result={"final_trade_decision": "late"})
+    row = store.get_run("r1")
+    assert row.status == "cancelled"
+    assert row.decision is None
