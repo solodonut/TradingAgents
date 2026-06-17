@@ -13,5 +13,6 @@ def client(tmp_path, monkeypatch):
     main.app.state.cancellations = {}
     main.app.state.telemetry = {}
     main.app.state.starting_telemetry = None
+    main.app.state.chat_llm_factory = None
     with TestClient(main.app) as c:
         yield c

@@ -34,6 +34,7 @@ app.state.cancellations = {}
 app.state.telemetry = {}
 app.state.starting_telemetry = None
 app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
+app.state.chat_llm_factory = None  # set at startup; tests inject their own
 
 
 def get_store() -> Store:
@@ -51,6 +52,10 @@ app.include_router(history_routes.router)
 from api.routes import analysis as analysis_routes  # noqa: E402
 
 app.include_router(analysis_routes.router)
+
+from api.routes import chat as chat_routes  # noqa: E402
+
+app.include_router(chat_routes.router)
 
 
 def real_graph_factory(req):
@@ -93,7 +98,32 @@ def real_graph_factory(req):
     return graph, init_state, None, None
 
 
+def real_chat_llm_factory():
+    """Build (chat_llm, vision_llm) LangChain models from DEFAULT_CONFIG.
+
+    Both use the configured provider/model. The vision model must support image
+    input (anthropic / google / openai families). set_config() makes the
+    dataflows vendor routing match the configured data_vendors.
+    """
+    from tradingagents.dataflows.config import set_config
+    from tradingagents.llm_clients import create_llm_client
+
+    config = DEFAULT_CONFIG.copy()
+    set_config(config)
+
+    provider = config["llm_provider"]
+    model = config["quick_think_llm"]
+    base_url = config.get("backend_url")
+
+    client = create_llm_client(provider=provider, model=model, base_url=base_url)
+    chat_llm = client.get_llm()
+    vision_llm = chat_llm
+    return chat_llm, vision_llm
+
+
 @app.on_event("startup")
 def _wire_graph_factory():
     if app.state.graph_factory is None:
         app.state.graph_factory = real_graph_factory
+    if app.state.chat_llm_factory is None:
+        app.state.chat_llm_factory = real_chat_llm_factory
