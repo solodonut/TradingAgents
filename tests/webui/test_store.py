@@ -1,4 +1,4 @@
-import json
+from langchain_core.messages import HumanMessage
 
 from api.store import Store
 
@@ -28,6 +28,29 @@ def test_complete_run_updates_decision_and_result(tmp_path):
     assert row.decision == "Buy"
     assert row.result == {"final_trade_decision": "x"}
     assert row.completed_at is not None
+
+
+def test_complete_run_serializes_langchain_messages(tmp_path):
+    store = Store(tmp_path / "test.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    store.complete_run(
+        "r1",
+        decision="Buy",
+        result={
+            "final_trade_decision": "x",
+            "messages": [HumanMessage(content="analyze NVDA", id="h1")],
+        },
+    )
+
+    row = store.get_run("r1")
+    assert row.status == "completed"
+    assert row.result["messages"] == [
+        {
+            "type": "human",
+            "content": "analyze NVDA",
+            "id": "h1",
+        }
+    ]
 
 
 def test_mark_error(tmp_path):

@@ -5,6 +5,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from api.schemas import HistorySummary, RunResult
 
@@ -26,6 +27,26 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _json_default(value: Any) -> Any:
+    """JSON fallback for LangGraph/LangChain objects in final_state."""
+    if hasattr(value, "type") and hasattr(value, "content"):
+        out = {
+            "type": value.type,
+            "content": value.content,
+        }
+        message_id = getattr(value, "id", None)
+        if message_id:
+            out["id"] = message_id
+        return out
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    return str(value)
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, default=_json_default, ensure_ascii=False)
 
 
 class Store:
@@ -50,7 +71,7 @@ class Store:
                 "(run_id, ticker, trade_date, asset_type, decision, status, "
                 " config_json, result_json, created_at, completed_at) "
                 "VALUES (?, ?, ?, ?, NULL, 'running', ?, NULL, ?, NULL)",
-                (run_id, ticker, trade_date, asset_type, json.dumps(config), _now()),
+                (run_id, ticker, trade_date, asset_type, _dumps(config), _now()),
             )
 
     def complete_run(self, run_id: str, decision: str, result: dict) -> None:
@@ -58,7 +79,7 @@ class Store:
             conn.execute(
                 "UPDATE analysis_runs SET status='completed', decision=?, "
                 "result_json=?, completed_at=? WHERE run_id=?",
-                (decision, json.dumps(result), _now(), run_id),
+                (decision, _dumps(result), _now(), run_id),
             )
 
     def mark_error(self, run_id: str, message: str) -> None:
@@ -66,7 +87,7 @@ class Store:
             conn.execute(
                 "UPDATE analysis_runs SET status='error', result_json=?, "
                 "completed_at=? WHERE run_id=?",
-                (json.dumps({"error": message}), _now(), run_id),
+                (_dumps({"error": message}), _now(), run_id),
             )
 
     def get_run(self, run_id: str) -> RunResult | None:
