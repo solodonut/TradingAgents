@@ -22,8 +22,8 @@ export function HistorySidebar({
   onDelete: (runId: string) => void;
 }) {
   return (
-    <aside className="h-full overflow-y-auto border-border bg-sidebar text-sidebar-foreground lg:border-r">
-      <div className="sticky top-0 z-10 border-b border-sidebar-border bg-sidebar/95 px-3 py-3">
+    <aside className="glass h-full overflow-y-auto rounded-none text-sidebar-foreground">
+      <div className="glass-readable sticky top-0 z-10 rounded-none border-x-0 border-t-0 px-3 py-3">
         <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
           History Queue
         </div>
@@ -32,7 +32,7 @@ export function HistorySidebar({
 
       <div className="space-y-1 p-2">
         {items.length === 0 && (
-          <div className="rounded-md border border-dashed border-sidebar-border px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+          <div className="glass-readable rounded-md border-dashed border-sidebar-border px-3 py-3 text-xs leading-relaxed text-muted-foreground">
             完成的分析会出现在这里。打开历史记录可以复盘每个 agent 的报告和最终决策。
           </div>
         )}
@@ -50,8 +50,8 @@ export function HistorySidebar({
               aria-current={active ? "true" : undefined}
               className={`group rounded-md border px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
                 active
-                  ? "border-primary/60 bg-accent text-accent-foreground"
-                  : "border-transparent hover:border-sidebar-border hover:bg-sidebar-accent"
+                  ? "border-primary/60 bg-accent/80 text-accent-foreground"
+                  : "border-transparent hover:border-sidebar-border hover:bg-sidebar-accent/70"
               }`}
               onClick={() => onOpen(it.run_id)}
               onKeyDown={(e) => {

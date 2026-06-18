@@ -92,14 +92,20 @@ export async function deleteChatSession(id: string): Promise<void> {
 
 export async function uploadPortfolio(
   id: string,
-  file: File,
+  files: File | File[],
 ): Promise<{ holdings: PortfolioHolding[]; source: string }> {
   const fd = new FormData();
-  fd.append("file", file);
+  const uploadFiles = Array.isArray(files) ? files : [files];
+  if (uploadFiles[0]) fd.append("file", uploadFiles[0]);
+  uploadFiles.forEach((file) => fd.append("files", file));
   const r = await fetch(`${BASE}/api/chat/sessions/${id}/portfolio`, {
     method: "POST",
     body: fd,
   });
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null);
+    throw new Error(detail?.detail ?? "持仓截图上传失败");
+  }
   return r.json();
 }
 

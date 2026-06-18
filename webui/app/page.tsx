@@ -1,5 +1,6 @@
 "use client";
-import { ArrowLeft, Activity, LoaderCircle, OctagonX, Terminal } from "lucide-react";
+import { ArrowLeft, Activity, LoaderCircle, MessageCircle, OctagonX, Terminal } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ConfigCard } from "@/components/ConfigCard";
 import { AgentProgress } from "@/components/AgentProgress";
@@ -230,7 +231,8 @@ export default function Home() {
   const workingAgents = Object.values(statuses).filter((s) => s === "working").length;
 
   return (
-    <div className="min-h-screen bg-background text-foreground lg:h-screen lg:overflow-hidden">
+    <div className="min-h-screen text-foreground lg:h-screen lg:overflow-hidden">
+      <div className="glass-glow" aria-hidden="true" />
       <div className="grid min-h-screen grid-cols-1 lg:h-screen lg:grid-cols-[18rem_minmax(0,1fr)_22rem]">
         <div className="order-3 min-h-[18rem] lg:order-1 lg:min-h-0">
           <HistorySidebar
@@ -243,7 +245,7 @@ export default function Home() {
 
         <main className="order-2 min-h-0 border-border lg:order-2 lg:h-screen lg:overflow-y-auto lg:border-r">
           <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-4 lg:px-5">
-            <header className="mb-3 rounded-lg border border-border bg-card px-3 py-3">
+            <header className="glass mb-3 rounded-lg px-3 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
@@ -254,7 +256,14 @@ export default function Home() {
                     研究工作台
                   </h1>
                 </div>
-                <div className="flex flex-wrap gap-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
+                  <Link
+                    href="/chat"
+                    className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  >
+                    <MessageCircle className="size-3.5" aria-hidden="true" />
+                    顾问对话
+                  </Link>
                   <span className="rounded border border-border px-2 py-1">
                     Done {completedAgents}
                   </span>
@@ -270,20 +279,20 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={exitDetail}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="glass inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
                   <ArrowLeft className="size-3.5" />
                   新分析
                 </button>
                 {detailLoading && (
                   <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <div className="h-16 rounded-lg border border-border bg-card" />
-                    <div className="h-36 rounded-lg border border-border bg-card" />
-                    <div className="h-36 rounded-lg border border-border bg-card" />
+                    <div className="glass h-16 rounded-lg" />
+                    <div className="glass h-36 rounded-lg" />
+                    <div className="glass h-36 rounded-lg" />
                   </div>
                 )}
                 {detailError && (
-                  <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
+                  <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
                     {detailError}
                   </div>
                 )}
@@ -300,12 +309,12 @@ export default function Home() {
             ) : (
               <section className="space-y-3">
                 {error && (
-                  <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
+                  <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
                     {error}
                   </div>
                 )}
                 {showEmptyState && (
-                  <div className="rounded-lg border border-dashed border-border bg-card px-4 py-5">
+                  <div className="glass rounded-lg px-4 py-5">
                     <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
                       Waiting For Run
                     </div>
@@ -319,7 +328,7 @@ export default function Home() {
                   </div>
                 )}
                 {running && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <div className="glass-readable flex flex-wrap items-center justify-between gap-2 rounded-md border-amber-500/40 bg-amber-500/10 px-3 py-2">
                     <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.14em] text-amber-300">
                       <Activity className="size-3.5" aria-hidden="true" />
                       分析进行中
@@ -354,9 +363,9 @@ export default function Home() {
           </div>
         </main>
 
-        <aside className="order-1 border-b border-border bg-background p-3 lg:order-3 lg:h-screen lg:overflow-y-auto lg:border-b-0">
+        <aside className="order-1 border-b border-border p-3 lg:order-3 lg:h-screen lg:overflow-y-auto lg:border-b-0">
           <div className="space-y-3">
-            <div className="rounded-lg border border-border bg-card px-3 py-3">
+            <div className="glass rounded-lg px-3 py-3">
               <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
                 Active Context
               </div>
@@ -379,7 +388,7 @@ export default function Home() {
             {options && <ConfigCard options={options} onStart={onStart} running={running} />}
 
             {error && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
+              <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
                 {error}
               </div>
             )}

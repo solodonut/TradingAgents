@@ -77,8 +77,13 @@ export interface PortfolioHolding {
   name?: string | null;
   shares?: number | null;
   avg_cost?: number | null;
+  current_price?: number | null;
   market_value?: number | null;
   weight?: number | null;
+  unrealized_pnl?: number | null;
+  return_rate?: number | null;
+  daily_pnl?: number | null;
+  daily_return_rate?: number | null;
   action?: "buy" | "sell" | null;
   trade_date?: string | null;
 }

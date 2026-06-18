@@ -47,7 +47,7 @@ export function RunDetail({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-border bg-card px-3 py-3 font-mono text-sm">
+      <div className="glass rounded-lg px-3 py-3 font-mono text-sm">
         <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
           Archived Run
         </div>
@@ -62,7 +62,7 @@ export function RunDetail({
       </div>
 
       {run.status === "running" && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+        <div className="glass-readable flex flex-wrap items-center justify-between gap-2 rounded-md border-amber-500/40 bg-amber-500/10 px-3 py-2">
           <div className="font-mono text-xs text-amber-300">
             仍在进行，以下为目前已生成的部分
           </div>
@@ -89,25 +89,25 @@ export function RunDetail({
       )}
 
       {run.status === "error" && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
+        <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-sm text-destructive">
           该分析以错误结束
         </div>
       )}
 
       {run.status === "cancelled" && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs text-amber-300">
+        <div className="glass-readable rounded-md border-amber-500/40 bg-amber-500/10 px-3 py-2 font-mono text-xs text-amber-300">
           该分析已停止，以下为停止前已生成的部分
         </div>
       )}
 
       {isEmpty && run.status === "running" && (
-        <div className="rounded-md border border-dashed border-border bg-card px-3 py-3 font-mono text-xs text-muted-foreground">
+        <div className="glass-readable rounded-md border-dashed border-border px-3 py-3 font-mono text-xs text-muted-foreground">
           尚未生成可持久化的阶段报告
         </div>
       )}
 
       {isEmpty && run.status !== "running" && run.status !== "error" && run.status !== "cancelled" && (
-        <div className="rounded-md border border-dashed border-border bg-card px-3 py-3 font-mono text-xs text-muted-foreground">
+        <div className="glass-readable rounded-md border-dashed border-border px-3 py-3 font-mono text-xs text-muted-foreground">
           暂无可显示的报告内容
         </div>
       )}

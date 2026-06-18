@@ -28,15 +28,26 @@ def _holdings_text(holdings: list[PortfolioHolding]) -> str:
         return ""
     lines = []
     for h in holdings:
-        bits = [h.ticker]
+        label = h.name or h.ticker
+        bits = [label]
         if h.shares is not None:
             bits.append(f"{h.shares} 股")
         if h.weight is not None:
             bits.append(f"占比 {h.weight}%")
         if h.avg_cost is not None:
             bits.append(f"成本 {h.avg_cost}")
+        if h.current_price is not None:
+            bits.append(f"现价 {h.current_price}")
         if h.market_value is not None:
             bits.append(f"市值 {h.market_value}")
+        if h.unrealized_pnl is not None:
+            bits.append(f"持有盈亏 {h.unrealized_pnl}")
+        if h.return_rate is not None:
+            bits.append(f"持有收益率 {h.return_rate}%")
+        if h.daily_pnl is not None:
+            bits.append(f"当日/昨日收益 {h.daily_pnl}")
+        if h.daily_return_rate is not None:
+            bits.append(f"当日收益率 {h.daily_return_rate}%")
         if h.action is not None:
             bits.append(f"操作 {h.action}")
         lines.append(": ".join([bits[0], ", ".join(bits[1:])]) if len(bits) > 1 else bits[0])
@@ -93,20 +104,33 @@ def delete_session(session_id: str) -> dict:
 
 @router.post("/sessions/{session_id}/portfolio", response_model=PortfolioExtractResponse)
 async def extract_portfolio(
-    session_id: str, request: Request, file: UploadFile = File(...)
+    session_id: str,
+    request: Request,
+    file: UploadFile | None = File(None),
+    files: list[UploadFile] | None = File(None),
 ) -> PortfolioExtractResponse:
     from api.main import get_store
-    from tradingagents.advisor.vision import extract_holdings
+    from tradingagents.advisor.vision import extract_holdings, merge_portfolio_rows
 
     store = get_store()
     if store.get_chat_session(session_id) is None:
         raise HTTPException(status_code=404, detail="session not found")
 
-    image_bytes = await file.read()
+    uploads = list(files or [])
+    if not uploads and file is not None:
+        uploads.append(file)
+    if not uploads:
+        raise HTTPException(status_code=400, detail="no portfolio images uploaded")
+
     _, vision_llm = request.app.state.chat_llm_factory()
-    holdings = extract_holdings(
-        vision_llm, image_bytes, mime=file.content_type or "image/png"
-    )
+    existing, _ = store.get_portfolio(session_id)
+    holdings = existing
+    for upload in uploads:
+        image_bytes = await upload.read()
+        extracted = extract_holdings(
+            vision_llm, image_bytes, mime=upload.content_type or "image/png"
+        )
+        holdings = merge_portfolio_rows(holdings, extracted)
     store.save_portfolio(session_id, holdings, source="vision")
     return PortfolioExtractResponse(holdings=holdings, source="vision")
 

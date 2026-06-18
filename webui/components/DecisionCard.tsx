@@ -11,11 +11,11 @@ const COLORS: Record<string, string> = {
 };
 
 const BORDERS: Record<string, string> = {
-  Buy: "border-emerald-500/60",
-  Overweight: "border-emerald-500/50",
-  Hold: "border-border",
-  Underweight: "border-red-500/50",
-  Sell: "border-red-500/60",
+  Buy: "ring-emerald-500/60",
+  Overweight: "ring-emerald-500/50",
+  Hold: "ring-border",
+  Underweight: "ring-red-500/50",
+  Sell: "ring-red-500/60",
 };
 
 const SUMMARY: Record<string, string> = {
@@ -37,7 +37,7 @@ export function DecisionCard({
 }) {
   return (
     <div
-      className={`rounded-lg border bg-card ${compact ? "p-3" : "p-4"} ${BORDERS[decision] ?? "border-border"}`}
+      className={`glass-strong rounded-lg ring-1 ${compact ? "p-3" : "p-4"} ${BORDERS[decision] ?? "ring-border"}`}
     >
       <div className="mb-1 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
         最终决策
@@ -52,7 +52,7 @@ export function DecisionCard({
           {SUMMARY[decision] ?? "最终评级已生成，查看主报告获取完整推理。"}
         </p>
       ) : (
-        <div className="ta-prose prose prose-invert prose-sm mt-3 max-w-none prose-pre:border prose-pre:border-border prose-pre:bg-background">
+        <div className="ta-prose prose prose-invert prose-sm mt-3 max-w-none prose-pre:border prose-pre:border-border prose-pre:bg-background/40">
           <MarkdownContent content={detail} />
         </div>
       )}

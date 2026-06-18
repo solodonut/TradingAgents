@@ -10,8 +10,10 @@ export function ChatMessage({ message }: { message: ChatMessageT }) {
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[80%] rounded-lg border border-border px-3 py-2",
-          isUser ? "bg-primary/10" : "bg-card",
+          "max-w-[80%] rounded-lg px-3 py-2",
+          isUser
+            ? "glass border-primary/30 bg-primary/10"
+            : "glass-readable",
         )}
       >
         {isUser ? (

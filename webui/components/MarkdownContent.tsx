@@ -16,13 +16,13 @@ function normalizeInlineTables(markdown: string): string {
 
 const components: Components = {
   table: ({ children }) => (
-    <div className="my-4 overflow-x-auto rounded-md border border-border">
+    <div className="glass-readable my-4 overflow-x-auto rounded-md">
       <table className="min-w-full border-collapse text-left font-mono text-xs">
         {children}
       </table>
     </div>
   ),
-  thead: ({ children }) => <thead className="bg-muted/60">{children}</thead>,
+  thead: ({ children }) => <thead className="bg-muted/30">{children}</thead>,
   th: ({ children }) => (
     <th className="border-b border-r border-border px-3 py-2 font-semibold text-foreground last:border-r-0">
       {children}

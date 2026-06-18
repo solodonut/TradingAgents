@@ -71,8 +71,13 @@ class PortfolioHolding(BaseModel):
     name: str | None = None
     shares: float | None = None
     avg_cost: float | None = None
+    current_price: float | None = None
     market_value: float | None = None
     weight: float | None = None
+    unrealized_pnl: float | None = None
+    return_rate: float | None = None
+    daily_pnl: float | None = None
+    daily_return_rate: float | None = None
     action: Literal["buy", "sell"] | None = None
     trade_date: str | None = None
 

@@ -3,8 +3,8 @@ import { MarkdownContent } from "@/components/MarkdownContent";
 
 export function MessageBubble({ agent, content }: { agent: string; content: string }) {
   return (
-    <article className="rounded-lg border border-border bg-card">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <article className="glass-readable rounded-lg">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
         <div>
           <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
             Research Memo
@@ -15,7 +15,7 @@ export function MessageBubble({ agent, content }: { agent: string; content: stri
           streamed
         </div>
       </header>
-      <div className="ta-prose prose prose-invert prose-sm max-w-none px-3 py-3 prose-pre:border prose-pre:border-border prose-pre:bg-background prose-table:text-sm">
+      <div className="ta-prose prose prose-invert prose-sm max-w-none px-3 py-3 prose-pre:border prose-pre:border-border prose-pre:bg-background/40 prose-table:text-sm">
         <MarkdownContent content={content} />
       </div>
     </article>

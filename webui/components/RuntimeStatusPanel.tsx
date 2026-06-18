@@ -26,7 +26,7 @@ export function RuntimeStatusPanel({
   runtimeError?: string | null;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-3">
+    <div className="glass rounded-lg px-3 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
           <Radio className="size-3.5" aria-hidden="true" />
@@ -38,13 +38,13 @@ export function RuntimeStatusPanel({
       </div>
 
       {runtimeError && (
-        <div className="mt-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
+        <div className="glass-readable mt-3 rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
           {runtimeError}
         </div>
       )}
 
       {!runtime && !runtimeError && (
-        <div className="mt-3 rounded-md border border-dashed border-border px-3 py-3 font-mono text-xs text-muted-foreground">
+        <div className="glass-readable mt-3 rounded-md border-dashed border-border px-3 py-3 font-mono text-xs text-muted-foreground">
           暂无后台遥测，可能是旧分析、服务重启前启动，或正在初始化。
         </div>
       )}
@@ -52,7 +52,7 @@ export function RuntimeStatusPanel({
       {runtime && (
         <div className="mt-3 space-y-3">
           <div className="grid gap-2 text-sm sm:grid-cols-2">
-            <div className="rounded-md border border-border px-3 py-2">
+            <div className="glass-readable rounded-md px-3 py-2">
               <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-muted-foreground">
                 <Activity className="size-3.5" aria-hidden="true" />
                 Process
@@ -61,7 +61,7 @@ export function RuntimeStatusPanel({
                 {runtime.process_alive ? "后台线程/队列仍存在" : "未发现活动后台进程"}
               </div>
             </div>
-            <div className="rounded-md border border-border px-3 py-2">
+            <div className="glass-readable rounded-md px-3 py-2">
               <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-muted-foreground">
                 <Clock3 className="size-3.5" aria-hidden="true" />
                 LLM
@@ -110,7 +110,7 @@ export function RuntimeStatusPanel({
           </dl>
 
           {runtime.last_llm_error && (
-            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
+            <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2">
               <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-destructive">
                 <AlertTriangle className="size-3.5" aria-hidden="true" />
                 Last LLM Error · {fmtTime(runtime.last_llm_error_at)}
@@ -122,7 +122,7 @@ export function RuntimeStatusPanel({
           )}
 
           {runtime.last_prompt_preview && (
-            <details className="rounded-md border border-border px-3 py-2">
+            <details className="glass-readable rounded-md px-3 py-2">
               <summary className="cursor-pointer font-mono text-[0.65rem] uppercase tracking-[0.14em] text-muted-foreground">
                 最近一次发给 LLM 的 Prompt 摘要
               </summary>

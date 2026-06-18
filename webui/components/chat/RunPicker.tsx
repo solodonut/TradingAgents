@@ -18,12 +18,12 @@ export function RunPicker({
       .catch(() => setRuns([]));
   }, []);
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-3">
+    <div className="glass-readable rounded-lg px-3 py-3">
       <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
         关联分析报告
       </div>
       <select
-        className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+        className="glass-control mt-2 w-full rounded-md px-2 py-1 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
       >

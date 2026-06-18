@@ -2,6 +2,9 @@ import json
 
 from langchain_core.messages import AIMessage
 
+import tradingagents.advisor.vision as vision
+from api.schemas import PortfolioHolding
+
 
 def _install_fake_chat(client, chat_responses, vision_content="[]"):
     import api.main as main
@@ -89,6 +92,116 @@ def test_portfolio_extract_and_get(client):
     assert resp.json()["source"] == "vision"
     got = client.get(f"/api/chat/sessions/{sid}/portfolio")
     assert got.json()["holdings"][0]["ticker"] == "AAPL"
+
+
+def test_portfolio_extract_accepts_multiple_images_and_merges_with_existing(client):
+    _install_fake_chat(
+        client,
+        [],
+        vision_content=json.dumps(
+            [
+                {"ticker": "AAPL", "shares": 12},
+                {"ticker": "NVDA", "shares": 2},
+            ]
+        ),
+    )
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    client.put(
+        f"/api/chat/sessions/{sid}/portfolio",
+        json={
+            "holdings": [
+                {"ticker": "AAPL", "shares": 10},
+                {"ticker": "MSFT", "shares": 5},
+            ],
+            "source": "manual",
+        },
+    )
+
+    resp = client.post(
+        f"/api/chat/sessions/{sid}/portfolio",
+        files=[
+            ("files", ("p1.png", b"\x89PNG-one", "image/png")),
+            ("files", ("p2.png", b"\x89PNG-two", "image/png")),
+        ],
+    )
+
+    assert resp.status_code == 200
+    assert [(h["ticker"], h["shares"]) for h in resp.json()["holdings"]] == [
+        ("AAPL", 12),
+        ("MSFT", 5),
+        ("NVDA", 2),
+    ]
+
+
+def test_portfolio_extract_prefers_files_over_legacy_file_field(client, monkeypatch):
+    extracted_payloads: list[bytes] = []
+
+    def fake_extract_holdings(llm, image_bytes, mime="image/png"):
+        extracted_payloads.append(image_bytes)
+        return [PortfolioHolding(ticker=f"ROW{len(extracted_payloads)}")]
+
+    monkeypatch.setattr(vision, "extract_holdings", fake_extract_holdings)
+    _install_fake_chat(
+        client,
+        [],
+        vision_content=json.dumps([{"ticker": "AAPL", "shares": 12}]),
+    )
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+
+    resp = client.post(
+        f"/api/chat/sessions/{sid}/portfolio",
+        files=[
+            ("file", ("legacy.png", b"\x89PNG-legacy", "image/png")),
+            ("files", ("p1.png", b"\x89PNG-one", "image/png")),
+            ("files", ("p2.png", b"\x89PNG-two", "image/png")),
+        ],
+    )
+
+    assert resp.status_code == 200
+    assert extracted_payloads == [b"\x89PNG-one", b"\x89PNG-two"]
+
+
+def test_portfolio_extract_appends_trade_on_different_date(client):
+    _install_fake_chat(
+        client,
+        [],
+        vision_content=json.dumps(
+            [
+                {
+                    "ticker": "AAPL",
+                    "action": "buy",
+                    "trade_date": "2026-06-18",
+                    "shares": 8,
+                }
+            ]
+        ),
+    )
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    client.put(
+        f"/api/chat/sessions/{sid}/portfolio",
+        json={
+            "holdings": [
+                {
+                    "ticker": "AAPL",
+                    "action": "buy",
+                    "trade_date": "2026-06-17",
+                    "shares": 10,
+                }
+            ],
+            "source": "manual",
+        },
+    )
+
+    resp = client.post(
+        f"/api/chat/sessions/{sid}/portfolio",
+        files={"file": ("p.png", b"\x89PNG", "image/png")},
+    )
+
+    assert resp.status_code == 200
+    assert [(h["ticker"], h["trade_date"], h["shares"]) for h in resp.json()["holdings"]] == [
+        ("AAPL", "2026-06-17", 10),
+        ("AAPL", "2026-06-18", 8),
+    ]
 
 
 def test_portfolio_manual_overwrite(client):

@@ -33,7 +33,7 @@ export function ConfigCard({
 
   return (
     <form
-      className="rounded-lg border border-border bg-card text-card-foreground"
+      className="glass rounded-lg text-card-foreground"
       onSubmit={(e) => {
         e.preventDefault();
         onStart({
@@ -65,7 +65,7 @@ export function ConfigCard({
             <label className="space-y-1">
               <span className="sr-only">Ticker</span>
               <input
-                className="h-9 w-full rounded-md border border-border bg-input px-2.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                 placeholder="159241.SZ"
@@ -75,7 +75,7 @@ export function ConfigCard({
               <span className="sr-only">Trade date</span>
               <input
                 type="date"
-                className="h-9 w-full rounded-md border border-border bg-input px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
@@ -87,7 +87,7 @@ export function ConfigCard({
           <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
             Scope
           </legend>
-          <div className="grid grid-cols-2 rounded-md border border-border bg-background p-1">
+          <div className="glass-control grid grid-cols-2 rounded-md p-1">
             {(["stock", "crypto"] as const).map((t) => (
               <button
                 key={t}
@@ -97,7 +97,7 @@ export function ConfigCard({
                 className={`h-8 rounded-sm px-2 font-mono text-xs uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
                   assetType === t
                     ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                 }`}
               >
                 {t === "stock" ? "股票" : "加密"}
@@ -124,7 +124,7 @@ export function ConfigCard({
                   className={`min-h-8 rounded-md border px-2 py-1 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
                     on
                       ? "border-primary/70 bg-accent text-accent-foreground"
-                      : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "glass-control text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                   } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
                 >
                   {a.label}
@@ -148,7 +148,7 @@ export function ConfigCard({
                 className={`h-8 rounded-md border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
                   depth === d.value
                     ? "border-primary/70 bg-accent text-accent-foreground"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                    : "glass-control text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                 }`}
               >
                 {d.label}
@@ -160,7 +160,7 @@ export function ConfigCard({
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-input px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+              className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
             >
               {options.languages.map((l) => (
                 <option key={l} value={l}>

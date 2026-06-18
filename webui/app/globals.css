@@ -83,6 +83,20 @@
   --sidebar-accent-foreground: oklch(0.9 0.01 168);
   --sidebar-border: oklch(0.28 0.01 168);
   --sidebar-ring: oklch(0.72 0.14 158);
+
+  /* Spatial glass: translucent surfaces that refract the glow layer behind them. */
+  --glass-bg: oklch(0.21 0.008 168 / 0.58);
+  --glass-bg-strong: oklch(0.19 0.009 168 / 0.66);
+  --glass-bg-readable: oklch(0.19 0.008 168 / 0.82);
+  --glass-bg-control: oklch(0.17 0.008 168 / 0.72);
+  --glass-border: oklch(0.62 0.02 168 / 0.32);
+  --glass-highlight: oklch(0.92 0.02 168 / 0.14);
+  --glass-blur: 18px;
+  --glass-saturate: 1.4;
+  --glass-shadow: 0 16px 40px -20px oklch(0.04 0.01 168 / 0.7);
+  /* Background glow stops, low chroma so the terminal base stays dark. */
+  --glow-primary: oklch(0.4 0.07 158 / 0.32);
+  --glow-secondary: oklch(0.34 0.045 248 / 0.22);
 }
 
 .dark {
@@ -117,6 +131,18 @@
   --sidebar-accent-foreground: oklch(0.9 0.01 168);
   --sidebar-border: oklch(0.28 0.01 168);
   --sidebar-ring: oklch(0.72 0.14 158);
+
+  --glass-bg: oklch(0.21 0.008 168 / 0.58);
+  --glass-bg-strong: oklch(0.19 0.009 168 / 0.66);
+  --glass-bg-readable: oklch(0.19 0.008 168 / 0.82);
+  --glass-bg-control: oklch(0.17 0.008 168 / 0.72);
+  --glass-border: oklch(0.62 0.02 168 / 0.32);
+  --glass-highlight: oklch(0.92 0.02 168 / 0.14);
+  --glass-blur: 18px;
+  --glass-saturate: 1.4;
+  --glass-shadow: 0 16px 40px -20px oklch(0.04 0.01 168 / 0.7);
+  --glow-primary: oklch(0.4 0.07 158 / 0.32);
+  --glow-secondary: oklch(0.34 0.045 248 / 0.22);
 }
 
 @layer base {
@@ -139,6 +165,71 @@
 }
 
 @layer components {
+  .glass-glow {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(60% 50% at 18% 0%, var(--glow-primary), transparent 70%),
+      radial-gradient(55% 45% at 90% 12%, var(--glow-secondary), transparent 72%),
+      radial-gradient(70% 60% at 50% 110%, var(--glow-primary), transparent 75%);
+  }
+
+  .glass,
+  .glass-strong {
+    position: relative;
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      var(--glass-shadow),
+      inset 0 1px 0 0 var(--glass-highlight);
+  }
+
+  .glass-strong {
+    background-color: var(--glass-bg-strong);
+  }
+
+  .glass-readable {
+    position: relative;
+    background-color: var(--glass-bg-readable);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      var(--glass-shadow),
+      inset 0 1px 0 0 var(--glass-highlight);
+  }
+
+  .glass-control {
+    background-color: var(--glass-bg-control);
+    border: 1px solid var(--glass-border);
+    box-shadow: inset 0 1px 0 0 var(--glass-highlight);
+  }
+
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .glass,
+    .glass-strong {
+      background-color: color-mix(in oklab, var(--glass-bg) 80%, transparent);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    }
+
+    .glass-strong {
+      background-color: color-mix(in oklab, var(--glass-bg-strong) 84%, transparent);
+    }
+
+    .glass-readable {
+      background-color: color-mix(in oklab, var(--glass-bg-readable) 92%, transparent);
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    }
+
+    .glass-control {
+      background-color: color-mix(in oklab, var(--glass-bg-control) 88%, transparent);
+      -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(var(--glass-saturate));
+      backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(var(--glass-saturate));
+    }
+  }
+
   .ta-prose {
     color: oklch(0.84 0.01 168);
   }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import Link from "next/link";
+import { Home, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createChatSession,
@@ -92,46 +93,58 @@ export default function ChatPage() {
   };
 
   return (
-    <main className="grid h-screen grid-cols-[20rem_minmax(0,1fr)] gap-4 p-4">
-      <aside className="flex flex-col gap-3 overflow-y-auto">
-        <h1 className="font-mono text-sm uppercase tracking-[0.18em] text-muted-foreground">
-          投资操作顾问
-        </h1>
-        <RunPicker value={runId} onChange={setRunId} />
-        <div className="rounded-lg border border-border bg-card px-3 py-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-              当前持仓
-            </span>
-            {sessionId && (
-              <PortfolioUpload sessionId={sessionId} onExtracted={persistHoldings} />
-            )}
+    <main className="min-h-screen text-foreground">
+      <div className="glass-glow" aria-hidden="true" />
+      <div className="grid min-h-screen grid-cols-1 gap-4 p-4 lg:h-screen lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <aside className="glass flex flex-col gap-3 overflow-y-auto rounded-lg p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="font-mono text-sm uppercase tracking-[0.18em] text-muted-foreground">
+              投资操作顾问
+            </h1>
+            <Link
+              href="/"
+              className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <Home className="size-3.5" aria-hidden="true" />
+              工作台
+            </Link>
           </div>
-          <HoldingsTable holdings={holdings} onChange={persistHoldings} />
-        </div>
-      </aside>
+          <RunPicker value={runId} onChange={setRunId} />
+          <div className="glass-readable rounded-lg px-3 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+                当前持仓
+              </span>
+              {sessionId && (
+                <PortfolioUpload sessionId={sessionId} onExtracted={persistHoldings} />
+              )}
+            </div>
+            <HoldingsTable holdings={holdings} onChange={persistHoldings} />
+          </div>
+        </aside>
 
-      <section className="flex h-full flex-col rounded-lg border border-border bg-background">
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {messages.map((m) => (
-            <ChatMessage key={m.message_id} message={m} />
-          ))}
-        </div>
-        <div className="flex items-center gap-2 border-t border-border p-3">
-          <input
-            className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
-            placeholder="问问该如何操作…"
-            aria-label="对话输入"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-            disabled={streaming}
-          />
-          <Button onClick={send} disabled={streaming || !input.trim()} aria-label="发送">
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </section>
+        <section className="glass flex min-h-[28rem] flex-col rounded-lg lg:h-full">
+          <div className="flex-1 space-y-3 overflow-y-auto p-4">
+            {messages.map((m) => (
+              <ChatMessage key={m.message_id} message={m} />
+            ))}
+          </div>
+          <div className="flex items-center gap-2 border-t border-border p-3">
+            <input
+              className="glass-control flex-1 rounded-md px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/30"
+              placeholder="问问该如何操作…"
+              aria-label="对话输入"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+              disabled={streaming}
+            />
+            <Button onClick={send} disabled={streaming || !input.trim()} aria-label="发送">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
