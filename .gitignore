@@ -225,3 +225,6 @@ __marimo__/
 .env.enterprise
 reports/
 .gstack/
+
+# Local Claude Code runtime config (env secrets, proxy scripts, settings)
+.claude/
