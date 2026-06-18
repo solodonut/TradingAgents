@@ -84,7 +84,7 @@ package + Typer CLI + FastAPI backend (`api/`) + Next.js frontend (`webui/`).
 
 ## WebUI (`api/` + `webui/`)
 
-- API dev: `scripts/dev.sh` (starts API+web with the correct interpreters), or manually
+- API dev: `./dev.sh` (starts API+web with the correct interpreters), or manually
   `.venv/bin/python -m uvicorn api.main:app --reload --port 8000`. Use the `.venv` binary
   explicitly — a bare `uvicorn`/`python3` on PATH may resolve to an unrelated Python (e.g. a
   Framework/conda env with NumPy-1.x wheels that crash against this project's NumPy 2.x).

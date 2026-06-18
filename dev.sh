@@ -6,15 +6,15 @@
 # stale server.
 #
 # Usage:
-#   scripts/dev.sh            # start both, stream logs, Ctrl-C stops both
-#   scripts/dev.sh --api      # backend only
-#   scripts/dev.sh --web      # frontend only
+#   ./dev.sh            # start both, stream logs, Ctrl-C stops both
+#   ./dev.sh --api      # backend only
+#   ./dev.sh --web      # frontend only
 #
 set -euo pipefail
 
 API_PORT=8000
 WEB_PORT=3000
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- arg parsing -------------------------------------------------------------
 START_API=1

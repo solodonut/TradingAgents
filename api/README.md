@@ -4,7 +4,7 @@ FastAPI backend for the conversational analysis assistant.
 
 ## Run (dev)
 
-Easiest: `scripts/dev.sh` starts both servers with the correct interpreters.
+Easiest: `./dev.sh` starts both servers with the correct interpreters.
 
 Manual (use the project venv explicitly — a bare `uvicorn`/`python3` on PATH may
 resolve to an unrelated Python with incompatible native wheels):

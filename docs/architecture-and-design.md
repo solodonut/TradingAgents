@@ -351,7 +351,7 @@ flowchart TB
 Backend:
 
 ```bash
-# Easiest: scripts/dev.sh starts both with the right interpreters.
+# Easiest: ./dev.sh starts both with the right interpreters.
 # Manual — use the project venv explicitly (a bare uvicorn on PATH may be the
 # wrong Python with incompatible native wheels):
 .venv/bin/python -m uvicorn api.main:app --reload --port 8000
