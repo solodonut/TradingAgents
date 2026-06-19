@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **AKShare ETF/fund fundamentals.** Mainland China listed fund/ETF symbols
+  (e.g. `159241`, `510300.SS`) now return a fund-specific fundamentals snapshot
+  (East Money spot quote plus recent NAV history) instead of attempting to fetch
+  operating-company financials. The balance sheet, income statement, and
+  cash-flow endpoints return a structured `not_applicable` response for these
+  products rather than failing.
+
+### Changed
+
+- **Liquid-glass WebUI theme.** Refreshed the Next.js frontend (chat, history,
+  config, run detail, and shared UI primitives) with a liquid-glass visual
+  style and updated global styles.
+
+### Fixed
+
+- **Advisor tool execution.** `run_chat` now invokes LangChain structured tools
+  via `tool.invoke(args)` instead of `tool(**kwargs)`, matching the
+  `StructuredTool` calling convention.
+
 ## [0.2.5] — 2026-05-11
 
 ### Added
