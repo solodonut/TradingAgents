@@ -33,6 +33,8 @@ from .akshare_utils import (
     cached_call,
     display_symbol,
     is_a_share,
+    is_etf_code,
+    to_bare_code,
     to_prefixed_code,
 )
 from .errors import NoMarketDataError
@@ -56,6 +58,95 @@ _STATEMENT_FETCHERS: dict[str, Callable[..., pd.DataFrame]] = {
     "income_statement": ak.stock_profit_sheet_by_report_em,
     "cashflow": ak.stock_cash_flow_sheet_by_report_em,
 }
+
+
+def _is_etf_symbol(symbol: str) -> bool:
+    """True for mainland listed fund/ETF symbols such as 159241 or 510300.SS."""
+    try:
+        return is_etf_code(to_bare_code(symbol))
+    except ValueError:
+        return False
+
+
+def _etf_statement_not_applicable(symbol: str, title: str, freq: str) -> str:
+    """Return a structured, non-failing statement response for ETF/fund products."""
+    label = display_symbol(symbol)
+    header = f"# {title} for {label} (ETF/Fund, AKShare, {freq})\n"
+    header += "# Status: Not applicable to fund/ETF products\n"
+    header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    return (
+        header
+        + "item,status,detail\n"
+        + f"{title},not_applicable,"
+        + "ETF/fund products do not publish operating-company financial statements; "
+        + "use the AKShare fund/ETF fundamentals snapshot plus price and technical data.\n"
+    )
+
+
+def _pick_etf_spot_row(data: pd.DataFrame, code: str) -> pd.Series:
+    """Find a fund/ETF row in East Money's ETF spot table across column variants."""
+    for column in ("代码", "基金代码", "symbol", "代码简称"):
+        if column not in data.columns:
+            continue
+        values = data[column].astype(str).str.extract(r"(\d{6})", expand=False)
+        matches = data[values == code]
+        if not matches.empty:
+            return matches.iloc[0]
+    raise NoMarketDataError(code, code, "fund/ETF not found in AKShare ETF spot table")
+
+
+def _format_etf_fundamentals(symbol: str, curr_date: str | None) -> str:
+    """Domestic ETF/fund overview from East Money via AKShare."""
+    code = to_bare_code(symbol)
+    label = display_symbol(symbol)
+
+    try:
+        spot = cached_call(
+            "fund_etf_spot_em",
+            15 * 60,
+            lambda: ak_retry(ak.fund_etf_spot_em),
+        )
+    except Exception as e:
+        raise NoMarketDataError(symbol, label, f"AKShare ETF spot unavailable: {e}") from e
+
+    if spot is None or spot.empty:
+        raise NoMarketDataError(symbol, label, "empty AKShare ETF spot table")
+
+    row = _pick_etf_spot_row(spot.copy(), code)
+    row = row.dropna()
+    row = row[row.astype(str).str.strip() != ""]
+
+    nav_summary = pd.DataFrame()
+    try:
+        end_date = (curr_date or pd.Timestamp.today().strftime("%Y-%m-%d")).replace("-", "")
+        nav = cached_call(
+            f"fund_etf_info_{code}_{end_date}",
+            _STATEMENT_TTL_SECONDS,
+            lambda: ak_retry(lambda: ak.fund_etf_fund_info_em(fund=code, end_date=end_date)),
+        )
+        if nav is not None and not nav.empty:
+            nav_summary = nav.tail(5).copy()
+    except Exception:
+        # Spot data is enough for an ETF/fund fundamentals overview. Historical
+        # NAV occasionally has gaps for newly listed funds, so omit it quietly.
+        nav_summary = pd.DataFrame()
+
+    spot_table = row.rename("value").to_frame()
+    spot_table.index.name = "field"
+
+    header = f"# Fund/ETF Fundamentals for {label} (AKShare, East Money)\n"
+    header += "# Instrument type: Mainland China listed fund/ETF, not an operating company\n"
+    header += "# Reporting currency: CNY where applicable\n"
+    header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    result = header + "## ETF Spot Snapshot\n\n" + spot_table.to_csv()
+    if not nav_summary.empty:
+        result += "\n## Recent NAV History\n\n" + nav_summary.to_csv(index=False)
+    result += (
+        "\n# Note: Balance sheet, income statement, and cash-flow statement are "
+        "not applicable to ETF/fund products. Use this snapshot with OHLCV and "
+        "technical indicators for analysis.\n"
+    )
+    return result
 
 
 def _fetch_statement(symbol: str, kind: str, curr_date: str | None) -> pd.DataFrame:
@@ -123,6 +214,8 @@ def get_balance_sheet(
     """A-share balance sheet (资产负债表) as a CSV string with header."""
     if not is_a_share(ticker):
         raise NoMarketDataError(ticker, ticker, "not an A-share symbol for AKShare")
+    if _is_etf_symbol(ticker):
+        return _etf_statement_not_applicable(ticker, "Balance Sheet", freq)
     try:
         return _statement_report(ticker, "balance_sheet", "Balance Sheet", freq, curr_date)
     except NoMarketDataError:
@@ -139,6 +232,8 @@ def get_income_statement(
     """A-share income statement (利润表) as a CSV string with header."""
     if not is_a_share(ticker):
         raise NoMarketDataError(ticker, ticker, "not an A-share symbol for AKShare")
+    if _is_etf_symbol(ticker):
+        return _etf_statement_not_applicable(ticker, "Income Statement", freq)
     try:
         return _statement_report(ticker, "income_statement", "Income Statement", freq, curr_date)
     except NoMarketDataError:
@@ -155,6 +250,8 @@ def get_cashflow(
     """A-share cash flow statement (现金流量表) as a CSV string with header."""
     if not is_a_share(ticker):
         raise NoMarketDataError(ticker, ticker, "not an A-share symbol for AKShare")
+    if _is_etf_symbol(ticker):
+        return _etf_statement_not_applicable(ticker, "Cash Flow", freq)
     try:
         return _statement_report(ticker, "cashflow", "Cash Flow", freq, curr_date)
     except NoMarketDataError:
@@ -177,7 +274,8 @@ def get_fundamentals(
     if not is_a_share(ticker):
         raise NoMarketDataError(ticker, ticker, "not an A-share symbol for AKShare")
 
-    from .akshare_utils import to_bare_code
+    if _is_etf_symbol(ticker):
+        return _format_etf_fundamentals(ticker, curr_date)
 
     code = to_bare_code(ticker)
     label = display_symbol(ticker)
