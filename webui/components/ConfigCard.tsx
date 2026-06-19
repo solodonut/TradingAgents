@@ -65,7 +65,7 @@ export function ConfigCard({
             <label className="space-y-1">
               <span className="sr-only">Ticker</span>
               <input
-                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                 placeholder="159241.SZ"
@@ -75,7 +75,7 @@ export function ConfigCard({
               <span className="sr-only">Trade date</span>
               <input
                 type="date"
-                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
@@ -94,9 +94,9 @@ export function ConfigCard({
                 type="button"
                 onClick={() => setAssetType(t)}
                 aria-pressed={assetType === t}
-                className={`h-8 rounded-sm px-2 font-mono text-xs uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                className={`h-8 rounded-sm px-2 font-mono text-xs uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:border-primary ${
                   assetType === t
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-[#6affb0] text-[#00363a]"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                 }`}
               >
@@ -121,9 +121,9 @@ export function ConfigCard({
                   disabled={disabled}
                   onClick={() => toggle(a.value)}
                   aria-pressed={on}
-                  className={`min-h-8 rounded-md border px-2 py-1 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                  className={`min-h-8 rounded-md border px-2 py-1 text-left text-xs transition-colors focus-visible:outline-none focus-visible:border-primary ${
                     on
-                      ? "border-primary/70 bg-accent text-accent-foreground"
+                      ? "glass-control border-primary/50 text-primary"
                       : "glass-control text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                   } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
                 >
@@ -145,9 +145,9 @@ export function ConfigCard({
                 type="button"
                 onClick={() => setDepth(d.value as 1 | 3 | 5)}
                 aria-pressed={depth === d.value}
-                className={`h-8 rounded-md border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+                className={`h-8 rounded-md border px-2 text-xs transition-colors focus-visible:outline-none focus-visible:border-primary ${
                   depth === d.value
-                    ? "border-primary/70 bg-accent text-accent-foreground"
+                    ? "glass-control border-primary/50 text-primary"
                     : "glass-control text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                 }`}
               >
@@ -160,7 +160,7 @@ export function ConfigCard({
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+              className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
             >
               {options.languages.map((l) => (
                 <option key={l} value={l}>
@@ -174,7 +174,11 @@ export function ConfigCard({
         <button
           type="submit"
           disabled={running || activeAnalysts.length === 0}
-          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 font-mono text-xs font-bold uppercase tracking-[0.18em] text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+          className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-md px-3 font-mono text-xs font-bold uppercase tracking-[0.18em] transition-colors focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed ${
+            running
+              ? "thinking-border"
+              : "border border-transparent bg-[#6affb0] text-[#00363a] hover:bg-[#52e89a] active:scale-[0.98] disabled:bg-muted disabled:text-muted-foreground"
+          }`}
         >
           {running ? (
             <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />

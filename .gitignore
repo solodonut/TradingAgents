@@ -228,3 +228,9 @@ reports/
 
 # Local Claude Code runtime config (env secrets, proxy scripts, settings)
 .claude/
+
+# macOS
+.DS_Store
+
+# Local design references (not part of the codebase)
+stitch_liquid_glass_ui_theme/

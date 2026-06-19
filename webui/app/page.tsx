@@ -28,6 +28,63 @@ import type {
   SSEEvent,
 } from "@/lib/types";
 
+const AGENT_SECTION_MAP: { agent: string; section: string }[] = [
+  { agent: "market_analyst", section: "market_report" },
+  { agent: "social_analyst", section: "sentiment_report" },
+  { agent: "news_analyst", section: "news_report" },
+  { agent: "fundamentals_analyst", section: "fundamentals_report" },
+  { agent: "research_manager", section: "investment_plan" },
+  { agent: "trader", section: "trader_investment_plan" },
+  { agent: "portfolio_manager", section: "final_trade_decision" },
+];
+
+const SECTION_TO_AGENT = Object.fromEntries(
+  AGENT_SECTION_MAP.map(({ agent, section }) => [section, agent]),
+);
+
+const SECTION_LABELS: Record<string, string> = {
+  market_report: "市场",
+  sentiment_report: "情绪",
+  news_report: "新闻",
+  fundamentals_report: "基本面",
+  investment_plan: "研究经理",
+  trader_investment_plan: "交易员",
+  final_trade_decision: "组合经理",
+};
+
+const BUSY_ERROR = "已有分析正在运行，请等待当前分析完成后再试。";
+
+function hasSection(result: RunResult["result"], section: string): boolean {
+  const value = result?.[section];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function deriveHistoryProgress(
+  run: RunResult | null,
+  runtime: RunStatusDetail | null,
+): Record<string, string> {
+  if (!run) return {};
+
+  const next: Record<string, string> = {};
+  for (const { agent, section } of AGENT_SECTION_MAP) {
+    if (hasSection(run.result, section)) next[agent] = "done";
+  }
+
+  if (run.status === "running") {
+    const lastAgent = runtime?.last_report_section
+      ? SECTION_TO_AGENT[runtime.last_report_section]
+      : null;
+    if (lastAgent && next[lastAgent] !== "done") next[lastAgent] = "working";
+
+    if (!Object.values(next).includes("working")) {
+      const working = AGENT_SECTION_MAP.find(({ agent }) => next[agent] !== "done");
+      if (working) next[working.agent] = "working";
+    }
+  }
+
+  return next;
+}
+
 export default function Home() {
   const [options, setOptions] = useState<ConfigOptions | null>(null);
   const [history, setHistory] = useState<HistorySummary[]>([]);
@@ -50,7 +107,15 @@ export default function Home() {
   const [runtimeStatus, setRuntimeStatus] = useState<RunStatusDetail | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
-  const refreshHistory = () => getHistory().then(setHistory).catch(() => setHistory([]));
+  const refreshHistory = () =>
+    getHistory()
+      .then((items) => {
+        setHistory(items);
+        if (!items.some((item) => item.status === "running")) {
+          setError((current) => (current === BUSY_ERROR ? null : current));
+        }
+      })
+      .catch(() => setHistory([]));
 
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
@@ -114,11 +179,19 @@ export default function Home() {
     let alive = true;
 
     const refreshRuntime = () => {
-      getAnalysisStatus(selectedId)
-        .then((s) => {
+      Promise.all([
+        getAnalysisStatus(selectedId),
+        getHistoryDetail(selectedId).catch(() => null),
+      ])
+        .then(([s, nextDetail]) => {
           if (!alive) return;
           setRuntimeStatus(s);
           setRuntimeError(null);
+          if (nextDetail) setDetail(nextDetail);
+          if (nextDetail && nextDetail.status !== "running") {
+            setError((current) => (current === BUSY_ERROR ? null : current));
+            refreshHistory();
+          }
         })
         .catch((err) => {
           if (!alive) return;
@@ -168,6 +241,7 @@ export default function Home() {
           setRunning(false);
           setCanceling(false);
           setCurrentRunId(null);
+          setError((current) => (current === BUSY_ERROR ? null : current));
           unsubscribeRef.current = null;
           refreshHistory();
         },
@@ -181,7 +255,7 @@ export default function Home() {
       const msg = (err as Error).message;
       setError(
         msg === "已有分析正在运行"
-          ? "已有分析正在运行，请等待当前分析完成后再试。"
+          ? BUSY_ERROR
           : msg,
       );
     }
@@ -221,14 +295,23 @@ export default function Home() {
   };
 
   const inDetailMode = selectedId !== null;
+  const selectedRunning = detail?.status === "running";
+  const sidebarStatuses = selectedRunning
+    ? deriveHistoryProgress(detail, runtimeStatus)
+    : statuses;
+  const sidebarRuntime = selectedRunning ? runtimeStatus : liveRuntimeStatus;
+  const sidebarRuntimeError = selectedRunning ? runtimeError : liveRuntimeError;
+  const sidebarLastSection = selectedRunning
+    ? runtimeStatus?.last_report_section
+    : liveRuntimeStatus?.last_report_section;
   const showEmptyState =
     !inDetailMode &&
     !running &&
     messages.length === 0 &&
     !decision;
   const latestMessage = messages.at(-1);
-  const completedAgents = Object.values(statuses).filter((s) => s === "done").length;
-  const workingAgents = Object.values(statuses).filter((s) => s === "working").length;
+  const completedAgents = Object.values(sidebarStatuses).filter((s) => s === "done").length;
+  const workingAgents = Object.values(sidebarStatuses).filter((s) => s === "working").length;
 
   return (
     <div className="min-h-screen text-foreground lg:h-screen lg:overflow-hidden">
@@ -259,7 +342,7 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
                   <Link
                     href="/chat"
-                    className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:border-primary"
                   >
                     <MessageCircle className="size-3.5" aria-hidden="true" />
                     顾问对话
@@ -279,7 +362,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={exitDetail}
-                  className="glass inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="glass inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:border-primary"
                 >
                   <ArrowLeft className="size-3.5" />
                   新分析
@@ -328,7 +411,7 @@ export default function Home() {
                   </div>
                 )}
                 {running && (
-                  <div className="glass-readable flex flex-wrap items-center justify-between gap-2 rounded-md border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <div className="thinking-panel flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2">
                     <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.14em] text-amber-300">
                       <Activity className="size-3.5" aria-hidden="true" />
                       分析进行中
@@ -337,7 +420,7 @@ export default function Home() {
                       type="button"
                       onClick={onCancel}
                       disabled={canceling}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-md border border-amber-500/50 px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-amber-100 transition-colors hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="thinking-border inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] transition-colors hover:brightness-110 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {canceling ? (
                         <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
@@ -373,19 +456,58 @@ export default function Home() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">Mode</span>
                   <span className="font-mono text-foreground">
-                    {inDetailMode ? "HISTORY" : running ? "LIVE" : "READY"}
+                    {selectedRunning ? "RUNNING" : inDetailMode ? "HISTORY" : running ? "LIVE" : "READY"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">Latest</span>
                   <span className="max-w-[12rem] truncate font-mono text-foreground">
-                    {latestMessage?.agent ?? (selectedId ? "DETAIL" : "NONE")}
+                    {selectedRunning
+                      ? sidebarLastSection
+                        ? (SECTION_LABELS[sidebarLastSection] ?? sidebarLastSection)
+                        : "RUNNING"
+                      : latestMessage?.agent ?? (selectedId ? "DETAIL" : "NONE")}
                   </span>
                 </div>
               </div>
             </div>
 
-            {options && <ConfigCard options={options} onStart={onStart} running={running} />}
+            {selectedRunning ? (
+              <>
+                <div className="thinking-panel rounded-lg px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-amber-300">
+                        Analysis Running
+                      </div>
+                      <div className="mt-1 font-mono text-sm text-foreground">
+                        {detail.ticker} · {detail.trade_date}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void cancelRun(detail.run_id)}
+                      disabled={canceling}
+                      className="thinking-border inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] transition-colors hover:brightness-110 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {canceling ? (
+                        <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <OctagonX className="size-3.5" />
+                      )}
+                      停止
+                    </button>
+                  </div>
+                </div>
+
+                <RuntimeStatusPanel
+                  runtime={sidebarRuntime}
+                  runtimeError={sidebarRuntimeError}
+                />
+              </>
+            ) : (
+              options && <ConfigCard options={options} onStart={onStart} running={running} />
+            )}
 
             {error && (
               <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
@@ -393,7 +515,7 @@ export default function Home() {
               </div>
             )}
 
-            <AgentProgress statuses={statuses} />
+            <AgentProgress statuses={sidebarStatuses} />
 
             {decision && (
               <DecisionCard decision={decision.d} detail={decision.detail} compact />

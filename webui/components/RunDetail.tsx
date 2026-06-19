@@ -62,7 +62,7 @@ export function RunDetail({
       </div>
 
       {run.status === "running" && (
-        <div className="glass-readable flex flex-wrap items-center justify-between gap-2 rounded-md border-amber-500/40 bg-amber-500/10 px-3 py-2">
+        <div className="thinking-panel flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2">
           <div className="font-mono text-xs text-amber-300">
             仍在进行，以下为目前已生成的部分
           </div>
@@ -71,7 +71,7 @@ export function RunDetail({
               type="button"
               onClick={() => onCancel(run.run_id)}
               disabled={canceling}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-amber-500/50 px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-amber-100 transition-colors hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+              className="thinking-border inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] transition-colors hover:brightness-110 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
             >
               {canceling ? (
                 <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />

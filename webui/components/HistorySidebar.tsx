@@ -48,9 +48,9 @@ export function HistorySidebar({
               role="button"
               tabIndex={0}
               aria-current={active ? "true" : undefined}
-              className={`group rounded-md border px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+              className={`group rounded-md border px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:border-primary ${
                 active
-                  ? "border-primary/60 bg-accent/80 text-accent-foreground"
+                  ? "glass-strong border-primary/30 text-foreground"
                   : "border-transparent hover:border-sidebar-border hover:bg-sidebar-accent/70"
               }`}
               onClick={() => onOpen(it.run_id)}
@@ -71,7 +71,7 @@ export function HistorySidebar({
                 <button
                   type="button"
                   aria-label={`删除 ${it.ticker} ${it.trade_date} 分析`}
-                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-colors hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 group-hover:opacity-100"
+                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-colors hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:text-destructive group-hover:opacity-100"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(it.run_id);

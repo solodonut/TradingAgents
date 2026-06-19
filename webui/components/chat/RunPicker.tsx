@@ -23,7 +23,7 @@ export function RunPicker({
         关联分析报告
       </div>
       <select
-        className="glass-control mt-2 w-full rounded-md px-2 py-1 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+        className="glass-control mt-2 w-full rounded-md px-2 py-1 text-sm outline-none focus:border-primary"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
       >
