@@ -15,6 +15,18 @@ class _FakeChain:
         return self._responses.pop(0)
 
 
+class _FakeTool:
+    """Mimics a LangChain StructuredTool: invoked via .invoke(args_dict)."""
+
+    def __init__(self, fn):
+        self._fn = fn
+        self.calls = []
+
+    def invoke(self, args):
+        self.calls.append(args)
+        return self._fn(args)
+
+
 def test_run_chat_streams_tokens_when_no_tool_calls():
     chain = _FakeChain([AIMessage(content="持仓集中度偏高。不构成投资建议。")])
     events = list(
@@ -43,8 +55,7 @@ def test_run_chat_executes_tool_then_answers():
     ai_final = AIMessage(content="当前价已确认。不构成投资建议。")
     chain = _FakeChain([ai_with_tool, ai_final])
 
-    def fake_tool(**kwargs):
-        return "AAPL,2024-01-01,190.0"
+    fake_tool = _FakeTool(lambda args: "AAPL,2024-01-01,190.0")
 
     events = list(
         run_chat(
@@ -54,6 +65,7 @@ def test_run_chat_executes_tool_then_answers():
             tools_by_name={"get_stock_data": fake_tool},
         )
     )
+    assert fake_tool.calls == [{"symbol": "AAPL"}]
     kinds = [e["event"] for e in events]
     assert "tool_call" in kinds
     assert kinds[-1] == "done"
@@ -75,7 +87,7 @@ def test_run_chat_done_carries_full_text_and_tool_calls():
             chain=chain,
             history_messages=[],
             user_message="新闻?",
-            tools_by_name={"get_news": lambda **k: "headline"},
+            tools_by_name={"get_news": _FakeTool(lambda args: "headline")},
         )
     )
     done = events[-1]

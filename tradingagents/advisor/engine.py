@@ -38,7 +38,7 @@ def run_chat(
                     output = f"NO_DATA_AVAILABLE: unknown tool {name}"
                 else:
                     try:
-                        output = tool(**args)
+                        output = tool.invoke(args)
                     except Exception as exc:  # noqa: BLE001
                         output = f"NO_DATA_AVAILABLE: tool error: {exc}"
                 executed_tool_calls.append(
