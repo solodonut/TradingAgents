@@ -10,6 +10,12 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **Chat multi-report context.** A Chat session can now persist an ordered
+  selection of multiple completed analysis reports (normalized into a new
+  `chat_session_runs` table, with `chat_sessions.run_id` kept as a legacy
+  read fallback). The right-sidebar `RunPicker` became a completed-only
+  multi-select, report selections are validated atomically at the API
+  boundary, and sessions support inline rename plus bulk delete.
 - **AKShare ETF/fund fundamentals.** Mainland China listed fund/ETF symbols
   (e.g. `159241`, `510300.SS`) now return a fund-specific fundamentals snapshot
   (East Money spot quote plus recent NAV history) instead of attempting to fetch

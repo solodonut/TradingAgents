@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 AssetType = Literal["stock", "crypto"]
 AnalystName = Literal["market", "social", "news", "fundamentals"]
@@ -88,6 +88,41 @@ class ChatRequest(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     run_id: str | None = None
+    run_ids: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _one_report_field(self) -> "ChatSessionCreate":
+        if self.run_id is not None and self.run_ids is not None:
+            raise ValueError("provide run_id or run_ids, not both")
+        return self
+
+
+class ChatSessionReportsUpdate(BaseModel):
+    run_ids: list[str] = Field(default_factory=list)
+
+
+class ChatSessionUpdate(BaseModel):
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def _title_not_empty(cls, v: str) -> str:
+        title = v.strip()
+        if not title:
+            raise ValueError("title cannot be empty")
+        return title
+
+
+class ChatSessionBulkDelete(BaseModel):
+    session_ids: list[str]
+
+    @field_validator("session_ids")
+    @classmethod
+    def _at_least_one_session(cls, v: list[str]) -> list[str]:
+        ids = [session_id for session_id in v if session_id]
+        if not ids:
+            raise ValueError("at least one session_id is required")
+        return ids
 
 
 class ChatMessage(BaseModel):
@@ -102,6 +137,7 @@ class ChatMessage(BaseModel):
 class ChatSession(BaseModel):
     session_id: str
     run_id: str | None
+    run_ids: list[str] = Field(default_factory=list)
     title: str | None
     created_at: str
     updated_at: str

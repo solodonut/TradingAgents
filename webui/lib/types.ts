@@ -100,6 +100,7 @@ export interface ChatMessageT {
 export interface ChatSessionT {
   session_id: string;
   run_id: string | null;
+  run_ids: string[];
   title: string | null;
   created_at: string;
   updated_at: string;

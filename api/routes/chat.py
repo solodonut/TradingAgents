@@ -11,7 +11,10 @@ from sse_starlette.sse import EventSourceResponse
 
 from api.schemas import (
     ChatRequest,
+    ChatSessionBulkDelete,
     ChatSessionCreate,
+    ChatSessionReportsUpdate,
+    ChatSessionUpdate,
     PortfolioExtractResponse,
     PortfolioHolding,
 )
@@ -21,6 +24,44 @@ from tradingagents.advisor.prompt import build_system_prompt
 from tradingagents.advisor.tools import ADVISOR_TOOLS
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+def _completed_runs(store, run_ids: list[str]):
+    if len(run_ids) != len(set(run_ids)):
+        raise HTTPException(status_code=422, detail="run_ids must be unique")
+    runs = []
+    for run_id in run_ids:
+        run = store.get_run(run_id)
+        if run is None:
+            raise HTTPException(
+                status_code=422, detail=f"analysis run not found: {run_id}"
+            )
+        if run.status != "completed":
+            raise HTTPException(
+                status_code=422,
+                detail=f"analysis run is not completed: {run_id}",
+            )
+        runs.append(run)
+    return runs
+
+
+def _report_context(store, run_ids: list[str]) -> str:
+    if not run_ids:
+        return build_report_context(None, None, "标的")
+    sections = []
+    for index, run_id in enumerate(run_ids, start=1):
+        run = store.get_run(run_id)
+        if run is None or run.status != "completed":
+            continue
+        header = (
+            f"# 报告 {index} · {run.ticker} · {run.trade_date} · "
+            f"{run.decision or '—'}"
+        )
+        sections.append(
+            f"{header}\n\n"
+            f"{build_report_context(run.result, run.decision, run.ticker)}"
+        )
+    return "\n\n---\n\n".join(sections) or build_report_context(None, None, "标的")
 
 
 def _holdings_text(holdings: list[PortfolioHolding]) -> str:
@@ -59,13 +100,20 @@ def create_session(req: ChatSessionCreate, request: Request) -> dict:
     from api.main import get_store
 
     store = get_store()
+    requested_run_ids = req.run_ids if req.run_ids is not None else []
+    if req.run_id is not None:
+        requested_run_ids = [req.run_id]
+    runs = _completed_runs(store, requested_run_ids)
     title = None
-    if req.run_id:
-        run = store.get_run(req.run_id)
-        if run is not None:
-            title = f"{run.ticker} ({run.trade_date})"
+    if runs:
+        title = f"{runs[0].ticker} ({runs[0].trade_date})"
     session_id = uuid.uuid4().hex
-    store.create_chat_session(session_id, run_id=req.run_id, title=title)
+    store.create_chat_session(
+        session_id,
+        run_id=req.run_id,
+        title=title,
+        run_ids=req.run_ids,
+    )
     return {"session_id": session_id}
 
 
@@ -74,6 +122,20 @@ def list_sessions() -> list[dict]:
     from api.main import get_store
 
     return [s.model_dump() for s in get_store().list_chat_sessions()]
+
+
+@router.delete("/sessions")
+def delete_sessions(req: ChatSessionBulkDelete) -> dict:
+    from api.main import get_store
+
+    store = get_store()
+    deleted: list[str] = []
+    for session_id in req.session_ids:
+        if store.get_chat_session(session_id) is None:
+            continue
+        store.delete_chat_session(session_id)
+        deleted.append(session_id)
+    return {"deleted": deleted}
 
 
 @router.get("/sessions/{session_id}")
@@ -89,6 +151,32 @@ def get_session(session_id: str) -> dict:
         "session": session.model_dump(),
         "messages": [m.model_dump() for m in messages],
     }
+
+
+@router.patch("/sessions/{session_id}")
+def update_session(session_id: str, req: ChatSessionUpdate) -> dict:
+    from api.main import get_store
+
+    store = get_store()
+    if store.get_chat_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    store.rename_chat_session(session_id, req.title)
+    session = store.get_chat_session(session_id)
+    return session.model_dump()
+
+
+@router.put("/sessions/{session_id}/reports")
+def update_session_reports(
+    session_id: str, req: ChatSessionReportsUpdate
+) -> dict:
+    from api.main import get_store
+
+    store = get_store()
+    if store.get_chat_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    _completed_runs(store, req.run_ids)
+    store.replace_chat_session_run_ids(session_id, req.run_ids)
+    return store.get_chat_session(session_id).model_dump()
 
 
 @router.delete("/sessions/{session_id}")
@@ -172,17 +260,7 @@ async def stream_chat(
 
     user_message = req.message
 
-    report_ctx = ""
-    decision = None
-    ticker = "标的"
-    if session.run_id:
-        run = store.get_run(session.run_id)
-        if run is not None:
-            decision = run.decision
-            ticker = run.ticker
-            report_ctx = build_report_context(run.result, decision, ticker)
-    else:
-        report_ctx = build_report_context(None, None, ticker)
+    report_ctx = _report_context(store, session.run_ids)
 
     holdings, _ = store.get_portfolio(session_id)
     holdings_ctx = _holdings_text(holdings)

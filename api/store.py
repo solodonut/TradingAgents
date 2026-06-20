@@ -31,6 +31,13 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     updated_at    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS chat_session_runs (
+    session_id TEXT NOT NULL,
+    run_id     TEXT NOT NULL,
+    position   INTEGER NOT NULL,
+    PRIMARY KEY (session_id, run_id)
+);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
     message_id      TEXT PRIMARY KEY,
     session_id      TEXT NOT NULL,
@@ -186,6 +193,10 @@ class Store:
 
     def delete_run(self, run_id: str) -> None:
         with self._lock, self._connect() as conn:
+            conn.execute("DELETE FROM chat_session_runs WHERE run_id=?", (run_id,))
+            conn.execute(
+                "UPDATE chat_sessions SET run_id=NULL WHERE run_id=?", (run_id,)
+            )
             conn.execute("DELETE FROM analysis_runs WHERE run_id=?", (run_id,))
 
     def has_running_run(self) -> bool:
@@ -198,7 +209,11 @@ class Store:
     # ---- chat sessions ----
 
     def create_chat_session(
-        self, session_id: str, run_id: str | None, title: str | None
+        self,
+        session_id: str,
+        run_id: str | None,
+        title: str | None,
+        run_ids: list[str] | None = None,
     ) -> None:
         now = _now()
         with self._lock, self._connect() as conn:
@@ -206,45 +221,83 @@ class Store:
                 "INSERT INTO chat_sessions "
                 "(session_id, run_id, title, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (session_id, run_id, title, now, now),
+                (session_id, run_id if run_ids is None else None, title, now, now),
             )
+            if run_ids is not None:
+                self._replace_chat_session_run_ids(conn, session_id, run_ids)
+
+    def _chat_session_from_row(
+        self, conn: sqlite3.Connection, row: sqlite3.Row
+    ) -> ChatSession:
+        association_rows = conn.execute(
+            "SELECT run_id FROM chat_session_runs WHERE session_id=? "
+            "ORDER BY position ASC",
+            (row["session_id"],),
+        ).fetchall()
+        run_ids = [association["run_id"] for association in association_rows]
+        if not run_ids and row["run_id"]:
+            run_ids = [row["run_id"]]
+        return ChatSession(
+            session_id=row["session_id"],
+            run_id=run_ids[0] if run_ids else None,
+            run_ids=run_ids,
+            title=row["title"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
 
     def get_chat_session(self, session_id: str) -> ChatSession | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM chat_sessions WHERE session_id=?", (session_id,)
             ).fetchone()
-        if row is None:
-            return None
-        return ChatSession(
-            session_id=row["session_id"],
-            run_id=row["run_id"],
-            title=row["title"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+            if row is None:
+                return None
+            return self._chat_session_from_row(conn, row)
 
     def list_chat_sessions(self) -> list[ChatSession]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM chat_sessions ORDER BY updated_at DESC, rowid DESC"
             ).fetchall()
-        return [
-            ChatSession(
-                session_id=r["session_id"],
-                run_id=r["run_id"],
-                title=r["title"],
-                created_at=r["created_at"],
-                updated_at=r["updated_at"],
-            )
-            for r in rows
-        ]
+            return [self._chat_session_from_row(conn, row) for row in rows]
 
     def delete_chat_session(self, session_id: str) -> None:
         with self._lock, self._connect() as conn:
             conn.execute("DELETE FROM chat_messages WHERE session_id=?", (session_id,))
             conn.execute("DELETE FROM chat_portfolios WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM chat_session_runs WHERE session_id=?", (session_id,))
             conn.execute("DELETE FROM chat_sessions WHERE session_id=?", (session_id,))
+
+    def _replace_chat_session_run_ids(
+        self, conn: sqlite3.Connection, session_id: str, run_ids: list[str]
+    ) -> None:
+        conn.execute("DELETE FROM chat_session_runs WHERE session_id=?", (session_id,))
+        conn.executemany(
+            "INSERT INTO chat_session_runs (session_id, run_id, position) "
+            "VALUES (?, ?, ?)",
+            [
+                (session_id, run_id, position)
+                for position, run_id in enumerate(run_ids)
+            ],
+        )
+        conn.execute(
+            "UPDATE chat_sessions SET run_id=NULL, updated_at=? WHERE session_id=?",
+            (_now(), session_id),
+        )
+
+    def replace_chat_session_run_ids(
+        self, session_id: str, run_ids: list[str]
+    ) -> None:
+        with self._lock, self._connect() as conn:
+            self._replace_chat_session_run_ids(conn, session_id, run_ids)
+
+    def rename_chat_session(self, session_id: str, title: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE chat_sessions SET title=?, updated_at=? WHERE session_id=?",
+                (title.strip(), _now(), session_id),
+            )
 
     def _touch_session(self, conn: sqlite3.Connection, session_id: str) -> None:
         conn.execute(

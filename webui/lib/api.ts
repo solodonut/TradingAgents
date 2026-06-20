@@ -64,12 +64,13 @@ export function streamUrl(runId: string): string {
   return `${BASE}/api/analysis/${runId}/stream`;
 }
 
-export async function createChatSession(runId: string | null): Promise<string> {
+export async function createChatSession(runIds: string[]): Promise<string> {
   const r = await fetch(`${BASE}/api/chat/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ run_id: runId }),
+    body: JSON.stringify({ run_ids: runIds }),
   });
+  if (!r.ok) throw new Error("failed to create chat session");
   return (await r.json()).session_id as string;
 }
 
@@ -88,6 +89,39 @@ export async function getChatSession(
 
 export async function deleteChatSession(id: string): Promise<void> {
   await fetch(`${BASE}/api/chat/sessions/${id}`, { method: "DELETE" });
+}
+
+export async function deleteChatSessions(ids: string[]): Promise<string[]> {
+  const r = await fetch(`${BASE}/api/chat/sessions`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_ids: ids }),
+  });
+  if (!r.ok) throw new Error("failed to delete chat sessions");
+  return (await r.json()).deleted as string[];
+}
+
+export async function renameChatSession(id: string, title: string): Promise<ChatSessionT> {
+  const r = await fetch(`${BASE}/api/chat/sessions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!r.ok) throw new Error("failed to rename chat session");
+  return r.json();
+}
+
+export async function updateChatSessionReports(
+  id: string,
+  runIds: string[],
+): Promise<ChatSessionT> {
+  const r = await fetch(`${BASE}/api/chat/sessions/${id}/reports`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_ids: runIds }),
+  });
+  if (!r.ok) throw new Error("无法保存关联分析报告");
+  return r.json();
 }
 
 export async function uploadPortfolio(

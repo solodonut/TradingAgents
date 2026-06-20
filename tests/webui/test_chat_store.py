@@ -2,6 +2,11 @@ from api.schemas import PortfolioHolding
 from api.store import Store
 
 
+def _completed_run(store: Store, run_id: str, ticker: str) -> None:
+    store.insert_run(run_id, ticker, "2026-06-20", "stock", {})
+    store.complete_run(run_id, "Hold", {"market_report": f"{ticker} report"})
+
+
 def test_create_and_get_chat_session(tmp_path):
     store = Store(tmp_path / "t.db")
     store.create_chat_session("s1", run_id="r1", title="AAPL")
@@ -60,6 +65,50 @@ def test_delete_chat_session_cascades_messages(tmp_path):
     store.delete_chat_session("s1")
     assert store.get_chat_session("s1") is None
     assert store.list_chat_messages("s1") == []
+
+
+def test_rename_chat_session_updates_title(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.create_chat_session("s1", run_id=None, title="old")
+    store.rename_chat_session("s1", "新的会话名称")
+    assert store.get_chat_session("s1").title == "新的会话名称"
+
+
+def test_chat_session_persists_ordered_run_ids(tmp_path):
+    store = Store(tmp_path / "t.db")
+    _completed_run(store, "r1", "AAA")
+    _completed_run(store, "r2", "BBB")
+    store.create_chat_session("s1", run_id=None, title="pair", run_ids=["r2", "r1"])
+    session = store.get_chat_session("s1")
+    assert session.run_ids == ["r2", "r1"]
+    assert session.run_id == "r2"
+
+
+def test_replace_chat_session_run_ids_accepts_empty_selection(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.create_chat_session("s1", run_id="legacy", title=None)
+    store.replace_chat_session_run_ids("s1", [])
+    session = store.get_chat_session("s1")
+    assert session.run_ids == []
+    assert session.run_id is None
+
+
+def test_legacy_chat_session_run_id_is_exposed_as_run_ids(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.create_chat_session("s1", run_id="legacy", title=None)
+    assert store.get_chat_session("s1").run_ids == ["legacy"]
+
+
+def test_deleting_run_removes_new_and_legacy_chat_associations(tmp_path):
+    store = Store(tmp_path / "t.db")
+    _completed_run(store, "r1", "AAA")
+    _completed_run(store, "r2", "BBB")
+    store.create_chat_session("new", run_id=None, title=None, run_ids=["r1"])
+    store.create_chat_session("legacy", run_id="r2", title=None)
+    store.delete_run("r1")
+    store.delete_run("r2")
+    assert store.get_chat_session("new").run_ids == []
+    assert store.get_chat_session("legacy").run_ids == []
 
 
 def test_chat_tables_coexist_with_existing_db(tmp_path):

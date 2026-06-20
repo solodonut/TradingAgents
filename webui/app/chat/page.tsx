@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Calculator,
+  Check,
+  Pencil,
   Home,
   MessageSquare,
   PanelLeftClose,
@@ -11,16 +13,20 @@ import {
   Plus,
   Send,
   Trash2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createChatSession,
   deleteChatSession,
+  deleteChatSessions,
   getChatSession,
   getPortfolio,
   listChatSessions,
+  renameChatSession,
   savePortfolio,
   chatStreamUrl,
+  updateChatSessionReports,
 } from "@/lib/api";
 import { streamChat } from "@/lib/sse";
 import type { ChatMessageT, ChatSessionT, PortfolioHolding } from "@/lib/types";
@@ -31,7 +37,7 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 
 export default function ChatPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runIds, setRunIds] = useState<string[]>([]);
   const [sessions, setSessions] = useState<ChatSessionT[]>([]);
   const [showHistory, setShowHistory] = useState(true);
   const [messages, setMessages] = useState<ChatMessageT[]>([]);
@@ -39,6 +45,12 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [savingReports, setSavingReports] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const streamingRef = useRef("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,7 +63,8 @@ export default function ChatPage() {
   const openSession = async (id: string) => {
     const data = await getChatSession(id);
     setSessionId(data.session.session_id);
-    setRunId(data.session.run_id);
+    setRunIds(data.session.run_ids);
+    setReportError(null);
     setMessages(data.messages);
     const portfolio = await getPortfolio(data.session.session_id).catch(() => ({
       holdings: [],
@@ -60,8 +73,10 @@ export default function ChatPage() {
     setHoldings(portfolio.holdings);
   };
 
-  const createNewSession = async (nextRunId: string | null = runId) => {
-    const sid = await createChatSession(nextRunId);
+  const createNewSession = async (nextRunIds: string[] = runIds) => {
+    const sid = await createChatSession(nextRunIds);
+    setSelectedSessionIds(new Set());
+    setSelectMode(false);
     await refreshSessions();
     await openSession(sid);
   };
@@ -72,6 +87,11 @@ export default function ChatPage() {
     try {
       await deleteChatSession(id);
       const remaining = await refreshSessions();
+      setSelectedSessionIds((ids) => {
+        const nextIds = new Set(ids);
+        nextIds.delete(id);
+        return nextIds;
+      });
       if (id !== sessionId) return;
 
       const next = remaining.find((session) => session.session_id !== id);
@@ -81,11 +101,61 @@ export default function ChatPage() {
         setSessionId(null);
         setMessages([]);
         setHoldings([]);
-        await createNewSession(runId);
+        await createNewSession(runIds);
       }
     } finally {
       setDeletingSessionId(null);
     }
+  };
+
+  const removeSelectedSessions = async () => {
+    if (streaming || deletingSessionId || selectedSessionIds.size === 0) return;
+    const ids = Array.from(selectedSessionIds);
+    setDeletingSessionId("__bulk__");
+    try {
+      await deleteChatSessions(ids);
+      const remaining = await refreshSessions();
+      setSelectedSessionIds(new Set());
+      setSelectMode(false);
+
+      if (!sessionId || !ids.includes(sessionId)) return;
+      if (remaining[0]) {
+        await openSession(remaining[0].session_id);
+      } else {
+        setSessionId(null);
+        setMessages([]);
+        setHoldings([]);
+        await createNewSession(runIds);
+      }
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
+
+  const toggleSelectedSession = (id: string) => {
+    setSelectedSessionIds((ids) => {
+      const next = new Set(ids);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const startRename = (session: ChatSessionT) => {
+    setRenamingSessionId(session.session_id);
+    setRenameTitle(session.title ?? "通用咨询");
+  };
+
+  const cancelRename = () => {
+    setRenamingSessionId(null);
+    setRenameTitle("");
+  };
+
+  const saveRename = async () => {
+    if (!renamingSessionId || !renameTitle.trim()) return;
+    await renameChatSession(renamingSessionId, renameTitle.trim());
+    await refreshSessions();
+    cancelRename();
   };
 
   useEffect(() => {
@@ -94,7 +164,7 @@ export default function ChatPage() {
       const next = await refreshSessions();
       if (!alive) return;
       if (next[0]) await openSession(next[0].session_id);
-      else await createNewSession(null);
+      else await createNewSession([]);
     })();
     return () => {
       alive = false;
@@ -167,6 +237,25 @@ export default function ChatPage() {
     if (sessionId) await savePortfolio(sessionId, next);
   };
 
+  const changeReports = async (nextRunIds: string[]) => {
+    const previous = runIds;
+    setRunIds(nextRunIds);
+    setReportError(null);
+    if (!sessionId) return;
+    setSavingReports(true);
+    try {
+      await updateChatSessionReports(sessionId, nextRunIds);
+      await refreshSessions();
+    } catch (error) {
+      setRunIds(previous);
+      setReportError(
+        error instanceof Error ? error.message : "无法保存关联分析报告",
+      );
+    } finally {
+      setSavingReports(false);
+    }
+  };
+
   const recalculateWeights = () => {
     const total = holdings.reduce(
       (sum, holding) => sum + (Number(holding.market_value) || 0),
@@ -185,7 +274,7 @@ export default function ChatPage() {
   const currentSession = sessions.find((s) => s.session_id === sessionId) ?? null;
   const currentTitle =
     currentSession?.title ??
-    (currentSession?.run_id ? "关联分析会话" : "通用咨询");
+    (currentSession?.run_ids.length ? "关联分析会话" : "通用咨询");
 
   const formatSessionTime = (iso: string) => {
     const d = new Date(iso);
@@ -224,19 +313,43 @@ export default function ChatPage() {
             </div>
 
             <div className="shrink-0 p-2">
-              <button
-                type="button"
-                onClick={() => void createNewSession(runId)}
-                className="glass-control inline-flex h-8 w-full items-center justify-center gap-2 rounded-md px-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors hover:border-primary/60 hover:text-primary"
-              >
-                <Plus className="size-4" />
-                新会话
-              </button>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <button
+                  type="button"
+                  onClick={() => void createNewSession(runIds)}
+                  className="glass-control inline-flex h-8 min-w-0 items-center justify-center gap-2 rounded-md px-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors hover:border-primary/60 hover:text-primary"
+                >
+                  <Plus className="size-4" />
+                  新会话
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectMode((value) => !value);
+                    setSelectedSessionIds(new Set());
+                  }}
+                  className="glass-control inline-flex h-8 items-center justify-center rounded-md px-2 text-xs transition-colors hover:border-primary/60 hover:text-primary"
+                >
+                  {selectMode ? "取消" : "选择"}
+                </button>
+              </div>
+              {selectMode && (
+                <button
+                  type="button"
+                  onClick={() => void removeSelectedSessions()}
+                  disabled={selectedSessionIds.size === 0 || deletingSessionId === "__bulk__"}
+                  className="glass-control mt-2 inline-flex h-8 w-full items-center justify-center gap-2 rounded-md px-3 text-sm text-destructive transition-colors hover:border-destructive/50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  删除所选 {selectedSessionIds.size > 0 ? selectedSessionIds.size : ""}
+                </button>
+              )}
             </div>
 
             <div className="ios-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto p-2 pt-0">
               {sessions.map((session) => {
                 const active = session.session_id === sessionId;
+                const renaming = renamingSessionId === session.session_id;
                 return (
                   <div
                     key={session.session_id}
@@ -246,27 +359,96 @@ export default function ChatPage() {
                         : "border-transparent hover:border-sidebar-border hover:bg-sidebar-accent/70"
                     }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => void openSession(session.session_id)}
-                      className="min-w-0 flex-1 rounded-[calc(var(--radius)-0.25rem)] px-2 py-1.5 text-left focus-visible:outline-none focus-visible:border-primary"
-                    >
-                      <div className="flex items-start gap-2">
-                      <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-primary" />
-                      <div className="min-w-0">
-                        <div className="truncate text-sm text-foreground">
-                          {session.title ?? "通用咨询"}
-                        </div>
-                        <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-muted-foreground">
-                          {formatSessionTime(session.updated_at)}
+                    {selectMode && (
+                      <label className="flex shrink-0 items-center pl-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedSessionIds.has(session.session_id)}
+                          onChange={() => toggleSelectedSession(session.session_id)}
+                          className="size-4 accent-primary"
+                          aria-label={`选择会话 ${session.title ?? "通用咨询"}`}
+                        />
+                      </label>
+                    )}
+                    {renaming ? (
+                      <div className="min-w-0 flex-1 rounded-[calc(var(--radius)-0.25rem)] px-2 py-1.5 text-left">
+                        <div className="flex items-start gap-2">
+                          <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                          <div className="min-w-0 flex-1">
+                            <input
+                              value={renameTitle}
+                              onChange={(e) => setRenameTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") void saveRename();
+                                if (e.key === "Escape") cancelRename();
+                              }}
+                              className="glass-control h-7 w-full rounded-md px-2 text-sm outline-none focus:border-primary"
+                              autoFocus
+                              aria-label="会话名称"
+                            />
+                            <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-muted-foreground">
+                              {formatSessionTime(session.updated_at)}
+                            </div>
+                          </div>
                         </div>
                       </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void openSession(session.session_id)}
+                        className="min-w-0 flex-1 rounded-[calc(var(--radius)-0.25rem)] px-2 py-1.5 text-left focus-visible:outline-none focus-visible:border-primary"
+                      >
+                        <div className="flex items-start gap-2">
+                          <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm text-foreground">
+                              {session.title ?? "通用咨询"}
+                            </div>
+                            <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-muted-foreground">
+                              {formatSessionTime(session.updated_at)}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    )}
+                    {renaming ? (
+                      <div className="flex shrink-0 items-center gap-1 self-center">
+                        <button
+                          type="button"
+                          onClick={() => void saveRename()}
+                          disabled={!renameTitle.trim()}
+                          className="glass-control inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-35"
+                          aria-label="保存会话名称"
+                          title="保存"
+                        >
+                          <Check className="size-3.5" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelRename}
+                          className="glass-control inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                          aria-label="取消重命名"
+                          title="取消"
+                        >
+                          <X className="size-3.5" aria-hidden="true" />
+                        </button>
                       </div>
-                    </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startRename(session)}
+                        disabled={selectMode || streaming}
+                        className="glass-control inline-flex size-8 shrink-0 items-center justify-center self-center rounded-md text-muted-foreground opacity-70 transition-colors hover:border-primary/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-35 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+                        aria-label={`重命名会话 ${session.title ?? "通用咨询"}`}
+                        title="重命名"
+                      >
+                        <Pencil className="size-3.5" aria-hidden="true" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => void removeSession(session.session_id)}
-                      disabled={streaming || deletingSessionId === session.session_id}
+                      disabled={selectMode || streaming || deletingSessionId === session.session_id}
                       className="glass-control inline-flex size-8 shrink-0 items-center justify-center self-center rounded-md text-muted-foreground opacity-70 transition-colors hover:border-destructive/50 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-35 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
                       aria-label={`删除会话 ${session.title ?? "通用咨询"}`}
                       title="删除会话"
@@ -336,7 +518,16 @@ export default function ChatPage() {
 
         <aside className="glass flex min-h-0 flex-col gap-3 rounded-lg p-3 lg:h-full">
           <div className="shrink-0">
-            <RunPicker value={runId} onChange={setRunId} />
+            <RunPicker
+              value={runIds}
+              onChange={(next) => void changeReports(next)}
+              disabled={streaming || savingReports}
+            />
+            {reportError && (
+              <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {reportError}
+              </div>
+            )}
           </div>
           <div className="glass-readable flex min-h-0 flex-1 flex-col rounded-lg px-3 py-3">
             <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
