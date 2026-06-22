@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --no-warnings --test --experimental-strip-types lib/*.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

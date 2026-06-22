@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Calculator,
   Check,
+  FileDown,
   Pencil,
   Home,
   MessageSquare,
@@ -29,6 +30,7 @@ import {
   updateChatSessionReports,
 } from "@/lib/api";
 import { streamChat } from "@/lib/sse";
+import { EXPORT_REPORT_PROMPT, exportScopeOptions } from "@/lib/chat-export";
 import type { ChatMessageT, ChatSessionT, PortfolioHolding } from "@/lib/types";
 import { RunPicker } from "@/components/chat/RunPicker";
 import { PortfolioUpload } from "@/components/chat/PortfolioUpload";
@@ -177,19 +179,19 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
-  const send = async () => {
-    if (!sessionId || !input.trim() || streaming) return;
+  const sendMessage = async (rawQuestion: string) => {
+    const question = rawQuestion.trim();
+    if (!sessionId || !question || streaming) return;
     const now = Date.now();
     const userMsg: ChatMessageT = {
       message_id: `local-${now}`,
       session_id: sessionId,
       role: "user",
-      content: input,
+      content: question,
       tool_calls: [],
       created_at: new Date().toISOString(),
     };
     setMessages((m) => [...m, userMsg]);
-    const question = input;
     setInput("");
     setStreaming(true);
     streamingRef.current = "";
@@ -200,37 +202,51 @@ export default function ChatPage() {
       { message_id: assistantId, session_id: sessionId, role: "assistant", content: "", tool_calls: [], created_at: new Date().toISOString() },
     ]);
 
-    await streamChat(chatStreamUrl(sessionId), question, (e) => {
-      if (e.event === "token") {
-        streamingRef.current += e.data.content;
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.message_id === assistantId
-              ? { ...msg, content: streamingRef.current }
-              : msg,
-          ),
-        );
-      } else if (e.event === "done") {
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.message_id === assistantId
-              ? { ...msg, content: e.data.content, tool_calls: e.data.tool_calls }
-              : msg,
-          ),
-        );
-      } else if (e.event === "error") {
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.message_id === assistantId
-              ? { ...msg, content: `⚠️ 出错了:${e.data.message}` }
-              : msg,
-          ),
-        );
-      }
-    });
-    setStreaming(false);
-    void refreshSessions();
+    try {
+      await streamChat(chatStreamUrl(sessionId), question, (e) => {
+        if (e.event === "token") {
+          streamingRef.current += e.data.content;
+          setMessages((m) =>
+            m.map((msg) =>
+              msg.message_id === assistantId
+                ? { ...msg, content: streamingRef.current }
+                : msg,
+            ),
+          );
+        } else if (e.event === "done") {
+          setMessages((m) =>
+            m.map((msg) =>
+              msg.message_id === assistantId
+                ? { ...msg, content: e.data.content, tool_calls: e.data.tool_calls }
+                : msg,
+            ),
+          );
+        } else if (e.event === "error") {
+          setMessages((m) =>
+            m.map((msg) =>
+              msg.message_id === assistantId
+                ? { ...msg, content: `⚠️ 出错了:${e.data.message}` }
+                : msg,
+            ),
+          );
+        }
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "连接失败";
+      setMessages((current) =>
+        current.map((item) =>
+          item.message_id === assistantId
+            ? { ...item, content: `⚠️ 出错了:${message}` }
+            : item,
+        ),
+      );
+    } finally {
+      setStreaming(false);
+      void refreshSessions();
+    }
   };
+
+  const send = () => void sendMessage(input);
 
   const persistHoldings = async (next: PortfolioHolding[]) => {
     setHoldings(next);
@@ -275,6 +291,18 @@ export default function ChatPage() {
   const currentTitle =
     currentSession?.title ??
     (currentSession?.run_ids.length ? "关联分析会话" : "通用咨询");
+  const latestMessage = messages.at(-1);
+  const activeChoiceMessageId =
+    latestMessage?.role === "assistant" && exportScopeOptions(latestMessage).length > 0
+      ? latestMessage.message_id
+      : null;
+  const canRequestExport =
+    Boolean(sessionId) &&
+    !streaming &&
+    !deletingSessionId &&
+    messages.some(
+      (message) => message.role === "assistant" && message.content.trim().length > 0,
+    );
 
   const formatSessionTime = (iso: string) => {
     const d = new Date(iso);
@@ -485,6 +513,18 @@ export default function ChatPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 px-4 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void sendMessage(EXPORT_REPORT_PROMPT)}
+                disabled={!canRequestExport}
+                aria-label="导出当前会话报告"
+                title="通过对话选择范围并导出报告"
+              >
+                <FileDown className="size-3.5" aria-hidden="true" />
+                导出报告
+              </Button>
               <Link
                 href="/"
                 className="glass-control inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:border-primary"
@@ -495,8 +535,15 @@ export default function ChatPage() {
             </div>
           </div>
           <div className="ios-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.map((m) => (
-              <ChatMessage key={m.message_id} message={m} />
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.message_id}
+                message={message}
+                choicesEnabled={
+                  message.message_id === activeChoiceMessageId && !streaming
+                }
+                onChoice={(choice) => void sendMessage(choice)}
+              />
             ))}
             <div ref={messagesEndRef} aria-hidden="true" />
           </div>
