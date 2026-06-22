@@ -82,6 +82,16 @@ class PortfolioHolding(BaseModel):
     trade_date: str | None = None
 
 
+class SessionProfile(BaseModel):
+    available_capital: float | None = None
+    capital_currency: str = "CNY"
+    risk_tolerance: Literal["conservative", "balanced", "aggressive"] | None = None
+    max_single_position_pct: float | None = None
+    horizon: Literal["short", "medium", "long"] | None = None
+    constraints: str | None = None
+    confirmed_at: str | None = None
+
+
 class ChatRequest(BaseModel):
     message: str
 

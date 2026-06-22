@@ -8,6 +8,7 @@ from api.schemas import (
     ChatSessionCreate,
     PortfolioExtractResponse,
     PortfolioHolding,
+    SessionProfile,
 )
 
 
@@ -62,3 +63,29 @@ def test_chat_session_shape():
     )
     assert s.session_id == "s1"
     assert s.run_id is None
+
+
+def test_session_profile_defaults_are_all_optional():
+    profile = SessionProfile()
+    assert profile.available_capital is None
+    assert profile.capital_currency == "CNY"
+    assert profile.risk_tolerance is None
+    assert profile.max_single_position_pct is None
+    assert profile.horizon is None
+    assert profile.constraints is None
+    assert profile.confirmed_at is None
+
+
+def test_session_profile_accepts_full_values():
+    profile = SessionProfile(
+        available_capital=300000,
+        capital_currency="USD",
+        risk_tolerance="balanced",
+        max_single_position_pct=25,
+        horizon="medium",
+        constraints="不碰白酒",
+        confirmed_at="2026-06-22T00:00:00Z",
+    )
+    assert profile.available_capital == 300000
+    assert profile.risk_tolerance == "balanced"
+    assert profile.horizon == "medium"
