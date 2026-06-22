@@ -6,9 +6,12 @@ model name is accepted, and the env backend URL precedence (#978).
 """
 
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_openai import ChatOpenAI
 
 from tradingagents.llm_clients.api_key_env import get_api_key_env
 from tradingagents.llm_clients.factory import create_llm_client
+from tradingagents.llm_clients.openai_client import NormalizedChatOpenAI
 from tradingagents.llm_clients.validators import validate_model
 
 # Note: assert by class NAME, not isinstance — other tests reload the
@@ -63,6 +66,26 @@ def test_any_model_accepted_no_forced_key():
     assert get_api_key_env("openai_compatible") == "OPENAI_COMPATIBLE_API_KEY"
     from tradingagents.llm_clients.openai_client import OPENAI_COMPATIBLE_PROVIDERS
     assert OPENAI_COMPATIBLE_PROVIDERS["openai_compatible"].key_optional is True
+
+
+@pytest.mark.unit
+def test_normalized_client_retries_one_empty_provider_response(monkeypatch):
+    attempts = 0
+
+    def invoke_once_empty_then_succeed(self, input, config=None, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise AttributeError("'NoneType' object has no attribute 'model_dump'")
+        return AIMessage(content="OK")
+
+    monkeypatch.setattr(ChatOpenAI, "invoke", invoke_once_empty_then_succeed)
+    llm = NormalizedChatOpenAI(model="test-model", api_key="test-key")
+
+    result = llm.invoke("hello")
+
+    assert result.content == "OK"
+    assert attempts == 2
 
 
 @pytest.mark.unit

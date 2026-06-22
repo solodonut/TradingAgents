@@ -32,7 +32,16 @@ class NormalizedChatOpenAI(ChatOpenAI):
     """
 
     def invoke(self, input, config=None, **kwargs):
-        return normalize_content(super().invoke(input, config, **kwargs))
+        try:
+            response = super().invoke(input, config, **kwargs)
+        except AttributeError as exc:
+            # Some OpenAI-compatible gateways intermittently return an empty
+            # successful response. The SDK parses it as None and LangChain then
+            # fails while calling model_dump(). Retry that transient case once.
+            if str(exc) != "'NoneType' object has no attribute 'model_dump'":
+                raise
+            response = super().invoke(input, config, **kwargs)
+        return normalize_content(response)
 
     def with_structured_output(self, schema, *, method=None, **kwargs):
         caps = get_capabilities(self.model_name)
