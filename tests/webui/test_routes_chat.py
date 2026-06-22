@@ -225,6 +225,125 @@ def test_stream_chat_uses_all_selected_reports(client, monkeypatch):
     assert "AAA report" in context
 
 
+def test_stream_chat_requests_export_scope_without_creating_file(client, monkeypatch, tmp_path):
+    import api.routes.chat as chat_routes
+
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr(chat_routes, "REPORT_DIR", report_dir)
+    question = "你希望导出哪部分？"
+    options = ["AAPL 操作结论", "风险与仓位建议"]
+    _install_fake_chat(
+        client,
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "request_export_scope",
+                        "args": {"question": question, "options": options},
+                        "id": "scope-1",
+                    }
+                ],
+            ),
+            AIMessage(content="请选择导出范围。"),
+        ],
+    )
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+
+    with client.stream(
+        "POST",
+        f"/api/chat/sessions/{sid}/stream",
+        json={"message": "先给我导出选项"},
+    ) as stream:
+        body = "".join(stream.iter_text())
+
+    assert "event: tool_call" in body
+    assert '"tool": "request_export_scope"' in body
+    assert not report_dir.exists()
+    messages = client.get(f"/api/chat/sessions/{sid}").json()["messages"]
+    assert messages[-1]["role"] == "assistant"
+    assert messages[-1]["tool_calls"] == [
+        {
+            "tool": "request_export_scope",
+            "args": {"question": question, "options": options},
+            "unavailable": False,
+        }
+    ]
+
+
+def test_stream_chat_exports_active_session_to_report_directory(client, monkeypatch, tmp_path):
+    import api.main as main
+    import api.routes.chat as chat_routes
+    import tradingagents.advisor.export as export_module
+
+    store = main.get_store()
+    active_sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    other_sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    client.patch(
+        f"/api/chat/sessions/{active_sid}", json={"title": "AAPL 复盘结论"}
+    )
+    store.insert_chat_message("active-user", active_sid, "user", "AAPL 应减仓", tool_calls=[])
+    store.insert_chat_message(
+        "active-assistant", active_sid, "assistant", "确认减仓至 20%", tool_calls=[]
+    )
+    store.insert_chat_message("other-user", other_sid, "user", "不要导出这段", tool_calls=[])
+
+    captured = {}
+
+    def capture_report(llm, messages, scope):
+        captured["messages"] = [message.content for message in messages]
+        captured["scope"] = scope
+        return "# AAPL 复盘结论\n\n减仓至 20%。"
+
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr(chat_routes, "REPORT_DIR", report_dir)
+    monkeypatch.setattr(export_module, "generate_report_markdown", capture_report)
+    scope = "仅导出 AAPL 已确认的仓位操作结论"
+    current_request = "导出仅包含 AAPL 已确认仓位操作的报告"
+    _install_fake_chat(
+        client,
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "export_chat_report",
+                        "args": {"scope": scope},
+                        "id": "export-1",
+                    }
+                ],
+            ),
+            AIMessage(content="报告已保存。"),
+        ],
+    )
+
+    with client.stream(
+        "POST",
+        f"/api/chat/sessions/{active_sid}/stream",
+        json={"message": current_request},
+    ) as stream:
+        body = "".join(stream.iter_text())
+
+    assert "event: tool_call" in body
+    assert captured == {
+        "messages": ["AAPL 应减仓", "确认减仓至 20%", current_request],
+        "scope": scope,
+    }
+    assert "不要导出这段" not in captured["messages"]
+    files = list(report_dir.glob("*.md"))
+    assert len(files) == 1
+    assert files[0].name.endswith("-AAPL 复盘结论.md")
+    assert files[0].read_text(encoding="utf-8") == "# AAPL 复盘结论\n\n减仓至 20%。\n"
+    messages = client.get(f"/api/chat/sessions/{active_sid}").json()["messages"]
+    assert messages[-1]["tool_calls"] == [
+        {
+            "tool": "export_chat_report",
+            "args": {"scope": scope},
+            "unavailable": False,
+        }
+    ]
+
+
 def test_portfolio_extract_and_get(client):
     _install_fake_chat(
         client,

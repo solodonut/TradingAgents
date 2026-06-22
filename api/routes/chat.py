@@ -3,6 +3,7 @@
 import queue
 import threading
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from langchain_core.messages import AIMessage, HumanMessage
@@ -20,10 +21,12 @@ from api.schemas import (
 )
 from tradingagents.advisor.context import build_report_context
 from tradingagents.advisor.engine import run_chat
+from tradingagents.advisor.export import ExportContext, create_export_tools
 from tradingagents.advisor.prompt import build_system_prompt
 from tradingagents.advisor.tools import ADVISOR_TOOLS
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+REPORT_DIR = Path(__file__).resolve().parents[2] / "report"
 
 
 def _completed_runs(store, run_ids: list[str]):
@@ -62,6 +65,16 @@ def _report_context(store, run_ids: list[str]) -> str:
             f"{build_report_context(run.result, run.decision, run.ticker)}"
         )
     return "\n\n---\n\n".join(sections) or build_report_context(None, None, "标的")
+
+
+def _chat_history(store, session_id: str) -> list:
+    history = []
+    for message in store.list_chat_messages(session_id):
+        if message.role == "user":
+            history.append(HumanMessage(content=message.content))
+        else:
+            history.append(AIMessage(content=message.content))
+    return history
 
 
 def _holdings_text(holdings: list[PortfolioHolding]) -> str:
@@ -266,18 +279,29 @@ async def stream_chat(
     holdings_ctx = _holdings_text(holdings)
     system_prompt = build_system_prompt(report_ctx, holdings_ctx)
 
-    history = []
-    for m in store.list_chat_messages(session_id):
-        if m.role == "user":
-            history.append(HumanMessage(content=m.content))
-        else:
-            history.append(AIMessage(content=m.content))
+    history = _chat_history(store, session_id)
 
     chat_llm, _ = request.app.state.chat_llm_factory()
+
+    def load_export_context() -> ExportContext:
+        current_session = store.get_chat_session(session_id)
+        if current_session is None:
+            raise ValueError("chat session not found")
+        return ExportContext(
+            title=current_session.title or "chat-report",
+            messages=_chat_history(store, session_id),
+        )
+
+    export_tools = create_export_tools(
+        llm=chat_llm,
+        load_context=load_export_context,
+        report_dir=REPORT_DIR,
+    )
+    tools = [*ADVISOR_TOOLS, *export_tools]
     prompt = ChatPromptTemplate.from_messages(
         [("system", "{system}"), MessagesPlaceholder(variable_name="messages")]
     ).partial(system=system_prompt)
-    bound = chat_llm.bind_tools(ADVISOR_TOOLS)
+    bound = chat_llm.bind_tools(tools)
 
     class _PromptChain:
         def invoke(self, messages):
@@ -286,7 +310,7 @@ async def stream_chat(
 
     chain = _PromptChain()
 
-    tools_by_name = {t.name: t for t in ADVISOR_TOOLS}
+    tools_by_name = {tool.name: tool for tool in tools}
 
     store.insert_chat_message(
         uuid.uuid4().hex, session_id, "user", user_message, tool_calls=[]
