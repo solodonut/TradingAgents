@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 
 _NO_CONFIRMED_CONTENT = "NO_CONFIRMED_CONTENT"
 _INVALID_FILENAME_CHARS = frozenset('/\\:*?"<>|')
@@ -50,29 +51,36 @@ class NoConfirmedContentError(ValueError):
     """Raised when a conversation has no confirmed report content."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExportContext:
     """Current session data used to generate an export."""
 
     title: str
-    messages: list
+    messages: list[BaseMessage]
+
+
+def _validation_key(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
 _POSITIONAL_SCOPE = re.compile(
     r"^(?:"
-    r"[A-D1-4][.)]?|"
-    r"option\s*[A-D1-4]|[A-D1-4]\s*option|"
-    r"(?:first|second|third|fourth)\s+option|"
-    r"第[一二三四1-4](?:个(?:选项)?|选项)|选项[一二三四1-4]"
+    r"[a-d1-4](?:[.)]|项|选项|方案)?|"
+    r"(?:option|选项|项|方案)[a-d1-4一二三四]|"
+    r"(?:first|second|third|fourth)(?:option|plan)|"
+    r"第[一二三四1-4](?:个(?:选项|项|方案)?|选项|项|方案)"
     r")[。.]?$",
-    re.IGNORECASE,
 )
 
 
 def create_export_tools(
     *, llm, load_context: Callable[[], ExportContext], report_dir: Path
-) -> list:
+) -> list[BaseTool]:
     """Create request-scoped tools for clarifying and saving chat exports."""
+
+    report_dir = Path(report_dir)
+    if report_dir.name != "report":
+        raise ValueError("report_dir must be a directory named 'report'")
 
     @tool
     def request_export_scope(question: str, options: list[str]) -> str:
@@ -87,7 +95,8 @@ def create_export_tools(
             raise ValueError("Export scope requires 2-4 options")
         if any(not option for option in clean_options):
             raise ValueError("Export scope options must be nonblank")
-        if len(set(clean_options)) != len(clean_options):
+        option_keys = {_validation_key(option) for option in clean_options}
+        if len(option_keys) != len(clean_options):
             raise ValueError("Export scope options must be unique")
 
         return json.dumps(
@@ -106,7 +115,8 @@ def create_export_tools(
         clean_scope = scope.strip()
         if not clean_scope:
             raise ValueError("Export scope must not be blank")
-        if _POSITIONAL_SCOPE.fullmatch(clean_scope):
+        scope_key = _validation_key(clean_scope).replace(" ", "")
+        if _POSITIONAL_SCOPE.fullmatch(scope_key):
             raise ValueError(
                 "Export scope must be self-contained, not a positional option reference"
             )
@@ -115,7 +125,7 @@ def create_export_tools(
         markdown = generate_report_markdown(llm, context.messages, clean_scope)
         saved_path = save_report(markdown, context.title, report_dir)
         return json.dumps(
-            {"status": "saved", "path": f"report/{saved_path.name}"},
+            {"status": "saved", "path": f"{report_dir.name}/{saved_path.name}"},
             ensure_ascii=False,
         )
 

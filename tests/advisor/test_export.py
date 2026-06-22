@@ -1,5 +1,6 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import FrozenInstanceError
 from datetime import date
 from pathlib import Path
 
@@ -42,12 +43,15 @@ def _export_tools(llm, load_context, report_dir):
         ("Choose", ["one", "two", "three", "four", "five"], "2-4"),
         ("Choose", ["one", "   "], "nonblank"),
         ("Choose", ["one", " one "], "unique"),
+        ("Choose", ["AAPL", "aapl"], "unique"),
+        ("Choose", ["ＡＡＰＬ", "AAPL"], "unique"),
+        ("Choose", ["risk  plan", "RISK plan"], "unique"),
     ],
 )
 def test_request_export_scope_validates_question_and_options(
     question, options, error, tmp_path
 ):
-    tool = _export_tools(_RecordingLLM("unused"), lambda: None, tmp_path)[
+    tool = _export_tools(_RecordingLLM("unused"), lambda: None, tmp_path / "report")[
         "request_export_scope"
     ]
 
@@ -56,7 +60,7 @@ def test_request_export_scope_validates_question_and_options(
 
 
 def test_request_export_scope_returns_exact_clean_values_and_wait_instruction(tmp_path):
-    tool = _export_tools(_RecordingLLM("unused"), lambda: None, tmp_path)[
+    tool = _export_tools(_RecordingLLM("unused"), lambda: None, tmp_path / "report")[
         "request_export_scope"
     ]
 
@@ -94,15 +98,60 @@ def test_request_export_scope_returns_exact_clean_values_and_wait_instruction(tm
         "第二个选项",
         "第2个选项",
         "选项二",
+        "第一项",
+        "第1项",
+        "选项 2",
+        "第 2 个选项",
+        "A项",
+        "A 项",
+        "A方案",
+        "Ａ",
+        "１",
+        "项一",
+        "第一方案",
+        "第 2 项",
+        "方案 2",
+        "方案二",
+        "第 2 个方案",
+        "第 2 个 方案",
     ],
 )
 def test_export_chat_report_rejects_blank_or_positional_scope(scope, tmp_path):
-    tool = _export_tools(_RecordingLLM("# Report"), lambda: None, tmp_path)[
+    llm = _RecordingLLM("# Report")
+    load_calls = 0
+
+    def load_context():
+        nonlocal load_calls
+        load_calls += 1
+        raise AssertionError("invalid scopes must not load context")
+
+    report_dir = tmp_path / "report"
+    tool = _export_tools(llm, load_context, report_dir)[
         "export_chat_report"
     ]
 
     with pytest.raises(ValueError, match="self-contained|blank"):
         tool.invoke({"scope": scope})
+
+    assert load_calls == 0
+    assert llm.invocations == []
+    assert not report_dir.exists()
+
+
+def test_create_export_tools_requires_report_directory_name(tmp_path):
+    with pytest.raises(ValueError, match="named 'report'"):
+        create_export_tools(
+            llm=_RecordingLLM("unused"),
+            load_context=lambda: ExportContext(title="title", messages=[]),
+            report_dir=tmp_path / "reports",
+        )
+
+
+def test_export_context_is_immutable():
+    context = ExportContext(title="title", messages=[])
+
+    with pytest.raises(FrozenInstanceError):
+        context.title = "changed"
 
 
 def test_export_chat_report_loads_current_context_at_invocation_and_returns_real_path(
@@ -121,7 +170,8 @@ def test_export_chat_report_loads_current_context_at_invocation_and_returns_real
         load_count += 1
         return context
 
-    tools = _export_tools(llm, load_context, tmp_path / "reports")
+    project_root = tmp_path
+    tools = _export_tools(llm, load_context, project_root / "report")
     assert load_count == 0
 
     first = json.loads(
@@ -141,14 +191,35 @@ def test_export_chat_report_loads_current_context_at_invocation_and_returns_real
         "status": "saved",
         "path": "report/2026-06-22-Current title.md",
     }
-    assert (tmp_path / "reports" / "2026-06-22-Old.md").read_text(
-        encoding="utf-8"
-    ) == "# Confirmed report\n"
-    assert (tmp_path / "reports" / "2026-06-22-Current title.md").is_file()
+    assert (project_root / first["path"]).read_text(encoding="utf-8") == (
+        "# Confirmed report\n"
+    )
+    assert (project_root / second["path"]).is_file()
     rendered = [invocation.to_messages() for invocation in llm.invocations]
     assert any("old" in str(message.content) for message in rendered[0])
     assert any("current" in str(message.content) for message in rendered[1])
     assert "AAPL 的最终操作结论和行动项" in str(rendered[0][-1].content)
+
+
+@pytest.mark.parametrize(
+    "scope",
+    ["A项中的 AAPL 最终操作结论", "第 2 个方案中的风险与仓位结论"],
+)
+def test_export_chat_report_allows_self_contained_scopes_with_positional_text(
+    scope, tmp_path
+):
+    llm = _RecordingLLM("# Confirmed report")
+    context = ExportContext(
+        title="Plan", messages=[HumanMessage(content="confirmed content")]
+    )
+    tool = _export_tools(llm, lambda: context, tmp_path / "report")[
+        "export_chat_report"
+    ]
+
+    result = json.loads(tool.invoke({"scope": scope}))
+
+    assert (tmp_path / result["path"]).is_file()
+    assert len(llm.invocations) == 1
 
 
 def test_generate_report_uses_full_history_scope_and_confirmation_rules():
