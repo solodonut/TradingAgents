@@ -4,6 +4,7 @@
 
 > 公共项目约定见上面引入的 `AGENTS.md`。以下只补充 Claude Code 在本仓库运行时的工具使用习惯。
 
+- **回复一律用中文**：与用户的所有对话回复都使用中文，不要用日文或英文。
 - **Python 一律走项目 venv**：系统 `python`/`python3` 可能是 3.10 以下，会报 union 语法错误。
   用 Bash 工具跑任何 Python/pytest/uvicorn 命令时，显式使用 `.venv/bin/python`
   （而不是裸 `python3`、`pytest`、`uvicorn`），避免 NumPy 1.x/2.x 冲突崩溃。
