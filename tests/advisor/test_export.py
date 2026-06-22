@@ -91,6 +91,16 @@ def test_request_export_scope_returns_exact_clean_values_and_wait_instruction(tm
         "D)",
         "1",
         "option D",
+        "option one",
+        "choice A",
+        "B choice",
+        "first choice",
+        "choice fourth",
+        "the first option",
+        "the B plan",
+        "plan B",
+        "B plan",
+        "three plan",
         "first option",
         "第一个",
         "第二个",
@@ -101,6 +111,7 @@ def test_request_export_scope_returns_exact_clean_values_and_wait_instruction(tm
         "第一项",
         "第1项",
         "选项 2",
+        "选项 two",
         "第 2 个选项",
         "A项",
         "A 项",
@@ -114,6 +125,9 @@ def test_request_export_scope_returns_exact_clean_values_and_wait_instruction(tm
         "方案二",
         "第 2 个方案",
         "第 2 个 方案",
+        "第二",
+        "第2",
+        "二",
     ],
 )
 def test_export_chat_report_rejects_blank_or_positional_scope(scope, tmp_path):
@@ -139,12 +153,14 @@ def test_export_chat_report_rejects_blank_or_positional_scope(scope, tmp_path):
 
 
 def test_create_export_tools_requires_report_directory_name(tmp_path):
-    with pytest.raises(ValueError, match="named 'report'"):
+    with pytest.raises(ValueError, match="project's report directory"):
         create_export_tools(
             llm=_RecordingLLM("unused"),
             load_context=lambda: ExportContext(title="title", messages=[]),
             report_dir=tmp_path / "reports",
         )
+
+    assert "project's report directory" in create_export_tools.__doc__
 
 
 def test_export_context_is_immutable():
@@ -203,7 +219,12 @@ def test_export_chat_report_loads_current_context_at_invocation_and_returns_real
 
 @pytest.mark.parametrize(
     "scope",
-    ["A项中的 AAPL 最终操作结论", "第 2 个方案中的风险与仓位结论"],
+    [
+        "A项中的 AAPL 最终操作结论",
+        "第 2 个方案中的风险与仓位结论",
+        "choice A 中的最终仓位结论",
+        "the first option 中已确认的风险结论",
+    ],
 )
 def test_export_chat_report_allows_self_contained_scopes_with_positional_text(
     scope, tmp_path

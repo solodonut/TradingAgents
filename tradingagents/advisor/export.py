@@ -63,24 +63,28 @@ def _validation_key(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
+_POSITION_MARKER = (
+    r"(?:[a-d1-4]|one|two|three|four|first|second|third|fourth|[一二三四])"
+)
+_POSITION_LABEL = r"(?:option|choice|plan|选项|项|方案)"
 _POSITIONAL_SCOPE = re.compile(
-    r"^(?:"
-    r"[a-d1-4](?:[.)]|项|选项|方案)?|"
-    r"(?:option|选项|项|方案)[a-d1-4一二三四]|"
-    r"(?:first|second|third|fourth)(?:option|plan)|"
-    r"第[一二三四1-4](?:个(?:选项|项|方案)?|选项|项|方案)"
-    r")[。.]?$",
+    rf"^(?:"
+    rf"(?:the)?(?:{_POSITION_LABEL}{_POSITION_MARKER}|"
+    rf"{_POSITION_MARKER}{_POSITION_LABEL})|"
+    rf"(?:the)?{_POSITION_MARKER}|"
+    rf"第[一二三四1-4](?:个)?(?:选项|项|方案)?"
+    rf")[。.)]?$"
 )
 
 
 def create_export_tools(
     *, llm, load_context: Callable[[], ExportContext], report_dir: Path
 ) -> list[BaseTool]:
-    """Create request-scoped tools for clarifying and saving chat exports."""
+    """Create export tools; report_dir must be exactly the project's report directory."""
 
     report_dir = Path(report_dir)
     if report_dir.name != "report":
-        raise ValueError("report_dir must be a directory named 'report'")
+        raise ValueError("report_dir must be exactly the project's report directory")
 
     @tool
     def request_export_scope(question: str, options: list[str]) -> str:
