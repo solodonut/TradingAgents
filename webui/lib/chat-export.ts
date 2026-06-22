@@ -6,6 +6,7 @@ export const EXPORT_REPORT_PROMPT =
 const INTERNAL_EXPORT_TOOLS = new Set([
   "request_export_scope",
   "export_chat_report",
+  "propose_session_facts",
 ]);
 
 export function exportScopeOptions(message: ChatMessageT): string[] {
