@@ -3,6 +3,7 @@
 import queue
 import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -18,6 +19,7 @@ from api.schemas import (
     ChatSessionUpdate,
     PortfolioExtractResponse,
     PortfolioHolding,
+    SessionProfile,
 )
 from tradingagents.advisor.context import build_report_context
 from tradingagents.advisor.engine import run_chat
@@ -258,6 +260,30 @@ def get_portfolio(session_id: str) -> PortfolioExtractResponse:
         raise HTTPException(status_code=404, detail="session not found")
     holdings, source = store.get_portfolio(session_id)
     return PortfolioExtractResponse(holdings=holdings, source=source or "manual")
+
+
+@router.get("/sessions/{session_id}/profile", response_model=SessionProfile)
+def get_session_profile(session_id: str) -> SessionProfile:
+    from api.main import get_store
+
+    store = get_store()
+    if store.get_chat_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return store.get_session_profile(session_id) or SessionProfile()
+
+
+@router.put("/sessions/{session_id}/profile", response_model=SessionProfile)
+def save_session_profile(
+    session_id: str, payload: SessionProfile
+) -> SessionProfile:
+    from api.main import get_store
+
+    store = get_store()
+    if store.get_chat_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    payload.confirmed_at = datetime.now(timezone.utc).isoformat()
+    store.save_session_profile(session_id, payload)
+    return payload
 
 
 @router.post("/sessions/{session_id}/stream")

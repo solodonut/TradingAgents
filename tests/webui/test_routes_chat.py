@@ -502,3 +502,36 @@ def test_stream_unknown_session_404(client):
     _install_fake_chat(client, [])
     resp = client.post("/api/chat/sessions/nope/stream", json={"message": "hi"})
     assert resp.status_code == 404
+
+
+def test_get_profile_defaults_when_unset(client):
+    _install_fake_chat(client, [])
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    resp = client.get(f"/api/chat/sessions/{sid}/profile")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["available_capital"] is None
+    assert body["capital_currency"] == "CNY"
+
+
+def test_put_profile_persists_and_sets_confirmed_at(client):
+    _install_fake_chat(client, [])
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    resp = client.put(
+        f"/api/chat/sessions/{sid}/profile",
+        json={"available_capital": 300000, "risk_tolerance": "balanced"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["available_capital"] == 300000
+    assert resp.json()["confirmed_at"] is not None
+    # round-trips
+    again = client.get(f"/api/chat/sessions/{sid}/profile").json()
+    assert again["risk_tolerance"] == "balanced"
+
+
+def test_profile_routes_404_for_missing_session(client):
+    _install_fake_chat(client, [])
+    assert client.get("/api/chat/sessions/nope/profile").status_code == 404
+    assert (
+        client.put("/api/chat/sessions/nope/profile", json={}).status_code == 404
+    )
