@@ -31,7 +31,11 @@ ADVISOR_TOOLS = [
     get_prediction_markets,
 ]
 
-_NO_DATA_PREFIXES = ("NO_DATA_AVAILABLE:", "DATA_SOURCE_DISABLED:")
+_NO_DATA_PREFIXES = (
+    "NO_DATA_AVAILABLE:",
+    "DATA_SOURCE_DISABLED:",
+    "NEED_CONFIRMATION:",
+)
 
 
 def is_no_data(result: str) -> bool:

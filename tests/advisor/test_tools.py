@@ -12,4 +12,5 @@ def test_advisor_tools_are_langchain_tools():
 def test_is_no_data_detects_sentinels():
     assert is_no_data("NO_DATA_AVAILABLE: ticker not found")
     assert is_no_data("DATA_SOURCE_DISABLED: reddit off")
+    assert is_no_data("NEED_CONFIRMATION: 缺少可用资金池")
     assert not is_no_data("AAPL,2024-01-01,190.0,...")
