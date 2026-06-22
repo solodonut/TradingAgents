@@ -1,4 +1,4 @@
-from api.schemas import PortfolioHolding
+from api.schemas import PortfolioHolding, SessionProfile
 from api.store import Store
 
 
@@ -115,9 +115,6 @@ def test_chat_tables_coexist_with_existing_db(tmp_path):
     store = Store(tmp_path / "t.db")
     store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
     assert store.get_run("r1").status == "running"
-
-
-from api.schemas import SessionProfile
 
 
 def test_save_and_get_session_profile_overwrites(tmp_path):
