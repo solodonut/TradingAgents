@@ -235,3 +235,6 @@ reports/
 
 # Local design references (not part of the codebase)
 stitch_liquid_glass_ui_theme/
+
+# Local agent tooling state (superpowers/brainstorm)
+.superpowers/
