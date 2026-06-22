@@ -41,3 +41,19 @@ def test_system_prompt_defines_explicit_export_flow_and_success_rules():
     assert "status=saved" in prompt
     assert "原样返回" in prompt
     assert "path" in prompt
+
+
+def test_system_prompt_embeds_confirmed_profile():
+    profile_ctx = "- 可用资金池: 300000 CNY\n- 风险偏好: 稳健"
+    prompt = build_system_prompt("report", holdings_ctx="", profile_ctx=profile_ctx)
+    assert "用户会话档案" in prompt
+    assert "300000 CNY" in prompt
+    assert "重新推断" in prompt
+
+
+def test_system_prompt_enforces_sizing_and_confirmation_rules():
+    prompt = build_system_prompt("report", holdings_ctx="")
+    assert "compute_position_sizing" in prompt
+    assert "NEED_CONFIRMATION" in prompt
+    assert "propose_session_facts" in prompt
+    assert "未设置" in prompt
