@@ -205,7 +205,7 @@ def test_stream_chat_uses_all_selected_reports(client, monkeypatch):
     _create_completed_run(store, "r2", "BBB")
     captured = {}
 
-    def capture_prompt(report_context: str, holdings_ctx: str) -> str:
+    def capture_prompt(report_context: str, holdings_ctx: str, profile_ctx: str = "") -> str:
         captured["report_context"] = report_context
         return "system"
 
@@ -535,3 +535,54 @@ def test_profile_routes_404_for_missing_session(client):
     assert (
         client.put("/api/chat/sessions/nope/profile", json={}).status_code == 404
     )
+
+
+def test_stream_chat_registers_profile_tools_and_injects_profile(client):
+    import api.main as main
+
+    captured = {}
+
+    class _RecordingChain:
+        def __init__(self):
+            self._round = 0
+
+        def invoke(self, messages):
+            # 记录注入的 system prompt（第一条消息由 prompt 模板渲染）
+            self._round += 1
+            if self._round == 1:
+                captured["system"] = str(messages)
+                return AIMessage(
+                    content="",
+                    tool_calls=[{
+                        "name": "compute_position_sizing",
+                        "args": {"ticker": "AAPL", "price": 200,
+                                 "target_weight_pct": 10},
+                        "id": "call1",
+                    }],
+                )
+            return AIMessage(content="done")
+
+    class _LLM:
+        def bind_tools(self, tools):
+            captured["tool_names"] = {t.name for t in tools}
+            return _RecordingChain()
+
+        def invoke(self, messages):
+            return AIMessage(content="[]")
+
+    main.app.state.chat_llm_factory = lambda: (_LLM(), _LLM())
+
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    client.put(
+        f"/api/chat/sessions/{sid}/profile",
+        json={"available_capital": 300000, "capital_currency": "CNY"},
+    )
+    with client.stream(
+        "POST", f"/api/chat/sessions/{sid}/stream", json={"message": "AAPL 配 10%"}
+    ) as resp:
+        body = "".join(resp.iter_text())
+
+    assert "compute_position_sizing" in captured["tool_names"]
+    assert "propose_session_facts" in captured["tool_names"]
+    assert "300000" in captured["system"]
+    assert "done" in body

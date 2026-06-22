@@ -24,6 +24,7 @@ from api.schemas import (
 from tradingagents.advisor.context import build_report_context
 from tradingagents.advisor.engine import run_chat
 from tradingagents.advisor.export import ExportContext, create_export_tools
+from tradingagents.advisor.profile_tools import create_profile_tools
 from tradingagents.advisor.prompt import build_system_prompt
 from tradingagents.advisor.tools import ADVISOR_TOOLS
 
@@ -108,6 +109,34 @@ def _holdings_text(holdings: list[PortfolioHolding]) -> str:
             bits.append(f"操作 {h.action}")
         lines.append(": ".join([bits[0], ", ".join(bits[1:])]) if len(bits) > 1 else bits[0])
     return "\n".join(lines)
+
+
+_RISK_LABELS = {"conservative": "保守", "balanced": "稳健", "aggressive": "激进"}
+_HORIZON_LABELS = {"short": "短期", "medium": "中期", "long": "长期"}
+
+
+def _profile_text(profile: SessionProfile | None) -> str:
+    p = profile or SessionProfile()
+    capital = (
+        f"{p.available_capital:g} {p.capital_currency}"
+        if p.available_capital is not None
+        else "未设置"
+    )
+    risk = _RISK_LABELS.get(p.risk_tolerance, "未设置")
+    max_pos = (
+        f"{p.max_single_position_pct:g}%"
+        if p.max_single_position_pct is not None
+        else "未设置"
+    )
+    horizon = _HORIZON_LABELS.get(p.horizon, "未设置")
+    constraints = p.constraints.strip() if p.constraints and p.constraints.strip() else "未设置"
+    return (
+        f"- 可用资金池: {capital}\n"
+        f"- 风险偏好: {risk}\n"
+        f"- 单票最大仓位: {max_pos}\n"
+        f"- 投资期限: {horizon}\n"
+        f"- 偏好/禁投: {constraints}"
+    )
 
 
 @router.post("/sessions")
@@ -303,7 +332,8 @@ async def stream_chat(
 
     holdings, _ = store.get_portfolio(session_id)
     holdings_ctx = _holdings_text(holdings)
-    system_prompt = build_system_prompt(report_ctx, holdings_ctx)
+    profile_ctx = _profile_text(store.get_session_profile(session_id))
+    system_prompt = build_system_prompt(report_ctx, holdings_ctx, profile_ctx)
 
     history = _chat_history(store, session_id)
 
@@ -323,7 +353,13 @@ async def stream_chat(
         load_context=load_export_context,
         report_dir=REPORT_DIR,
     )
-    tools = [*ADVISOR_TOOLS, *export_tools]
+
+    def load_profile() -> dict:
+        current = store.get_session_profile(session_id)
+        return current.model_dump() if current else {}
+
+    profile_tools = create_profile_tools(load_profile=load_profile)
+    tools = [*ADVISOR_TOOLS, *profile_tools, *export_tools]
     prompt = ChatPromptTemplate.from_messages(
         [("system", "{system}"), MessagesPlaceholder(variable_name="messages")]
     ).partial(system=system_prompt)
