@@ -35,6 +35,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **Empty provider response retry.** `NormalizedChatOpenAI.invoke` now retries
+  once when an OpenAI-compatible gateway returns an empty successful response
+  that the SDK parses as `None` (surfacing as
+  `'NoneType' object has no attribute 'model_dump'`), instead of failing the run
+  on a transient gateway hiccup.
 - **Advisor tool execution.** `run_chat` now invokes LangChain structured tools
   via `tool.invoke(args)` instead of `tool(**kwargs)`, matching the
   `StructuredTool` calling convention.
