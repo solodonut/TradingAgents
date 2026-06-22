@@ -64,6 +64,7 @@ export default function ChatPage() {
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [dismissedProposals, setDismissedProposals] = useState<Set<string>>(new Set());
   const [savingReports, setSavingReports] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const streamingRef = useRef("");
@@ -199,6 +200,7 @@ export default function ChatPage() {
   const sendMessage = async (rawQuestion: string) => {
     const question = rawQuestion.trim();
     if (!sessionId || !question || streaming) return;
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     const userMsg: ChatMessageT = {
       message_id: `local-${now}`,
@@ -276,6 +278,16 @@ export default function ChatPage() {
       const saved = await saveSessionProfile(sessionId, next).catch(() => null);
       if (saved) setProfile(saved);
     }
+  };
+
+  const confirmFacts = async (messageId: string, merged: SessionProfile) => {
+    await persistProfile(merged);
+    setDismissedProposals((ids) => new Set(ids).add(messageId));
+    void sendMessage("我已确认会话参数面板，请据此继续。");
+  };
+
+  const dismissFacts = (messageId: string) => {
+    setDismissedProposals((ids) => new Set(ids).add(messageId));
   };
 
   const changeReports = async (nextRunIds: string[]) => {
@@ -568,6 +580,12 @@ export default function ChatPage() {
                   message.message_id === activeChoiceMessageId && !streaming
                 }
                 onChoice={(choice) => void sendMessage(choice)}
+                profile={profile}
+                profileActionsEnabled={
+                  !streaming && !dismissedProposals.has(message.message_id)
+                }
+                onConfirmFacts={(merged) => void confirmFacts(message.message_id, merged)}
+                onDismissFacts={() => dismissFacts(message.message_id)}
               />
             ))}
             <div ref={messagesEndRef} aria-hidden="true" />
