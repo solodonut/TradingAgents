@@ -7,6 +7,7 @@ const INTERNAL_EXPORT_TOOLS = new Set([
   "request_export_scope",
   "export_chat_report",
   "propose_session_facts",
+  "compute_position_sizing",
 ]);
 
 export function exportScopeOptions(message: ChatMessageT): string[] {

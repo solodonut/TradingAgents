@@ -52,6 +52,14 @@ def test_compute_position_sizing_needs_capital_when_unset():
     assert out.startswith("NEED_CONFIRMATION:")
 
 
+def test_compute_position_sizing_needs_capital_when_zero():
+    tools, _ = _tools(profile={"available_capital": 0})
+    out = tools["compute_position_sizing"].invoke(
+        {"ticker": "AAPL", "price": 200, "target_weight_pct": 10}
+    )
+    assert out.startswith("NEED_CONFIRMATION:")
+
+
 def test_compute_position_sizing_by_weight():
     tools, _ = _tools(
         profile={"available_capital": 300000, "capital_currency": "CNY",

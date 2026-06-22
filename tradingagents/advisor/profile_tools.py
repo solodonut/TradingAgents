@@ -80,7 +80,7 @@ def create_profile_tools(*, load_profile: Callable[[], dict]) -> list[BaseTool]:
 
         profile = load_profile() or {}
         available_capital = profile.get("available_capital")
-        if available_capital is None:
+        if not available_capital:
             return "NEED_CONFIRMATION: 缺少可用资金池，请先在参数面板确认"
 
         currency = profile.get("capital_currency") or "CNY"

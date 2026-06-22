@@ -272,16 +272,27 @@ export default function ChatPage() {
     if (sessionId) await savePortfolio(sessionId, next);
   };
 
-  const persistProfile = async (next: SessionProfile) => {
-    setProfile(next);
-    if (sessionId) {
-      const saved = await saveSessionProfile(sessionId, next).catch(() => null);
-      if (saved) setProfile(saved);
+  const persistProfile = async (
+    next: SessionProfile,
+  ): Promise<SessionProfile | null> => {
+    if (!sessionId) {
+      setProfile(next);
+      return next;
     }
+    const prev = profile;
+    setProfile(next);
+    const saved = await saveSessionProfile(sessionId, next).catch(() => null);
+    if (saved) {
+      setProfile(saved);
+      return saved;
+    }
+    setProfile(prev);
+    return null;
   };
 
   const confirmFacts = async (messageId: string, merged: SessionProfile) => {
-    await persistProfile(merged);
+    const saved = await persistProfile(merged);
+    if (!saved) return;
     setDismissedProposals((ids) => new Set(ids).add(messageId));
     void sendMessage("我已确认会话参数面板，请据此继续。");
   };

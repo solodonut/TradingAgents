@@ -44,6 +44,7 @@ test("visibleDataSources excludes internal export tools", () => {
       { tool: "request_export_scope", args: {} },
       { tool: "get_stock_data", args: {} },
       { tool: "export_chat_report", args: {} },
+      { tool: "compute_position_sizing", args: {} },
     ]),
   );
 
