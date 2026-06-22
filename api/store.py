@@ -7,7 +7,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from api.schemas import ChatMessage, ChatSession, HistorySummary, PortfolioHolding, RunResult
+from api.schemas import (
+    ChatMessage,
+    ChatSession,
+    HistorySummary,
+    PortfolioHolding,
+    RunResult,
+    SessionProfile,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS analysis_runs (
@@ -52,6 +59,12 @@ CREATE TABLE IF NOT EXISTS chat_portfolios (
     holdings_json TEXT NOT NULL,
     source        TEXT NOT NULL,
     updated_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_profiles (
+    session_id   TEXT PRIMARY KEY,
+    profile_json TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
 );
 """
 
@@ -266,6 +279,7 @@ class Store:
         with self._lock, self._connect() as conn:
             conn.execute("DELETE FROM chat_messages WHERE session_id=?", (session_id,))
             conn.execute("DELETE FROM chat_portfolios WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM chat_profiles WHERE session_id=?", (session_id,))
             conn.execute("DELETE FROM chat_session_runs WHERE session_id=?", (session_id,))
             conn.execute("DELETE FROM chat_sessions WHERE session_id=?", (session_id,))
 
@@ -372,3 +386,26 @@ class Store:
             return [], None
         holdings = [PortfolioHolding(**h) for h in json.loads(row["holdings_json"])]
         return holdings, row["source"]
+
+    # ---- session profile ----
+
+    def save_session_profile(self, session_id: str, profile: SessionProfile) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT INTO chat_profiles (session_id, profile_json, updated_at) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(session_id) DO UPDATE SET "
+                "profile_json=excluded.profile_json, updated_at=excluded.updated_at",
+                (session_id, _dumps(profile.model_dump()), _now()),
+            )
+            self._touch_session(conn, session_id)
+
+    def get_session_profile(self, session_id: str) -> SessionProfile | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT profile_json FROM chat_profiles WHERE session_id=?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return SessionProfile(**json.loads(row["profile_json"]))

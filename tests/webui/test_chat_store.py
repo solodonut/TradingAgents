@@ -115,3 +115,32 @@ def test_chat_tables_coexist_with_existing_db(tmp_path):
     store = Store(tmp_path / "t.db")
     store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
     assert store.get_run("r1").status == "running"
+
+
+from api.schemas import SessionProfile
+
+
+def test_save_and_get_session_profile_overwrites(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.create_chat_session("s1", run_id=None, title=None)
+    store.save_session_profile("s1", SessionProfile(available_capital=100000))
+    store.save_session_profile(
+        "s1", SessionProfile(available_capital=300000, risk_tolerance="balanced")
+    )
+    profile = store.get_session_profile("s1")
+    assert profile.available_capital == 300000
+    assert profile.risk_tolerance == "balanced"
+
+
+def test_get_session_profile_missing_returns_none(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.create_chat_session("s1", run_id=None, title=None)
+    assert store.get_session_profile("s1") is None
+
+
+def test_delete_chat_session_cascades_profile(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.create_chat_session("s1", run_id=None, title=None)
+    store.save_session_profile("s1", SessionProfile(available_capital=100000))
+    store.delete_chat_session("s1")
+    assert store.get_session_profile("s1") is None
