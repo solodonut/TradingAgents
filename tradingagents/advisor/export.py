@@ -63,7 +63,7 @@ _POSITIONAL_SCOPE = re.compile(
     r"[A-D1-4][.)]?|"
     r"option\s*[A-D1-4]|[A-D1-4]\s*option|"
     r"(?:first|second|third|fourth)\s+option|"
-    r"第[一二三四1-4]个?选项|选项[一二三四1-4]"
+    r"第[一二三四1-4](?:个(?:选项)?|选项)|选项[一二三四1-4]"
     r")[。.]?$",
     re.IGNORECASE,
 )

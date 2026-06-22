@@ -88,6 +88,8 @@ def test_request_export_scope_returns_exact_clean_values_and_wait_instruction(tm
         "1",
         "option D",
         "first option",
+        "第一个",
+        "第二个",
         "第一个选项",
         "第二个选项",
         "第2个选项",
