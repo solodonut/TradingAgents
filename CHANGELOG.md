@@ -10,6 +10,9 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **Chat 会话档案 Harness.** 新增可用资金池/风险偏好/单票上限/投资期限等会话参数面板，
+  确认后稳定注入每轮推理；新增 `propose_session_facts`（对话抽取→确认卡片）与
+  `compute_position_sizing`（强制使用已确认资金池、缺失则返回 `NEED_CONFIRMATION` 反问）工具。
 - **Context-aware Chat report export.** The advisor can clarify an ambiguous
   export scope with persisted clickable choices, then save only the session's
   final confirmed conclusions and action items as a dated, collision-safe
@@ -29,6 +32,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Changed
 
+- **Clear error for unknown IBM ICA models.** When the ICA gateway rejects a
+  model ID with its opaque `400 - {'detail': 'Model not found'}`, the `ibm_ica`
+  client now raises a clear error that names the rejected model and lists the
+  models the gateway currently serves (fetched live), instead of surfacing the
+  raw gateway response.
 - **Liquid-glass WebUI theme.** Refreshed the Next.js frontend (chat, history,
   config, run detail, and shared UI primitives) with a liquid-glass visual
   style and updated global styles.
