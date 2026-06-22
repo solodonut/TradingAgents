@@ -111,3 +111,16 @@ export type ChatSSEEvent =
   | { event: "token"; data: { content: string } }
   | { event: "done"; data: { content: string; tool_calls: Record<string, unknown>[] } }
   | { event: "error"; data: { message: string } };
+
+export type RiskTolerance = "conservative" | "balanced" | "aggressive";
+export type InvestmentHorizon = "short" | "medium" | "long";
+
+export interface SessionProfile {
+  available_capital: number | null;
+  capital_currency: string;
+  risk_tolerance: RiskTolerance | null;
+  max_single_position_pct: number | null;
+  horizon: InvestmentHorizon | null;
+  constraints: string | null;
+  confirmed_at: string | null;
+}
