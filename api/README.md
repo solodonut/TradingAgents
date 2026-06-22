@@ -36,4 +36,11 @@ Frontend (separate terminal, needs Node >=20.9 for Next.js 16):
 - `GET    /api/chat/sessions/{id}/portfolio` — read current holdings
 - `POST   /api/chat/sessions/{id}/stream` — SSE chat (token / tool_call / done / error)
 
+Chat report export is tool-driven through the existing session stream endpoint.
+Explicit export requests either produce persisted clickable scope choices or,
+once the scope is clear, save only final confirmed conclusions and action items
+as a collision-safe Markdown file under the project `report/` directory. The
+title-bar shortcut sends a normal Chat message; there is no separate export
+endpoint or Markdown preview step.
+
 History DB: `~/.tradingagents/webui.db`.

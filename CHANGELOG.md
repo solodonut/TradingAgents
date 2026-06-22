@@ -10,6 +10,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **Context-aware Chat report export.** The advisor can clarify an ambiguous
+  export scope with persisted clickable choices, then save only the session's
+  final confirmed conclusions and action items as a dated, collision-safe
+  Markdown file under `report/`.
 - **Chat multi-report context.** A Chat session can now persist an ordered
   selection of multiple completed analysis reports (normalized into a new
   `chat_session_runs` table, with `chat_sessions.run_id` kept as a legacy
