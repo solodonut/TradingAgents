@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import re
 import unicodedata
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import tool
 
 _NO_CONFIRMED_CONTENT = "NO_CONFIRMED_CONTENT"
 _INVALID_FILENAME_CHARS = frozenset('/\\:*?"<>|')
@@ -43,6 +48,78 @@ NO_CONFIRMED_CONTENT""",
 
 class NoConfirmedContentError(ValueError):
     """Raised when a conversation has no confirmed report content."""
+
+
+@dataclass
+class ExportContext:
+    """Current session data used to generate an export."""
+
+    title: str
+    messages: list
+
+
+_POSITIONAL_SCOPE = re.compile(
+    r"^(?:"
+    r"[A-D1-4][.)]?|"
+    r"option\s*[A-D1-4]|[A-D1-4]\s*option|"
+    r"(?:first|second|third|fourth)\s+option|"
+    r"第[一二三四1-4]个?选项|选项[一二三四1-4]"
+    r")[。.]?$",
+    re.IGNORECASE,
+)
+
+
+def create_export_tools(
+    *, llm, load_context: Callable[[], ExportContext], report_dir: Path
+) -> list:
+    """Create request-scoped tools for clarifying and saving chat exports."""
+
+    @tool
+    def request_export_scope(question: str, options: list[str]) -> str:
+        """Ask the user to choose among distinct export scopes without exporting yet."""
+
+        clean_question = question.strip()
+        if not clean_question:
+            raise ValueError("Export scope question must be nonblank")
+
+        clean_options = [option.strip() for option in options]
+        if not 2 <= len(clean_options) <= 4:
+            raise ValueError("Export scope requires 2-4 options")
+        if any(not option for option in clean_options):
+            raise ValueError("Export scope options must be nonblank")
+        if len(set(clean_options)) != len(clean_options):
+            raise ValueError("Export scope options must be unique")
+
+        return json.dumps(
+            {
+                "question": clean_question,
+                "options": clean_options,
+                "instruction": "Wait for the user and do not export yet.",
+            },
+            ensure_ascii=False,
+        )
+
+    @tool
+    def export_chat_report(scope: str) -> str:
+        """Save confirmed chat conclusions for a complete, self-contained scope."""
+
+        clean_scope = scope.strip()
+        if not clean_scope:
+            raise ValueError("Export scope must not be blank")
+        if _POSITIONAL_SCOPE.fullmatch(clean_scope):
+            raise ValueError(
+                "Export scope must be self-contained, not a positional option reference"
+            )
+
+        context = load_context()
+        markdown = generate_report_markdown(llm, context.messages, clean_scope)
+        saved_path = save_report(markdown, context.title, report_dir)
+        return json.dumps(
+            {"status": "saved", "path": f"report/{saved_path.name}"},
+            ensure_ascii=False,
+        )
+
+    return [request_export_scope, export_chat_report]
 
 
 def _response_text(response: object) -> str:

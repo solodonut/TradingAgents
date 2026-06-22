@@ -1,3 +1,4 @@
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
@@ -6,7 +7,9 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from tradingagents.advisor.export import (
+    ExportContext,
     NoConfirmedContentError,
+    create_export_tools,
     generate_report_markdown,
     save_report,
 )
@@ -20,6 +23,130 @@ class _RecordingLLM:
     def invoke(self, prompt):
         self.invocations.append(prompt)
         return AIMessage(content=self.content)
+
+
+def _export_tools(llm, load_context, report_dir):
+    return {
+        tool.name: tool
+        for tool in create_export_tools(
+            llm=llm, load_context=load_context, report_dir=report_dir
+        )
+    }
+
+
+@pytest.mark.parametrize(
+    ("question", "options", "error"),
+    [
+        ("   ", ["one", "two"], "question"),
+        ("Choose", ["one"], "2-4"),
+        ("Choose", ["one", "two", "three", "four", "five"], "2-4"),
+        ("Choose", ["one", "   "], "nonblank"),
+        ("Choose", ["one", " one "], "unique"),
+    ],
+)
+def test_request_export_scope_validates_question_and_options(
+    question, options, error, tmp_path
+):
+    tool = _export_tools(_RecordingLLM("unused"), lambda: None, tmp_path)[
+        "request_export_scope"
+    ]
+
+    with pytest.raises(ValueError, match=error):
+        tool.invoke({"question": question, "options": options})
+
+
+def test_request_export_scope_returns_exact_clean_values_and_wait_instruction(tmp_path):
+    tool = _export_tools(_RecordingLLM("unused"), lambda: None, tmp_path)[
+        "request_export_scope"
+    ]
+
+    result = json.loads(
+        tool.invoke(
+            {
+                "question": "  你希望导出哪部分？  ",
+                "options": ["  AAPL 操作结论", "风险与仓位建议  "],
+            }
+        )
+    )
+
+    assert result["question"] == "你希望导出哪部分？"
+    assert result["options"] == ["AAPL 操作结论", "风险与仓位建议"]
+    instruction = result["instruction"].lower()
+    assert "wait for the user" in instruction
+    assert "do not export yet" in instruction
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "",
+        "   ",
+        "A",
+        "b",
+        "C.",
+        "D)",
+        "1",
+        "option D",
+        "first option",
+        "第一个选项",
+        "第二个选项",
+        "第2个选项",
+        "选项二",
+    ],
+)
+def test_export_chat_report_rejects_blank_or_positional_scope(scope, tmp_path):
+    tool = _export_tools(_RecordingLLM("# Report"), lambda: None, tmp_path)[
+        "export_chat_report"
+    ]
+
+    with pytest.raises(ValueError, match="self-contained|blank"):
+        tool.invoke({"scope": scope})
+
+
+def test_export_chat_report_loads_current_context_at_invocation_and_returns_real_path(
+    tmp_path,
+):
+    llm = _RecordingLLM("# Confirmed report")
+    contexts = [
+        ExportContext(title="Old", messages=[HumanMessage(content="old")]),
+        ExportContext(title="Current title", messages=[HumanMessage(content="current")]),
+    ]
+    load_count = 0
+
+    def load_context():
+        nonlocal load_count
+        context = contexts[load_count]
+        load_count += 1
+        return context
+
+    tools = _export_tools(llm, load_context, tmp_path / "reports")
+    assert load_count == 0
+
+    first = json.loads(
+        tools["export_chat_report"].invoke(
+            {"scope": "  AAPL 的最终操作结论和行动项  "}
+        )
+    )
+    second = json.loads(
+        tools["export_chat_report"].invoke(
+            {"scope": "风险与仓位管理的最终结论"}
+        )
+    )
+
+    assert load_count == 2
+    assert first == {"status": "saved", "path": "report/2026-06-22-Old.md"}
+    assert second == {
+        "status": "saved",
+        "path": "report/2026-06-22-Current title.md",
+    }
+    assert (tmp_path / "reports" / "2026-06-22-Old.md").read_text(
+        encoding="utf-8"
+    ) == "# Confirmed report\n"
+    assert (tmp_path / "reports" / "2026-06-22-Current title.md").is_file()
+    rendered = [invocation.to_messages() for invocation in llm.invocations]
+    assert any("old" in str(message.content) for message in rendered[0])
+    assert any("current" in str(message.content) for message in rendered[1])
+    assert "AAPL 的最终操作结论和行动项" in str(rendered[0][-1].content)
 
 
 def test_generate_report_uses_full_history_scope_and_confirmation_rules():
