@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable
 
 from langchain_core.tools import BaseTool, tool
@@ -61,4 +62,53 @@ def create_profile_tools(*, load_profile: Callable[[], dict]) -> list[BaseTool]:
             ensure_ascii=False,
         )
 
-    return [propose_session_facts]
+    @tool
+    def compute_position_sizing(
+        ticker: str,
+        price: float,
+        target_weight_pct: float | None = None,
+        target_amount: float | None = None,
+    ) -> str:
+        """Compute position size from the confirmed available capital. Required for any sizing."""
+
+        if (target_weight_pct is None) == (target_amount is None):
+            raise ValueError(
+                "provide exactly one of target_weight_pct or target_amount"
+            )
+        if price <= 0:
+            raise ValueError("price must be positive")
+
+        profile = load_profile() or {}
+        available_capital = profile.get("available_capital")
+        if available_capital is None:
+            return "NEED_CONFIRMATION: 缺少可用资金池，请先在参数面板确认"
+
+        currency = profile.get("capital_currency") or "CNY"
+        max_pct = profile.get("max_single_position_pct")
+
+        if target_weight_pct is not None:
+            weight = float(target_weight_pct)
+            amount = available_capital * weight / 100
+        else:
+            amount = float(target_amount)
+            weight = amount / available_capital * 100 if available_capital else 0.0
+
+        shares = math.floor(amount / price)
+        exceeds_max = max_pct is not None and weight > max_pct + 1e-9
+
+        return json.dumps(
+            {
+                "ticker": ticker,
+                "available_capital": available_capital,
+                "capital_currency": currency,
+                "target_weight_pct": round(weight, 2),
+                "amount": round(amount, 2),
+                "price": price,
+                "shares": shares,
+                "max_single_position_pct": max_pct,
+                "exceeds_max": exceeds_max,
+            },
+            ensure_ascii=False,
+        )
+
+    return [propose_session_facts, compute_position_sizing]
