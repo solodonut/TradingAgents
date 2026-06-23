@@ -89,6 +89,85 @@ def test_normalized_client_retries_one_empty_provider_response(monkeypatch):
 
 
 @pytest.mark.unit
+def test_ica_model_not_found_translates_to_clear_error(monkeypatch):
+    # IBM ICA rejects an unknown model ID with an opaque
+    # 400 - {'detail': 'Model not found'}. The ibm_ica client should translate
+    # that into a clear error naming the rejected model and listing what the
+    # gateway currently serves.
+    from tradingagents.llm_clients import openai_client as oc
+
+    def raise_model_not_found(self, input, config=None, **kwargs):
+        raise Exception("Error code: 400 - {'detail': 'Model not found'}")
+
+    monkeypatch.setattr(ChatOpenAI, "invoke", raise_model_not_found)
+    monkeypatch.setattr(
+        oc, "_fetch_ica_models", lambda base_url, api_key: ["claude-haiku-4-5", "claude-opus-4-8"]
+    )
+    llm = oc.IbmIcaChatOpenAI(
+        model="claude-haiku-4.5",
+        api_key="test-key",
+        base_url="https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models",
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        llm.invoke("hi")
+
+    msg = str(excinfo.value)
+    assert "claude-haiku-4.5" in msg  # the rejected model is named
+    assert "claude-opus-4-8" in msg   # available models are listed
+
+
+@pytest.mark.unit
+def test_ica_other_errors_propagate_unchanged(monkeypatch):
+    from tradingagents.llm_clients import openai_client as oc
+
+    def raise_other(self, input, config=None, **kwargs):
+        raise RuntimeError("some other failure")
+
+    monkeypatch.setattr(ChatOpenAI, "invoke", raise_other)
+    llm = oc.IbmIcaChatOpenAI(
+        model="claude-haiku-4-5", api_key="test-key", base_url="https://x/ica/v1/chat-models"
+    )
+
+    with pytest.raises(RuntimeError, match="some other failure"):
+        llm.invoke("hi")
+
+
+@pytest.mark.unit
+def test_ica_guardrail_failure_translates_to_clear_error(monkeypatch):
+    # ICA's guardrail subsystem fails with an opaque
+    # 500 - Custom code guardrail execution failed: Model not available - E001
+    # when the guardrail backend for a model family is down. This is a
+    # gateway-side outage (the model is still in the catalog), so it must be
+    # translated differently from the 400 "Model not found" case — and it must
+    # NOT trigger a /models catalog fetch.
+    from tradingagents.llm_clients import openai_client as oc
+
+    def raise_guardrail(self, input, config=None, **kwargs):
+        raise Exception(
+            "Error code: 500 - {'error': {'message': 'Custom code guardrail "
+            "execution failed: Model not available - E001'}}"
+        )
+
+    def fail_if_called(base_url, api_key):
+        raise AssertionError("_fetch_ica_models must not run on a guardrail 500")
+
+    monkeypatch.setattr(ChatOpenAI, "invoke", raise_guardrail)
+    monkeypatch.setattr(oc, "_fetch_ica_models", fail_if_called)
+    llm = oc.IbmIcaChatOpenAI(
+        model="claude-opus-4-8", api_key="test-key", base_url="https://x/ica/v1/chat-models"
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        llm.invoke("hi")
+
+    msg = str(excinfo.value)
+    assert "claude-opus-4-8" in msg       # the affected model is named
+    assert "guardrail" in msg.lower()     # framed as a gateway-side outage
+    assert "E001" in msg
+
+
+@pytest.mark.unit
 def test_env_backend_url_precedence():
     # #978: explicit env URL wins over the menu/default regardless of provider source.
     from cli.utils import resolve_backend_url

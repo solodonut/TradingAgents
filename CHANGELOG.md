@@ -32,11 +32,15 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Changed
 
-- **Clear error for unknown IBM ICA models.** When the ICA gateway rejects a
-  model ID with its opaque `400 - {'detail': 'Model not found'}`, the `ibm_ica`
-  client now raises a clear error that names the rejected model and lists the
-  models the gateway currently serves (fetched live), instead of surfacing the
-  raw gateway response.
+- **Clear errors for IBM ICA gateway failures.** The `ibm_ica` client now
+  translates two opaque gateway responses instead of surfacing them raw. A
+  `400 - {'detail': 'Model not found'}` raises a clear error that names the
+  rejected model and lists the models the gateway currently serves (fetched
+  live). A `500 - Custom code guardrail execution failed: Model not available
+  - E001` is framed as a gateway-side guardrail outage (the model is likely
+  still in the catalog), advising a retry or switching to a different model
+  family — verified empirically: the guardrail 500 hits every Claude model on
+  the gateway while GPT/Gemini/Granite return 200, so it is not a bad model ID.
 - **Liquid-glass WebUI theme.** Refreshed the Next.js frontend (chat, history,
   config, run detail, and shared UI primitives) with a liquid-glass visual
   style and updated global styles.
