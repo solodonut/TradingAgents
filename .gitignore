@@ -237,4 +237,6 @@ reports/
 stitch_liquid_glass_ui_theme/
 
 # Local agent tooling state (superpowers/brainstorm)
-.superpowers/
+.superpowers/**
+docs/**
+report/**
