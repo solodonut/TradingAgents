@@ -10,6 +10,7 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- 服务启动时对当前 provider 的候选模型做健康检查，自动为 deep/quick 槽位选用可用模型（原配置优先，全挂不阻断启动）。可用 `TRADINGAGENTS_STARTUP_MODEL_CHECK=0` 关闭。
 - **Chat 会话档案 Harness.** 新增可用资金池/风险偏好/单票上限/投资期限等会话参数面板，
   确认后稳定注入每轮推理；新增 `propose_session_facts`（对话抽取→确认卡片）与
   `compute_position_sizing`（强制使用已确认资金池、缺失则返回 `NEED_CONFIRMATION` 反问）工具。
