@@ -36,6 +36,12 @@ def _dummy_api_keys(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_startup_model_check(monkeypatch):
+    """WebUI startup probes real models; force it off for the whole suite."""
+    monkeypatch.setenv("TRADINGAGENTS_STARTUP_MODEL_CHECK", "0")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_config():
     """Reset the global dataflows config before and after each test.
 

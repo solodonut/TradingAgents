@@ -1,5 +1,7 @@
 """FastAPI application entry point for the TradingAgents WebUI."""
 
+import logging
+import os
 import threading
 from pathlib import Path
 
@@ -9,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import config as config_routes
 from api.store import Store
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.llm_clients.health_check import check_and_select
 
 try:
     from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -35,6 +38,59 @@ app.state.telemetry = {}
 app.state.starting_telemetry = None
 app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
 app.state.chat_llm_factory = None  # set at startup; tests inject their own
+app.state.model_health = None  # set by the startup health check; tests may inject
+
+logger = logging.getLogger(__name__)
+
+
+def _startup_model_check_enabled() -> bool:
+    return os.getenv("TRADINGAGENTS_STARTUP_MODEL_CHECK", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
+def _run_model_health_check() -> None:
+    """Probe configured models, write working ones back to DEFAULT_CONFIG.
+
+    Never raises: a failing or buggy health check must not block startup.
+    """
+    try:
+        report = check_and_select(DEFAULT_CONFIG)
+    except Exception:  # noqa: BLE001 - health check must never crash startup
+        logger.exception("model-health: health check failed; keeping configured models")
+        return
+
+    for slot, slot_report in report.slots.items():
+        DEFAULT_CONFIG[slot] = slot_report.selected
+        for candidate in slot_report.candidates:
+            logger.info(
+                "model-health %s candidate=%s ok=%s latency=%dms%s",
+                slot,
+                candidate.model,
+                candidate.ok,
+                candidate.latency_ms,
+                f" error={candidate.error}" if candidate.error else "",
+            )
+        if slot_report.configured != slot_report.selected:
+            logger.warning(
+                "model-health %s switched %s -> %s",
+                slot,
+                slot_report.configured,
+                slot_report.selected,
+            )
+
+    app.state.model_health = report
+
+    if report.any_failed:
+        failed = [slot for slot, sr in report.slots.items() if sr.all_failed]
+        logger.error(
+            "model-health: no working model for slots %s on provider %s; keeping configured values",
+            failed,
+            report.provider,
+        )
 
 
 def get_store() -> Store:
@@ -127,3 +183,5 @@ def _wire_graph_factory():
         app.state.graph_factory = real_graph_factory
     if app.state.chat_llm_factory is None:
         app.state.chat_llm_factory = real_chat_llm_factory
+    if _startup_model_check_enabled():
+        _run_model_health_check()
