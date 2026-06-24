@@ -1,6 +1,7 @@
 "use client";
-import { Cpu, LoaderCircle, Play, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Cpu, LoaderCircle, Play, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { lookupTicker } from "@/lib/api";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
 export function ConfigCard({
@@ -12,7 +13,11 @@ export function ConfigCard({
   onStart: (req: { tickers: string[] } & Omit<AnalysisRequest, "ticker">) => void;
   running?: boolean;
 }) {
-  const [tickersText, setTickersText] = useState("NVDA");
+  type TickerItem = { ticker: string; name: string };
+
+  // 原: const [tickersText, setTickersText] = useState("NVDA");
+  const [tickers, setTickers] = useState<TickerItem[]>([{ ticker: "NVDA", name: "" }]);
+  const [tickerInput, setTickerInput] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [assetType, setAssetType] = useState<"stock" | "crypto">("stock");
   const [analysts, setAnalysts] = useState<string[]>([
@@ -55,17 +60,54 @@ export function ConfigCard({
     };
   }, [modelsOpen]);
 
+  // 挂载后从 localStorage 回填代码清单
+  useEffect(() => {
+    const saved = localStorage.getItem("ta:ticker_list");
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) setTickers(parsed);
+    } catch {
+      // 损坏的数据：忽略，保留默认清单
+    }
+  }, []);
+
+  // 清单每次变化都写回
+  useEffect(() => {
+    localStorage.setItem("ta:ticker_list", JSON.stringify(tickers));
+  }, [tickers]);
+
   const toggle = (v: string) =>
     setAnalysts((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
 
-  const parsedTickers = Array.from(
-    new Set(
-      tickersText
-        .split(/[\s,，、\n]+/)
-        .map((t) => t.trim().toUpperCase())
-        .filter(Boolean),
-    ),
-  );
+  const addTicker = async () => {
+    const code = tickerInput.trim().toUpperCase();
+    if (!code) return;
+    if (tickers.some((t) => t.ticker === code)) {
+      setTickerInput("");
+      return; // 去重：已存在则忽略
+    }
+    setTickers((prev) => [...prev, { ticker: code, name: "" }]);
+    setTickerInput("");
+    const res = await lookupTicker(code);
+    if (res.name) {
+      setTickers((prev) =>
+        prev.map((t) => (t.ticker === code ? { ...t, name: res.name as string } : t)),
+      );
+    }
+  };
+
+  const removeTicker = (code: string) =>
+    setTickers((prev) => prev.filter((t) => t.ticker !== code));
+
+  const moveTicker = (index: number, delta: number) =>
+    setTickers((prev) => {
+      const next = [...prev];
+      const j = index + delta;
+      if (j < 0 || j >= next.length) return prev;
+      [next[index], next[j]] = [next[j], next[index]];
+      return next;
+    });
 
   const activeAnalysts = analysts.filter(
     (a) => !(assetType === "crypto" && a === "fundamentals"),
@@ -77,7 +119,7 @@ export function ConfigCard({
       onSubmit={(e) => {
         e.preventDefault();
         onStart({
-          tickers: parsedTickers,
+          tickers: tickers.map((t) => t.ticker),
           trade_date: date,
           asset_type: assetType,
           analysts: activeAnalysts,
@@ -176,17 +218,81 @@ export function ConfigCard({
           <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
             Instrument
           </legend>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9.5rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_9.5rem]">
+          <div className="space-y-2">
             <label className="space-y-1">
-              <span className="sr-only">Tickers</span>
-              <textarea
-                rows={2}
-                className="glass-control w-full resize-y rounded-md px-2.5 py-1.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
-                value={tickersText}
-                onChange={(e) => setTickersText(e.target.value)}
-                placeholder="NVDA, AAPL, 159241.SZ"
-              />
+              <span className="sr-only">Ticker</span>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  className="glass-control w-full rounded-md px-2.5 py-1.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
+                  value={tickerInput}
+                  onChange={(e) => setTickerInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addTicker();
+                    }
+                  }}
+                  placeholder="输入代码，如 NVDA / 159241.SZ"
+                />
+                <button
+                  type="button"
+                  onClick={() => void addTicker()}
+                  title="添加到清单"
+                  className="glass-control inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:border-primary"
+                >
+                  <span className="sr-only">添加</span>
+                  <Plus className="size-4" aria-hidden="true" />
+                </button>
+              </div>
             </label>
+
+            {tickers.length === 0 ? (
+              <p className="px-0.5 py-2 text-xs text-muted-foreground">清单为空，添加代码后开始分析。</p>
+            ) : (
+              <ul className="space-y-1">
+                {tickers.map((t, i) => (
+                  <li
+                    key={t.ticker}
+                    className="glass-control flex items-center gap-2 rounded-md px-2 py-1.5"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="font-mono text-sm text-foreground">{t.ticker}</span>
+                      {t.name ? (
+                        <span className="ml-2 truncate text-xs text-muted-foreground">{t.name}</span>
+                      ) : null}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => moveTicker(i, -1)}
+                      disabled={i === 0}
+                      aria-label="上移"
+                      className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:border-primary"
+                    >
+                      <ChevronUp className="size-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveTicker(i, 1)}
+                      disabled={i === tickers.length - 1}
+                      aria-label="下移"
+                      className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:border-primary"
+                    >
+                      <ChevronDown className="size-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeTicker(t.ticker)}
+                      aria-label="移除"
+                      className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:border-primary"
+                    >
+                      <X className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <label className="space-y-1">
               <span className="sr-only">Trade date</span>
               <input
@@ -289,7 +395,7 @@ export function ConfigCard({
 
         <button
           type="submit"
-          disabled={running || activeAnalysts.length === 0 || parsedTickers.length === 0}
+          disabled={running || activeAnalysts.length === 0 || tickers.length === 0}
           className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-md px-3 font-mono text-xs font-bold uppercase tracking-[0.18em] transition-colors focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed ${
             running
               ? "thinking-border"
@@ -303,8 +409,8 @@ export function ConfigCard({
           )}
           {running
             ? "分析进行中"
-            : parsedTickers.length > 1
-              ? `分析 ${parsedTickers.length} 个标的`
+            : tickers.length > 1
+              ? `分析 ${tickers.length} 个标的`
               : "开始分析"}
         </button>
       </div>
