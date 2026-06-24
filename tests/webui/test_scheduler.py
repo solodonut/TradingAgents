@@ -106,6 +106,32 @@ def test_advance_skips_failing_run(scheduler_env):
     assert _wait_until(lambda: store.get_status("ok") == "completed")
 
 
+def test_advance_skips_build_failure_run(scheduler_env):
+    """Scheduler's own except branch: graph_factory raises → run marked error, next run completes."""
+    store, main = scheduler_env
+
+    def factory(req):
+        if req.ticker == "BUILDFAIL":
+            raise RuntimeError("build failed")
+
+        class _Ok:
+            def stream(inner_self, init_state, **kwargs):
+                yield {"final_trade_decision": "**Rating**: Hold"}
+
+        return types.SimpleNamespace(graph=_Ok()), {}, "Hold", {"final_trade_decision": "x"}
+
+    app = _FakeApp(store, factory)
+    sched = QueueScheduler(app)
+
+    store.enqueue_run("bf", "BUILDFAIL", "2024-05-10", "stock", {"ticker": "BUILDFAIL", "trade_date": "2024-05-10"})
+    store.enqueue_run("ok", "OK", "2024-05-10", "stock", {"ticker": "OK", "trade_date": "2024-05-10"})
+
+    sched.advance()
+
+    assert _wait_until(lambda: store.get_status("bf") == "error")
+    assert _wait_until(lambda: store.get_status("ok") == "completed")
+
+
 def test_cancel_then_advance_starts_next(scheduler_env):
     store, main = scheduler_env
     gate = threading.Event()
