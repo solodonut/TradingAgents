@@ -78,23 +78,18 @@ _MINIMAX_MODELS: dict[str, list[ModelOption]] = {
 }
 
 
-# IBM ICA enterprise gateway model lineup. IDs are the bare names ICA's
-# OpenAI-compatible endpoint expects (no "ibm_ica/" prefix — that prefix only
-# exists in opencode's provider routing). Verified live against /v1/models.
+# IBM ICA's Claude-only model lineup. IDs are the bare names accepted by its
+# Anthropic Messages endpoint (no "ibm_ica/" routing prefix).
 _ICA_MODELS: dict[str, list[ModelOption]] = {
     "quick": [
         ("Claude 4.5 Haiku - Fast, cheap quick-thinking", "claude-haiku-4-5"),
         ("Claude 4.6 Sonnet - Balanced", "claude-sonnet-4-6"),
-        ("GPT-5.1 - Fast OpenAI", "gpt-5.1-chat-gus"),
-        ("Granite 4 Small - IBM, lightweight", "ibm/granite-4-h-small"),
         ("Custom model ID", "custom"),
     ],
     "deep": [
         ("Claude 4.8 Opus - Latest flagship, deep reasoning", "claude-opus-4-8"),
         ("Claude 4.7 Opus - Previous flagship", "claude-opus-4-7"),
         ("Claude 4.6 Sonnet - Balanced reasoning", "claude-sonnet-4-6"),
-        ("GPT-5.4 - OpenAI frontier", "gpt-5.4-gus"),
-        ("Gemini 3.1 Pro - Google frontier", "gemini-3.1-pro-preview"),
         ("Custom model ID", "custom"),
     ],
 }

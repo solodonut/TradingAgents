@@ -114,6 +114,12 @@ def test_cli_dropdown_default_when_unset(monkeypatch):
     assert ollama_url == "http://localhost:11434/v1"
 
 
+def test_ibm_ica_cli_uses_anthropic_base_url():
+    from cli.utils import provider_default_url
+
+    assert provider_default_url("ibm_ica") == "https://api.nextgen-beta.ica.ibm.com/ica"
+
+
 # ---- confirm_ollama_endpoint UX -------------------------------------------
 
 

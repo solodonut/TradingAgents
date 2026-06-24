@@ -98,8 +98,9 @@ def test_check_and_select_keeps_configured_when_it_works():
     assert quick.selected == "claude-haiku-4-5"
     # "全部测一遍"：候选含 configured + catalog 非 custom 项
     assert deep.candidates[0].model == "claude-opus-4-8"
-    assert len(deep.candidates) == 5  # opus-4-8, opus-4-7, sonnet-4-6, gpt-5.4-gus, gemini-3.1-pro-preview
-    assert len(quick.candidates) == 4  # haiku-4-5, sonnet-4-6, gpt-5.1-chat-gus, granite-4-h-small
+    assert len(deep.candidates) == 3  # opus-4-8, opus-4-7, sonnet-4-6
+    assert len(quick.candidates) == 2  # haiku-4-5, sonnet-4-6
+    assert all(c.model.startswith("claude-") for c in [*deep.candidates, *quick.candidates])
     assert "custom" not in [c.model for c in deep.candidates]
 
 
@@ -110,10 +111,6 @@ def test_check_and_select_falls_back_to_first_working_candidate():
         "claude-haiku-4-5",
         "claude-opus-4-7",
         "claude-sonnet-4-6",
-        "gpt-5.1-chat-gus",
-        "ibm/granite-4-h-small",
-        "gpt-5.4-gus",
-        "gemini-3.1-pro-preview",
     }  # 注意：不含 claude-opus-4-8
     with patch(
         "tradingagents.llm_clients.health_check.create_llm_client",
@@ -134,8 +131,6 @@ def test_check_and_select_marks_all_failed_and_keeps_configured():
     # deep 槽位所有候选都挂；quick 正常
     quick_only = {
         "claude-haiku-4-5",
-        "gpt-5.1-chat-gus",
-        "ibm/granite-4-h-small",
     }
     with patch(
         "tradingagents.llm_clients.health_check.create_llm_client",

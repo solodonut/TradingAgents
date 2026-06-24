@@ -4,7 +4,7 @@ import warnings
 import pytest
 
 from tradingagents.llm_clients.base_client import BaseLLMClient
-from tradingagents.llm_clients.model_catalog import get_known_models
+from tradingagents.llm_clients.model_catalog import get_known_models, get_model_options
 from tradingagents.llm_clients.validators import validate_model
 
 
@@ -53,3 +53,14 @@ class ModelValidationTests(unittest.TestCase):
                     client.get_llm()
 
                 self.assertEqual(caught, [])
+
+    def test_ibm_ica_catalog_is_claude_only(self):
+        values = {
+            value
+            for mode in ("quick", "deep")
+            for _label, value in get_model_options("ibm_ica", mode)
+            if value != "custom"
+        }
+
+        self.assertTrue(values)
+        self.assertTrue(all(value.startswith("claude-") for value in values))

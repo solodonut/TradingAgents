@@ -362,7 +362,7 @@ def _llm_provider_table() -> list[tuple[str, str, str | None]]:
         ("Azure OpenAI", "azure", None),
         ("Amazon Bedrock", "bedrock", None),
         ("Ollama", "ollama", ollama_url),
-        ("IBM ICA", "ibm_ica", "https://api.nextgen-beta.ica.ibm.com/ica/v1"),
+        ("IBM ICA", "ibm_ica", "https://api.nextgen-beta.ica.ibm.com/ica"),
         ("OpenAI-compatible (vLLM, LM Studio, llama.cpp, custom relay)", "openai_compatible", None),
     ]
 
