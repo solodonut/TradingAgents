@@ -1,3 +1,4 @@
+import os
 import re
 from typing import Any
 
@@ -20,6 +21,7 @@ _EFFORT_EXACT = {
     "claude-mythos-preview",  # non-standard preview name; effort-capable
 }
 _EFFORT_PATTERN = re.compile(r"^claude-(opus|sonnet)-\d+-\d+$")
+_IBM_ICA_DEFAULT_BASE_URL = "https://api.nextgen-beta.ica.ibm.com/ica"
 
 
 def _supports_effort(model: str) -> bool:
@@ -66,3 +68,22 @@ class AnthropicClient(BaseLLMClient):
     def validate_model(self) -> bool:
         """Validate model for Anthropic."""
         return validate_model("anthropic", self.model)
+
+
+class IbmIcaAnthropicClient(AnthropicClient):
+    """Claude-only IBM ICA client using the Anthropic Messages API."""
+
+    def __init__(self, model: str, base_url: str | None = None, **kwargs):
+        resolved_base_url = (
+            base_url
+            or os.environ.get("IBM_ICA_BASE_URL")
+            or _IBM_ICA_DEFAULT_BASE_URL
+        )
+        api_key = kwargs.get("api_key") or os.environ.get("IBM_ICA_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "API key for provider 'ibm_ica' is not set. "
+                "Please set the IBM_ICA_API_KEY environment variable."
+            )
+        kwargs["api_key"] = api_key
+        super().__init__(model, resolved_base_url, **kwargs)
