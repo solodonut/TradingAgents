@@ -157,6 +157,8 @@ For Azure OpenAI, copy `.env.enterprise.example` to `.env.enterprise` and fill i
 
 For IBM ICA (IBM Consulting Advantage enterprise gateway), set `llm_provider: "ibm_ica"`, export `IBM_ICA_API_KEY=...` (the long ICA REST API key), and pick an ICA model ID (e.g. `claude-opus-4-8` for deep reasoning, `claude-haiku-4-5` for quick tasks). The endpoint defaults to the business-layer Chat Completions at `https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models`; override it with `IBM_ICA_BASE_URL` if your tenant differs. This is the default provider in `default_config.py`.
 
+For the complete provider matrix, model-to-agent mapping, Chat/vision/export call paths, structured-output behavior, health-check costs, retries, and IBM ICA wire details, see [LLM API Architecture and Call Reference](docs/llm-api-architecture.md).
+
 For AWS Bedrock, install the extra with `pip install ".[bedrock]"`, set `llm_provider: "bedrock"`, configure AWS credentials (environment variables, `~/.aws/credentials`, or an IAM role) and `AWS_DEFAULT_REGION`, and use a Bedrock model ID, e.g. `us.anthropic.claude-opus-4-8-v1:0`.
 
 For local models, configure Ollama with `llm_provider: "ollama"`. The default endpoint is `http://localhost:11434/v1`; set `OLLAMA_BASE_URL` to point at a remote `ollama-serve`. Pull models with `ollama pull <name>`, and pick "Custom model ID" in the CLI for any model not listed by default.

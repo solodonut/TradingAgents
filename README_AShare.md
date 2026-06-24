@@ -187,8 +187,10 @@ ICA 是 OpenAI 兼容端点，已注册为命名 provider `ibm_ica`。
 
 | 角色 | 模型 ID | 描述 |
 |---|---|---|
-| **深思考** `deep_think_llm` | `claude-opus-4-8` | Claude 4.8 Opus，最新旗舰，用于复杂推理：研究员辩论、研究经理、交易决策、风控、组合经理最终决策 |
-| **快思考** `quick_think_llm` | `claude-haiku-4-5` | Claude 4.5 Haiku，快速且廉价，用于分析师的工具调用循环（行情/情绪/新闻/基本面取数与初步整理） |
+| **深思考** `deep_think_llm` | `claude-opus-4-8` | Claude 4.8 Opus，用于 Research Manager 和 Portfolio Manager |
+| **快思考** `quick_think_llm` | `claude-haiku-4-5` | Claude 4.5 Haiku，用于四类分析师、Bull/Bear Researcher、Trader、三类风险分析师、反思和 Chat |
+
+完整的 Provider 矩阵、Agent 模型分配、Chat/视觉/导出调用链、健康检查成本和 ICA 请求细节见 [LLM API 架构与调用参考](docs/llm-api-architecture.md)。
 
 > ICA 走的是**业务层端点** `/chat-models`，由**长 key**（ICA REST API key）认证；langchain 会在 baseURL 后自动追加 `/chat/completions`。该端点实测支持 streaming 与 tool calling，满足 agent 的 ReAct 循环需求。
 

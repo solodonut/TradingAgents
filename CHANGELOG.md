@@ -10,6 +10,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **LLM API architecture reference.** Added a maintainer document covering every
+  model-backed execution path across TradingAgents, Advisor Chat, vision extraction,
+  report export, startup health checks, Provider authentication, structured-output
+  fallback, retries, streaming semantics, and the IBM ICA endpoint differences between
+  WebUI/Python and the interactive CLI.
 - 服务启动时对当前 provider 的候选模型做健康检查，自动为 deep/quick 槽位选用可用模型（原配置优先，全挂不阻断启动）。可用 `TRADINGAGENTS_STARTUP_MODEL_CHECK=0` 关闭。
 - **Chat 会话档案 Harness.** 新增可用资金池/风险偏好/单票上限/投资期限等会话参数面板，
   确认后稳定注入每轮推理；新增 `propose_session_facts`（对话抽取→确认卡片）与
