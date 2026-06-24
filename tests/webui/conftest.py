@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -17,3 +19,15 @@ def client(tmp_path, monkeypatch):
     main.app.state.chat_llm_factory = None
     with TestClient(main.app) as c:
         yield c
+        # Drain in-flight scheduler threads before the next test resets app.state.
+        # Queue tests launch real daemon runner threads via a gated fake graph; once
+        # the test releases its gate the run completes and its finally-block calls
+        # scheduler.advance() against the global store. If we don't wait here, that
+        # thread can mutate the NEXT test's freshly-reset app.state/DB and flake it.
+        store = main.app.state.store
+        if store is not None:
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                if not store.has_running_run() and not store.list_queue().pending:
+                    break
+                time.sleep(0.02)
