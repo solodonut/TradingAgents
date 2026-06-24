@@ -276,6 +276,7 @@ export default function Home() {
           })
           .catch(() => {
             setRunning(false);
+            setCanceling(false);
             setCurrentRunId(null);
           });
       },
@@ -293,6 +294,7 @@ export default function Home() {
       if (running_run_id) followRun(running_run_id);
     } catch (err) {
       setRunning(false);
+      setCanceling(false);
       setCurrentRunId(null);
       setError((err as Error).message);
     }
