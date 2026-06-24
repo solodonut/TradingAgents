@@ -10,6 +10,7 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- WebUI 分析配置改用可持久化的代码清单：单代码输入框 + 自动带出公司名（`GET /api/ticker/{code}`）、可增删排序、localStorage 长期保存，开始分析按清单顺序入队。
 - **WebUI 分析队列**：一次输入多个标的代码，持久化为后端队列，由调度器串行依次分析；
   支持移除/清空/重排 pending、取消当前并自动推进、出错跳过；服务重启后 pending 队列保留。
 - **WebUI 模型选择.** 分析工作台新增「深度思考模型 / 快速思考模型」两个下拉，Chat
