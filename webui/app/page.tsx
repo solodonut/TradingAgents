@@ -65,8 +65,6 @@ function workingAgentLabel(statuses: Record<string, string>): string | null {
   return (section && SECTION_LABELS[section]) || id;
 }
 
-const BUSY_ERROR = "已有分析正在运行，请等待当前分析完成后再试。";
-
 function hasSection(result: RunResult["result"], section: string): boolean {
   const value = result?.[section];
   return typeof value === "string" && value.trim().length > 0;
@@ -132,7 +130,7 @@ export default function Home() {
       .then((items) => {
         setHistory(items);
         if (!items.some((item) => item.status === "running")) {
-          setError((current) => (current === BUSY_ERROR ? null : current));
+          setError(null);
         }
       })
       .catch(() => setHistory([]));
@@ -210,7 +208,6 @@ export default function Home() {
           setRuntimeError(null);
           if (nextDetail) setDetail(nextDetail);
           if (nextDetail && nextDetail.status !== "running") {
-            setError((current) => (current === BUSY_ERROR ? null : current));
             refreshHistory();
           }
         })
@@ -237,6 +234,7 @@ export default function Home() {
     setStatuses({});
     setMessages([]);
     setDecision(null);
+    setError(null);
     setLiveRuntimeStatus(null);
     setLiveRuntimeError(null);
     setCanceling(false);
@@ -260,27 +258,35 @@ export default function Home() {
       () => {
         unsubscribeRef.current = null;
         refreshHistory();
-        // follow the next running item, if the scheduler advanced
-        getQueue()
-          .then((q) => {
-            setQueue(q);
-            if (q.running) {
-              resetRunView();
-              followRun(q.running.run_id);
-            } else {
-              setRunning(false);
-              setCanceling(false);
-              setCurrentRunId(null);
-              setError((current) => (current === BUSY_ERROR ? null : current));
-            }
-          })
-          .catch(() => {
-            setRunning(false);
-            setCanceling(false);
-            setCurrentRunId(null);
-          });
+        void followNextInQueue();
       },
     );
+  };
+
+  // Poll the queue and attach to the next running run. Retries briefly because
+  // after a cancel the backend advances only once the runner thread notices the
+  // cancel between graph chunks — the next run may not be `running` on the first poll.
+  const followNextInQueue = async (attempt = 0): Promise<void> => {
+    const q = await getQueue().catch(() => null);
+    if (!q) {
+      setRunning(false);
+      setCanceling(false);
+      setCurrentRunId(null);
+      return;
+    }
+    setQueue(q);
+    if (q.running) {
+      resetRunView();
+      followRun(q.running.run_id);
+      return;
+    }
+    if (q.pending.length > 0 && attempt < 5) {
+      window.setTimeout(() => void followNextInQueue(attempt + 1), 600);
+      return;
+    }
+    setRunning(false);
+    setCanceling(false);
+    setCurrentRunId(null);
   };
 
   const onStart = async (req: Parameters<typeof enqueueAnalysis>[0]) => {
@@ -303,26 +309,27 @@ export default function Home() {
   const cancelRun = async (runId: string) => {
     if (canceling) return;
     setCanceling(true);
+    const isLiveRun = currentRunId === runId;
     try {
       await cancelAnalysis(runId);
       setError("分析已停止");
-      setRunning(false);
-      if (currentRunId === runId) setCurrentRunId(null);
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       refreshHistory();
-      refreshQueue();
       if (selectedId === runId) {
         const next = await getHistoryDetail(runId);
         setDetail(next);
         const status = await getAnalysisStatus(runId).catch(() => null);
         setRuntimeStatus(status);
       }
-      if (currentRunId === runId) {
-        const status = await getAnalysisStatus(runId).catch(() => null);
-        setLiveRuntimeStatus(status);
+      if (isLiveRun) {
+        // Drive the follow-next logic so the UI picks up the auto-advanced run.
+        // followNextInQueue sets running/canceling/currentRunId appropriately.
+        void followNextInQueue();
+      } else {
+        setRunning(false);
+        setCanceling(false);
       }
-      setCanceling(false);
     } catch (err) {
       setCanceling(false);
       setError((err as Error).message);
