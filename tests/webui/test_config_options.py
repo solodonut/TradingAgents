@@ -32,6 +32,8 @@ def test_get_config_options_route(client):
     assert resp.status_code == 200
     body = resp.json()
     assert "analysts" in body and "research_depth" in body
+    assert "model_options" in body
+    assert set(body["model_options"].keys()) == {"deep", "quick"}
 
 
 def test_model_options_present_for_configured_provider():
