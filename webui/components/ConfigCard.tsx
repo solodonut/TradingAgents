@@ -82,6 +82,31 @@ export function ConfigCard({
     localStorage.setItem("ta:ticker_list", JSON.stringify(tickers));
   }, [tickers, tickersLoaded]);
 
+  // 加载后给名称为空的项补查一次：A 股/ETF 名称走 AKShare，首次因冷缓存可能超时返回空，
+  // 缓存预热后再次打开页面即自愈。只在 loaded 翻转时跑一次，避免每次清单变化都重查。
+  useEffect(() => {
+    if (!tickersLoaded) return;
+    const blanks = tickers.filter((t) => !t.name).map((t) => t.ticker);
+    if (blanks.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const code of blanks) {
+        const res = await lookupTicker(code);
+        if (cancelled) return;
+        if (res.name) {
+          setTickers((prev) =>
+            prev.map((t) => (t.ticker === code ? { ...t, name: res.name as string } : t)),
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // 仅依赖 tickersLoaded：补查只在加载完成那一刻触发一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickersLoaded]);
+
   const toggle = (v: string) =>
     setAnalysts((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
 
