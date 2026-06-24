@@ -92,6 +92,10 @@ package + Typer CLI + FastAPI backend (`api/`) + Next.js frontend (`webui/`).
   `api/routes/`; LangGraph→SSE bridge in `api/runner.py`; SQLite history in `api/store.py`
   (`~/.tradingagents/webui.db`). CORS allows `localhost:3000` only. Single-user invariant:
   one run at a time (409 if busy).
+  现已引入**队列**：`POST /api/queue` 批量入队（`status='pending'`），`api/scheduler.py::QueueScheduler`
+  串行启动下一个 pending（runner 线程结束后回调 `advance()`），出错/取消自动跳过推进；
+  `POST /api/analysis` 改为「入队单个 + 调度」，忙时不再 409 而是排队。启动时 `reset_orphaned_runs()`
+  复位残留 running 行。队列接口见 `api/routes/queue.py`。
 - Tests inject a fake graph via `app.state.graph_factory`; no running server or real graph needed.
 - Frontend: `cd webui && npm run dev` (Next.js 16, React 19, Tailwind 4). **`webui/AGENTS.md`
   warns this Next.js version has breaking changes vs training data — read

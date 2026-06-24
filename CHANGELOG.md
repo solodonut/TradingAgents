@@ -10,6 +10,8 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **WebUI 分析队列**：一次输入多个标的代码，持久化为后端队列，由调度器串行依次分析；
+  支持移除/清空/重排 pending、取消当前并自动推进、出错跳过；服务重启后 pending 队列保留。
 - **WebUI 模型选择.** 分析工作台新增「深度思考模型 / 快速思考模型」两个下拉，Chat
   页新增模型下拉（deep+quick 合并去重）；选项来自当前已配置 provider 的模型目录
   （`GET /api/config/options` 新增 `model_options`），选择记忆于浏览器 localStorage。
