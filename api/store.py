@@ -12,6 +12,8 @@ from api.schemas import (
     ChatSession,
     HistorySummary,
     PortfolioHolding,
+    QueueItem,
+    QueueState,
     RunResult,
     SessionProfile,
 )
@@ -100,6 +102,9 @@ class Store:
         self._lock = threading.Lock()
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(analysis_runs)")}
+            if "queue_position" not in cols:
+                conn.execute("ALTER TABLE analysis_runs ADD COLUMN queue_position INTEGER")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, check_same_thread=False)
@@ -166,13 +171,7 @@ class Store:
             ).fetchone()
         return None if row is None else row["status"]
 
-    def get_run(self, run_id: str) -> RunResult | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM analysis_runs WHERE run_id=?", (run_id,)
-            ).fetchone()
-        if row is None:
-            return None
+    def _to_run_result(self, row: sqlite3.Row) -> RunResult:
         return RunResult(
             run_id=row["run_id"],
             ticker=row["ticker"],
@@ -186,11 +185,21 @@ class Store:
             completed_at=row["completed_at"],
         )
 
+    def get_run(self, run_id: str) -> RunResult | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM analysis_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return self._to_run_result(row)
+
     def list_runs(self) -> list[HistorySummary]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT run_id, ticker, trade_date, decision, status, created_at "
-                "FROM analysis_runs ORDER BY created_at DESC, rowid DESC"
+                "FROM analysis_runs WHERE status != 'pending' "
+                "ORDER BY created_at DESC, rowid DESC"
             ).fetchall()
         return [
             HistorySummary(
@@ -218,6 +227,106 @@ class Store:
                 "SELECT 1 FROM analysis_runs WHERE status='running' LIMIT 1"
             ).fetchone()
         return row is not None
+
+    def _to_queue_item(self, row: sqlite3.Row) -> QueueItem:
+        return QueueItem(
+            run_id=row["run_id"],
+            ticker=row["ticker"],
+            status=row["status"],
+            queue_position=row["queue_position"],
+            created_at=row["created_at"],
+        )
+
+    def enqueue_run(
+        self, run_id: str, ticker: str, trade_date: str, asset_type: str, config: dict
+    ) -> None:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(queue_position), 0) AS m "
+                "FROM analysis_runs WHERE status='pending'"
+            ).fetchone()
+            pos = row["m"] + 1
+            conn.execute(
+                "INSERT INTO analysis_runs "
+                "(run_id, ticker, trade_date, asset_type, decision, status, "
+                " config_json, result_json, created_at, completed_at, queue_position) "
+                "VALUES (?, ?, ?, ?, NULL, 'pending', ?, NULL, ?, NULL, ?)",
+                (run_id, ticker, trade_date, asset_type, _dumps(config), _now(), pos),
+            )
+
+    def start_run(self, run_id: str) -> bool:
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE analysis_runs SET status='running', queue_position=NULL "
+                "WHERE run_id=? AND status='pending'",
+                (run_id,),
+            )
+            return cur.rowcount > 0
+
+    def next_pending(self) -> RunResult | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM analysis_runs WHERE status='pending' "
+                "ORDER BY queue_position ASC, rowid ASC LIMIT 1"
+            ).fetchone()
+        return None if row is None else self._to_run_result(row)
+
+    def list_queue(self) -> QueueState:
+        with self._connect() as conn:
+            running_row = conn.execute(
+                "SELECT run_id, ticker, status, queue_position, created_at "
+                "FROM analysis_runs WHERE status='running' "
+                "ORDER BY created_at ASC LIMIT 1"
+            ).fetchone()
+            pending_rows = conn.execute(
+                "SELECT run_id, ticker, status, queue_position, created_at "
+                "FROM analysis_runs WHERE status='pending' "
+                "ORDER BY queue_position ASC, rowid ASC"
+            ).fetchall()
+        return QueueState(
+            running=self._to_queue_item(running_row) if running_row else None,
+            pending=[self._to_queue_item(r) for r in pending_rows],
+        )
+
+    def remove_pending(self, run_id: str) -> bool:
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM analysis_runs WHERE run_id=? AND status='pending'",
+                (run_id,),
+            )
+            return cur.rowcount > 0
+
+    def clear_pending(self) -> int:
+        with self._lock, self._connect() as conn:
+            cur = conn.execute("DELETE FROM analysis_runs WHERE status='pending'")
+            return cur.rowcount
+
+    def reorder_pending(self, ordered_run_ids: list[str]) -> None:
+        with self._lock, self._connect() as conn:
+            pending = {
+                r["run_id"]
+                for r in conn.execute(
+                    "SELECT run_id FROM analysis_runs WHERE status='pending'"
+                )
+            }
+            pos = 1
+            for run_id in ordered_run_ids:
+                if run_id in pending:
+                    conn.execute(
+                        "UPDATE analysis_runs SET queue_position=? "
+                        "WHERE run_id=? AND status='pending'",
+                        (pos, run_id),
+                    )
+                    pos += 1
+
+    def reset_orphaned_runs(self) -> int:
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE analysis_runs SET status='error', result_json=?, completed_at=? "
+                "WHERE status='running'",
+                (_dumps({"error": "服务重启中断"}), _now()),
+            )
+            return cur.rowcount
 
     # ---- chat sessions ----
 

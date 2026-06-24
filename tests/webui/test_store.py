@@ -123,3 +123,102 @@ def test_update_partial_result_does_not_modify_finished_run(tmp_path):
 
     row = store.get_run("r1")
     assert row.result == {"final_trade_decision": "done"}
+
+
+def test_enqueue_and_next_pending_orders_by_position(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.enqueue_run("a", "NVDA", "2024-05-10", "stock", {"ticker": "NVDA"})
+    store.enqueue_run("b", "AAPL", "2024-05-10", "stock", {"ticker": "AAPL"})
+
+    nxt = store.next_pending()
+    assert nxt.run_id == "a"
+    assert nxt.config["ticker"] == "NVDA"
+
+
+def test_start_run_flips_pending_to_running(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.enqueue_run("a", "NVDA", "2024-05-10", "stock", {})
+    assert store.start_run("a") is True
+    assert store.start_run("a") is False  # no longer pending
+    assert store.get_status("a") == "running"
+    assert store.has_running_run() is True
+
+
+def test_list_queue_returns_running_and_ordered_pending(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.enqueue_run("a", "NVDA", "2024-05-10", "stock", {})
+    store.enqueue_run("b", "AAPL", "2024-05-10", "stock", {})
+    store.enqueue_run("c", "TSLA", "2024-05-10", "stock", {})
+    store.start_run("a")
+
+    state = store.list_queue()
+    assert state.running.run_id == "a"
+    assert [p.ticker for p in state.pending] == ["AAPL", "TSLA"]
+
+
+def test_remove_pending_only_removes_pending(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.enqueue_run("a", "NVDA", "2024-05-10", "stock", {})
+    store.start_run("a")
+    store.enqueue_run("b", "AAPL", "2024-05-10", "stock", {})
+
+    assert store.remove_pending("b") is True
+    assert store.remove_pending("a") is False  # running, untouched
+    assert store.get_status("a") == "running"
+
+
+def test_clear_pending_leaves_running(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.enqueue_run("a", "NVDA", "2024-05-10", "stock", {})
+    store.start_run("a")
+    store.enqueue_run("b", "AAPL", "2024-05-10", "stock", {})
+    store.enqueue_run("c", "TSLA", "2024-05-10", "stock", {})
+
+    assert store.clear_pending() == 2
+    assert store.list_queue().running.run_id == "a"
+    assert store.list_queue().pending == []
+
+
+def test_reorder_pending(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.enqueue_run("a", "NVDA", "2024-05-10", "stock", {})
+    store.enqueue_run("b", "AAPL", "2024-05-10", "stock", {})
+    store.enqueue_run("c", "TSLA", "2024-05-10", "stock", {})
+
+    store.reorder_pending(["c", "a", "b"])
+    assert [p.run_id for p in store.list_queue().pending] == ["c", "a", "b"]
+
+
+def test_reset_orphaned_runs_marks_running_error(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.insert_run("a", "NVDA", "2024-05-10", "stock", {})  # status=running
+    assert store.has_running_run() is True
+
+    assert store.reset_orphaned_runs() == 1
+    assert store.get_status("a") == "error"
+    assert store.has_running_run() is False
+
+
+def test_list_runs_excludes_pending(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.insert_run("a", "NVDA", "2024-05-10", "stock", {})  # running -> shown
+    store.enqueue_run("b", "AAPL", "2024-05-10", "stock", {})  # pending -> hidden
+
+    ids = {r.run_id for r in store.list_runs()}
+    assert ids == {"a"}
