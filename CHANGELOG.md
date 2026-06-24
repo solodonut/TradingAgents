@@ -10,6 +10,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **WebUI 模型选择.** 分析工作台新增「深度思考模型 / 快速思考模型」两个下拉，Chat
+  页新增模型下拉（deep+quick 合并去重）；选项来自当前已配置 provider 的模型目录
+  （`GET /api/config/options` 新增 `model_options`），选择记忆于浏览器 localStorage。
+  Chat 发消息支持 `chat_llm` 请求字段，在当前 provider 内覆盖对话模型。
 - **LLM API architecture reference.** Added a maintainer document covering every
   model-backed execution path across TradingAgents, Advisor Chat, vision extraction,
   report export, startup health checks, Provider authentication, structured-output
