@@ -39,14 +39,20 @@ def test_post_analysis_returns_run_id_and_streams_done(client):
     assert "Buy" in body
 
 
-def test_second_analysis_while_running_returns_409(client, monkeypatch):
+def test_post_analysis_while_running_enqueues_instead_of_409(client):
     import api.main as main
 
-    monkeypatch.setattr(main.get_store(), "has_running_run", lambda: True)
+    # an already-running row makes the scheduler keep the new POST pending
+    store = main.get_store()
+    store.insert_run("busy", "NVDA", "2024-05-10", "stock", {})
+
+    _install_fake_graph(client, chunks=[], decision="Hold", final_state={})
     resp = client.post(
-        "/api/analysis", json={"ticker": "NVDA", "trade_date": "2024-05-10"}
+        "/api/analysis", json={"ticker": "AAPL", "trade_date": "2024-05-10"}
     )
-    assert resp.status_code == 409
+    assert resp.status_code == 200
+    new_id = resp.json()["run_id"]
+    assert store.get_status(new_id) == "pending"
 
 
 def test_cancel_running_analysis_marks_cancelled(client):

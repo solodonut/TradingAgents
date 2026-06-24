@@ -1,16 +1,13 @@
 """Analysis routes: start run, SSE stream, report download."""
 
 import queue
-import threading
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from sse_starlette.sse import EventSourceResponse
 
-from api.runner import AnalysisRunner
 from api.schemas import AnalysisRequest
-from api.telemetry import RunTelemetry
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -30,49 +27,15 @@ def start_analysis(req: AnalysisRequest, request: Request) -> dict:
     from api.main import get_store
 
     store = get_store()
-    if store.has_running_run():
-        raise HTTPException(status_code=409, detail="another analysis is running")
-
     run_id = uuid.uuid4().hex
-    telemetry = RunTelemetry(run_id)
-    request.app.state.telemetry[run_id] = telemetry
-    store.insert_run(
+    store.enqueue_run(
         run_id=run_id,
         ticker=req.ticker,
         trade_date=req.trade_date,
         asset_type=req.asset_type,
         config=req.model_dump(),
     )
-
-    request.app.state.starting_telemetry = telemetry
-    try:
-        graph, init_state, decision, final_state = request.app.state.graph_factory(req)
-    finally:
-        request.app.state.starting_telemetry = None
-
-    q: queue.Queue = queue.Queue()
-    request.app.state.queues[run_id] = q
-    cancel_event = threading.Event()
-    request.app.state.cancellations[run_id] = cancel_event
-    runner = AnalysisRunner(
-        store=store,
-        event_queue=q,
-        cancel_event=cancel_event,
-        telemetry=telemetry,
-    )
-
-    thread = threading.Thread(
-        target=runner.run,
-        kwargs={
-            "run_id": run_id,
-            "graph": graph,
-            "init_state": init_state,
-            "decision": decision,
-            "final_state": final_state,
-        },
-        daemon=True,
-    )
-    thread.start()
+    request.app.state.scheduler.advance()
     return {"run_id": run_id}
 
 

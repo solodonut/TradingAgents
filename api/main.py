@@ -38,6 +38,7 @@ app.state.telemetry = {}
 app.state.starting_telemetry = None
 app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
 app.state.chat_llm_factory = None  # set at startup; tests inject their own
+app.state.scheduler = None  # QueueScheduler, created at startup; tests reset to None
 app.state.model_health = None  # set by the startup health check; tests may inject
 
 logger = logging.getLogger(__name__)
@@ -185,5 +186,12 @@ def _wire_graph_factory():
         app.state.graph_factory = real_graph_factory
     if app.state.chat_llm_factory is None:
         app.state.chat_llm_factory = real_chat_llm_factory
+    if app.state.scheduler is None:
+        from api.scheduler import QueueScheduler
+
+        app.state.scheduler = QueueScheduler(app)
+    # recover from a crash mid-run, then resume any leftover queue
+    get_store().reset_orphaned_runs()
+    app.state.scheduler.advance()
     if _startup_model_check_enabled():
         _run_model_health_check()
