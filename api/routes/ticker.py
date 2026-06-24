@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from tradingagents.agents.utils.agent_utils import resolve_instrument_identity
+from tradingagents.dataflows.ticker_name import resolve_ticker_name
 
 router = APIRouter(prefix="/api/ticker", tags=["ticker"])
 
@@ -10,6 +10,5 @@ router = APIRouter(prefix="/api/ticker", tags=["ticker"])
 @router.get("/{code}")
 def lookup_ticker(code: str) -> dict:
     ticker = code.strip().upper()
-    identity = resolve_instrument_identity(ticker)
-    name = identity.get("company_name")
+    name = resolve_ticker_name(ticker)
     return {"ticker": ticker, "name": name, "valid": bool(name)}
