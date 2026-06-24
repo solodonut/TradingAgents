@@ -24,6 +24,12 @@ def test_registry_membership():
 
 
 @pytest.mark.unit
+def test_ibm_ica_is_not_openai_compatible():
+    assert "ibm_ica" not in OPENAI_COMPATIBLE_PROVIDERS
+    assert is_openai_compatible("ibm_ica") is False
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("provider,base_url,chat_class,responses", [
     ("openai", None, NormalizedChatOpenAI, True),
     ("xai", "https://api.x.ai/v1", NormalizedChatOpenAI, False),

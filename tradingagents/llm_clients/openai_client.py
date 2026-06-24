@@ -153,77 +153,6 @@ class MinimaxChatOpenAI(NormalizedChatOpenAI):
         return payload
 
 
-def _fetch_ica_models(base_url: str | None, api_key: str | None) -> list[str]:
-    """Best-effort fetch of IBM ICA's live model IDs, for error messages only.
-
-    Hits ``{base_url}/models`` (the gateway exposes an OpenAI-style listing
-    there). Returns ``[]`` on any failure — this only enriches an error
-    message and must never raise on its own.
-    """
-    if not base_url:
-        return []
-    try:
-        import httpx
-
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        resp = httpx.get(f"{base_url.rstrip('/')}/models", headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-        return [m["id"] for m in data if isinstance(m, dict) and m.get("id")]
-    except Exception:
-        return []
-
-
-class IbmIcaChatOpenAI(NormalizedChatOpenAI):
-    """IBM ICA-specific overrides on top of the OpenAI-compatible client.
-
-    ICA's gateway rejects an unknown model ID with an opaque
-    ``400 - {'detail': 'Model not found'}``. Model names are not validated up
-    front (ibm_ica is in ``validators._ANY_MODEL_PROVIDERS``, since ICA also
-    accepts custom IDs), so a typo or a model that has left the gateway's
-    lineup only surfaces here. Translate that one error into a clear message
-    that names the rejected model and lists what the gateway currently serves.
-
-    Separately, ICA's guardrail subsystem can fail with an opaque
-    ``500 - Custom code guardrail execution failed: Model not available - E001``
-    when the guardrail backend for a *model family* is down. This was observed
-    hitting every Claude model while GPT/Gemini/Granite kept returning 200, so
-    it is a gateway-side outage, not a bad model ID — the model is still in the
-    catalog. Translate it into a distinct message that says "retry or switch
-    model family", not "pick a valid model".
-    """
-
-    def invoke(self, input, config=None, **kwargs):
-        try:
-            return super().invoke(input, config, **kwargs)
-        except Exception as exc:
-            text = str(exc)
-            # Gateway-side guardrail outage (500 / E001). Checked first because
-            # it is a different failure than a bad model ID and must not be
-            # rewritten as "pick a valid model".
-            if "guardrail" in text.lower() or "E001" in text:
-                raise ValueError(
-                    f"IBM ICA guardrail subsystem failed for model "
-                    f"'{self.model_name}' (gateway returned 'Model not available "
-                    f"- E001'). This is a gateway-side outage of the guardrail "
-                    f"backend, not a model-config problem — the model is likely "
-                    f"still in the catalog. Retry later, or switch quick_think_llm "
-                    f"/ deep_think_llm (or TRADINGAGENTS_QUICK_THINK_LLM / "
-                    f"TRADINGAGENTS_DEEP_THINK_LLM) to a different model family."
-                ) from exc
-            if "Model not found" not in text:
-                raise
-            api_key = self.openai_api_key.get_secret_value() if self.openai_api_key else None
-            available = _fetch_ica_models(self.openai_api_base, api_key)
-            hint = f" Available models: {', '.join(available)}." if available else ""
-            raise ValueError(
-                f"IBM ICA rejected model '{self.model_name}' — it is not in the "
-                f"gateway's catalog.{hint} Set quick_think_llm / deep_think_llm "
-                f"(or TRADINGAGENTS_QUICK_THINK_LLM / TRADINGAGENTS_DEEP_THINK_LLM) "
-                f"to a supported model."
-            ) from exc
-
-
 # Kwargs forwarded from user config to ChatOpenAI
 _PASSTHROUGH_KWARGS = (
     "timeout", "max_retries", "reasoning_effort", "temperature",
@@ -276,14 +205,6 @@ OPENAI_COMPATIBLE_PROVIDERS: dict[str, ProviderSpec] = {
     "nvidia":     ProviderSpec(base_url="https://integrate.api.nvidia.com/v1"),
     "ollama":     ProviderSpec(base_url="http://localhost:11434/v1", base_url_env="OLLAMA_BASE_URL",
                                key_optional=True, placeholder_key="ollama"),
-    # IBM ICA (Internal/Enterprise model gateway): OpenAI-compatible Chat
-    # Completions at the ICA business-layer endpoint (/chat-models), serving
-    # Claude / GPT / Gemini / Granite behind bare model IDs (claude-opus-4-8,
-    # gpt-5.4-gus, ...) and authenticated with the long ICA REST API key.
-    # Reachable via the corporate network, so it must NOT use the AKShare proxy
-    # bypass. langchain appends /chat/completions -> .../ica/v1/chat-models/chat/completions.
-    "ibm_ica":    ProviderSpec(base_url="https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models",
-                               base_url_env="IBM_ICA_BASE_URL", chat_class=IbmIcaChatOpenAI),
     # Generic endpoint: user supplies base_url; key optional (keyless local).
     "openai_compatible": ProviderSpec(require_base_url=True, key_optional=True),
 }
