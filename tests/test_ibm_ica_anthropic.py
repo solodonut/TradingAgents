@@ -77,3 +77,11 @@ def test_ibm_ica_does_not_fall_back_to_anthropic_key(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "wrong-provider-key")
     with pytest.raises(ValueError, match="IBM_ICA_API_KEY"):
         create_llm_client("ibm_ica", "claude-haiku-4-5")
+
+
+@pytest.mark.unit
+def test_ibm_ica_accepts_tenant_specific_claude_model(monkeypatch):
+    monkeypatch.setenv("IBM_ICA_API_KEY", "test-ica-key")
+    client = create_llm_client("ibm_ica", "claude-tenant-preview")
+
+    assert client.validate_model() is True

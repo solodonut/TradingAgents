@@ -87,3 +87,7 @@ class IbmIcaAnthropicClient(AnthropicClient):
             )
         kwargs["api_key"] = api_key
         super().__init__(model, resolved_base_url, **kwargs)
+
+    def validate_model(self) -> bool:
+        """Accept tenant-specific Claude IDs served by IBM ICA."""
+        return validate_model("ibm_ica", self.model)
