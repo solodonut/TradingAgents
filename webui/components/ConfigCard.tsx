@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { lookupTicker } from "@/lib/api";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
+type TickerItem = { ticker: string; name: string };
+
 export function ConfigCard({
   options,
   onStart,
@@ -13,9 +15,6 @@ export function ConfigCard({
   onStart: (req: { tickers: string[] } & Omit<AnalysisRequest, "ticker">) => void;
   running?: boolean;
 }) {
-  type TickerItem = { ticker: string; name: string };
-
-  // 原: const [tickersText, setTickersText] = useState("NVDA");
   const [tickers, setTickers] = useState<TickerItem[]>([{ ticker: "NVDA", name: "" }]);
   const [tickerInput, setTickerInput] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -72,6 +71,7 @@ export function ConfigCard({
     }
   }, []);
 
+  // 写 effect 在读 effect 之后以恢复的正确值收敛，SSR 安全；不要改成惰性 useState 初始化（会在服务端崩溃 / hydration 不一致）。
   // 清单每次变化都写回
   useEffect(() => {
     localStorage.setItem("ta:ticker_list", JSON.stringify(tickers));
