@@ -22,6 +22,7 @@ import {
   deleteChatSession,
   deleteChatSessions,
   getChatSession,
+  getConfigOptions,
   getPortfolio,
   getSessionProfile,
   listChatSessions,
@@ -67,6 +68,8 @@ export default function ChatPage() {
   const [dismissedProposals, setDismissedProposals] = useState<Set<string>>(new Set());
   const [savingReports, setSavingReports] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [chatModels, setChatModels] = useState<[string, string][]>([]);
+  const [chatLlm, setChatLlm] = useState("");
   const streamingRef = useRef("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -194,6 +197,31 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
+    getConfigOptions()
+      .then((opts) => {
+        // deep + quick 合并去重（按 model_id）
+        const seen = new Set<string>();
+        const merged: [string, string][] = [];
+        for (const [label, id] of [
+          ...opts.model_options.quick,
+          ...opts.model_options.deep,
+        ]) {
+          if (!seen.has(id)) {
+            seen.add(id);
+            merged.push([label, id]);
+          }
+        }
+        setChatModels(merged);
+        const saved = localStorage.getItem("ta:chat_llm");
+        const fallback = opts.configured_quick_llm ?? "";
+        setChatLlm(saved && seen.has(saved) ? saved : fallback);
+      })
+      .catch(() => {
+        /* 配置加载失败时下拉为空，发消息仍走后端默认 */
+      });
+  }, []);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
@@ -222,34 +250,40 @@ export default function ChatPage() {
     ]);
 
     try {
-      await streamChat(chatStreamUrl(sessionId), question, (e) => {
-        if (e.event === "token") {
-          streamingRef.current += e.data.content;
-          setMessages((m) =>
-            m.map((msg) =>
-              msg.message_id === assistantId
-                ? { ...msg, content: streamingRef.current }
-                : msg,
-            ),
-          );
-        } else if (e.event === "done") {
-          setMessages((m) =>
-            m.map((msg) =>
-              msg.message_id === assistantId
-                ? { ...msg, content: e.data.content, tool_calls: e.data.tool_calls }
-                : msg,
-            ),
-          );
-        } else if (e.event === "error") {
-          setMessages((m) =>
-            m.map((msg) =>
-              msg.message_id === assistantId
-                ? { ...msg, content: `⚠️ 出错了:${e.data.message}` }
-                : msg,
-            ),
-          );
-        }
-      });
+      await streamChat(
+        chatStreamUrl(sessionId),
+        question,
+        (e) => {
+          if (e.event === "token") {
+            streamingRef.current += e.data.content;
+            setMessages((m) =>
+              m.map((msg) =>
+                msg.message_id === assistantId
+                  ? { ...msg, content: streamingRef.current }
+                  : msg,
+              ),
+            );
+          } else if (e.event === "done") {
+            setMessages((m) =>
+              m.map((msg) =>
+                msg.message_id === assistantId
+                  ? { ...msg, content: e.data.content, tool_calls: e.data.tool_calls }
+                  : msg,
+              ),
+            );
+          } else if (e.event === "error") {
+            setMessages((m) =>
+              m.map((msg) =>
+                msg.message_id === assistantId
+                  ? { ...msg, content: `⚠️ 出错了:${e.data.message}` }
+                  : msg,
+              ),
+            );
+          }
+        },
+        undefined,
+        chatLlm || undefined,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "连接失败";
       setMessages((current) =>
@@ -561,6 +595,26 @@ export default function ChatPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 px-4 py-3">
+              {chatModels.length > 0 && (
+                <label className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">模型</span>
+                  <select
+                    value={chatLlm}
+                    onChange={(e) => {
+                      setChatLlm(e.target.value);
+                      localStorage.setItem("ta:chat_llm", e.target.value);
+                    }}
+                    disabled={streaming}
+                    className="glass-control h-8 rounded-md px-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-primary disabled:opacity-50"
+                  >
+                    {chatModels.map(([label, id]) => (
+                      <option key={id} value={id}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <Button
                 type="button"
                 variant="outline"
