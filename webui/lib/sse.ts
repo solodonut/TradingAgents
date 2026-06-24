@@ -41,11 +41,12 @@ export async function streamChat(
   message: string,
   onEvent: (e: ChatSSEEvent) => void,
   signal?: AbortSignal,
+  model?: string,
 ): Promise<void> {
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(model ? { message, chat_llm: model } : { message }),
     signal,
   });
   if (!resp.body) return;

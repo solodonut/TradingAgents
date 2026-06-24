@@ -21,6 +21,7 @@ export interface ConfigOptions {
   configured_provider: string | null;
   configured_deep_llm: string | null;
   configured_quick_llm: string | null;
+  model_options: { deep: [string, string][]; quick: [string, string][] };
 }
 
 export interface HistorySummary {
