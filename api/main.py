@@ -118,6 +118,10 @@ from api.routes import queue as queue_routes  # noqa: E402
 
 app.include_router(queue_routes.router)
 
+from api.routes import ticker as ticker_routes  # noqa: E402
+
+app.include_router(ticker_routes.router)
+
 
 def real_graph_factory(req):
     """Build a TradingAgentsGraph from a request.
