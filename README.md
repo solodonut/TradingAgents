@@ -155,7 +155,7 @@ export ALPHA_VANTAGE_API_KEY=...   # Alpha Vantage
 
 For Azure OpenAI, copy `.env.enterprise.example` to `.env.enterprise` and fill in your credentials.
 
-For IBM ICA (IBM Consulting Advantage enterprise gateway), set `llm_provider: "ibm_ica"`, export `IBM_ICA_API_KEY=...` (the long ICA REST API key), and pick an ICA model ID (e.g. `claude-opus-4-8` for deep reasoning, `claude-haiku-4-5` for quick tasks). The endpoint defaults to the business-layer Chat Completions at `https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models`; override it with `IBM_ICA_BASE_URL` if your tenant differs. This is the default provider in `default_config.py`.
+For IBM ICA (IBM Consulting Advantage enterprise gateway), set `llm_provider: "ibm_ica"`, export `IBM_ICA_API_KEY=...`, and pick a Claude model ID (e.g. `claude-opus-4-8` for deep reasoning, `claude-haiku-4-5` for quick tasks). ICA uses the Anthropic Messages API at `https://api.nextgen-beta.ica.ibm.com/ica/v1/messages`; the SDK sends the key as `x-api-key`. Override the Base URL with `IBM_ICA_BASE_URL` only if your tenant differs. This is the default provider in `default_config.py`.
 
 For the complete provider matrix, model-to-agent mapping, Chat/vision/export call paths, structured-output behavior, health-check costs, retries, and IBM ICA wire details, see [LLM API Architecture and Call Reference](docs/llm-api-architecture.md).
 

@@ -37,7 +37,7 @@ PROVIDER_API_KEY_ENV: dict[str, str | None] = {
     "nvidia":     "NVIDIA_API_KEY",
     # Local runtimes do not authenticate.
     "ollama":     None,
-    # IBM ICA enterprise gateway: Bearer token in IBM_ICA_API_KEY.
+    # IBM ICA Anthropic Messages gateway: sent as x-api-key.
     "ibm_ica":    "IBM_ICA_API_KEY",
     # Generic OpenAI-compatible endpoint: the client reads this when set (keyed
     # relays), but it is marked key-optional in the provider registry so the CLI

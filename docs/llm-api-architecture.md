@@ -27,9 +27,9 @@
 provider:  ibm_ica
 quick:     claude-haiku-4-5
 deep:      claude-opus-4-8
-base URL:  https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models
-request:   POST .../ica/v1/chat-models/chat/completions
-auth:      Authorization: Bearer $IBM_ICA_API_KEY
+base URL:  https://api.nextgen-beta.ica.ibm.com/ica
+request:   POST .../ica/v1/messages
+auth:      x-api-key: $IBM_ICA_API_KEY
 ```
 
 模型 ID 必须使用 ICA 接受的裸名，例如 `claude-opus-4-8`，不能写成 `ibm_ica/claude-opus-4-8`。
@@ -54,9 +54,8 @@ flowchart TB
     Chat --> Factory
     Health[Startup health check] --> Factory
 
-    Factory --> Native[Anthropic / Google / Azure / Bedrock]
+    Factory --> Native[Anthropic / IBM ICA / Google / Azure / Bedrock]
     Factory --> Compat[OpenAI-compatible registry]
-    Compat --> ICA[IBM ICA]
     Compat --> Other[OpenAI / xAI / DeepSeek / Qwen / GLM / MiniMax / ...]
 ```
 
@@ -130,11 +129,12 @@ CLI 的 `ensure_api_key()` 会在必需 Key 缺失时交互询问，并把 Key �
 | Provider | LangChain 客户端 | 协议和说明 |
 |---|---|---|
 | `anthropic` | `ChatAnthropic` | Anthropic Messages API；仅 Opus/Sonnet 型号接收 `effort` |
+| `ibm_ica` | `ChatAnthropic` | Claude-only ICA Anthropic Messages API；使用独立 ICA Key 和 Base URL |
 | `google` | `ChatGoogleGenerativeAI` | Gemini API；Gemini 3 使用 `thinking_level`，旧型号映射为 `thinking_budget` |
 | `azure` | `AzureChatOpenAI` | Azure OpenAI deployment API；deployment 默认回退到模型名 |
 | `bedrock` | `ChatBedrockConverse` | Amazon Bedrock Converse API；需要可选依赖 `.[bedrock]` |
 
-这四类先由 `factory.py` 分派，不进入 OpenAI-compatible 注册表。
+这五类先由 `factory.py` 分派，不进入 OpenAI-compatible 注册表。
 
 ### 4.2 OpenAI-compatible Provider
 
@@ -155,18 +155,17 @@ CLI 的 `ensure_api_key()` 会在必需 Key 缺失时交互询问，并把 Key �
 | `groq` | `https://api.groq.com/openai/v1` | 模型 ID 由用户提供 |
 | `nvidia` | `https://integrate.api.nvidia.com/v1` | NVIDIA NIM |
 | `ollama` | `http://localhost:11434/v1` | 可用 `OLLAMA_BASE_URL` 覆盖 |
-| `ibm_ica` | `https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models` | ICA 业务层 Chat Completions |
 | `openai_compatible` | 无 | 必须提供 `backend_url` |
 
 OpenAI-compatible Base URL 的优先级是：
 
 ```text
 create_llm_client(base_url=...)
-→ Provider 专用环境变量，如 IBM_ICA_BASE_URL / OLLAMA_BASE_URL
+→ Provider 专用环境变量，如 OLLAMA_BASE_URL
 → 注册表默认 URL
 ```
 
-`TRADINGAGENTS_LLM_BACKEND_URL` 会进入第一级，因此会覆盖 `IBM_ICA_BASE_URL`。
+IBM ICA 使用同样的显式 URL 优先原则，但由 `IbmIcaAnthropicClient` 独立解析：显式 `backend_url` → `IBM_ICA_BASE_URL` → 内置 `/ica` Base URL。
 
 ## 5. IBM ICA 专项说明
 
@@ -175,51 +174,36 @@ create_llm_client(base_url=...)
 WebUI 和直接 Python 调用在没有 `backend_url` 覆盖时使用：
 
 ```http
-POST /ica/v1/chat-models/chat/completions HTTP/1.1
+POST /ica/v1/messages HTTP/1.1
 Host: api.nextgen-beta.ica.ibm.com
-Authorization: Bearer <IBM_ICA_API_KEY>
+x-api-key: <IBM_ICA_API_KEY>
+anthropic-version: 2023-06-01
 Content-Type: application/json
 
 {
   "model": "claude-haiku-4-5",
+  "max_tokens": 64000,
+  "system": "...",
   "messages": [
-    {"role": "system", "content": "..."},
     {"role": "user", "content": "..."}
-  ],
-  "tools": []
+  ]
 }
 ```
 
-`tools`、`tool_choice`、结构化输出相关字段是否出现，取决于具体 Agent 调用方式。
+Anthropic SDK 自动发送 `anthropic-version`。`tools` 和 tool-use 内容块是否出现，取决于具体 Agent 调用方式。
 
 ### 5.2 当前 ICA 模型目录
 
 | 槽位 | 模型候选顺序 |
 |---|---|
-| quick | `claude-haiku-4-5`、`claude-sonnet-4-6`、`gpt-5.1-chat-gus`、`ibm/granite-4-h-small` |
-| deep | `claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`gpt-5.4-gus`、`gemini-3.1-pro-preview` |
+| quick | `claude-haiku-4-5`、`claude-sonnet-4-6` |
+| deep | `claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6` |
 
 ICA 被列入“接受任意模型 ID”的 Provider。客户端不会在本地阻止自定义 ID，最终由网关决定是否存在。
 
-### 5.3 ICA 特殊错误处理
+### 5.3 统一入口
 
-`IbmIcaChatOpenAI` 处理两种网关错误：
-
-- `Model not found`：转换成包含被拒绝模型名的错误，并额外请求 `{base_url}/models`，尽力列出当前模型。
-- Guardrail `E001`：标记为 ICA guardrail 子系统故障，而不是错误模型 ID，建议重试或切换模型家族。
-
-模型列表请求只发生在 `Model not found` 错误之后，不是每次推理前都请求。
-
-### 5.4 CLI 与 WebUI 的端点差异
-
-当前代码存在一个需要维护者知晓的端点差异：
-
-| 入口 | IBM ICA Base URL 来源 | 当前值 |
-|---|---|---|
-| WebUI / Python 默认配置 | `OPENAI_COMPATIBLE_PROVIDERS` | `.../ica/v1/chat-models` |
-| 交互式 CLI | `cli.utils._llm_provider_table()` | `.../ica/v1` |
-
-CLI 会把菜单中的 URL 写入 `config["backend_url"]`，其优先级高于 Provider 注册表，所以交互式 CLI 实际会请求 `.../ica/v1/chat/completions`。这与 README 和 WebUI 默认的业务层 `/chat-models` 端点不同。本文记录现状，不把二者描述成同一条链路。
+Python、CLI、FastAPI 分析、Advisor Chat、视觉识别、报告导出和健康检查都通过 `create_llm_client("ibm_ica", ...)` 构造 `IbmIcaAnthropicClient`。不存在入口级协议分支，也不再请求 OpenAI Chat Completions 或 `/models` 目录。
 
 ## 6. TradingAgents 模型分配
 
@@ -370,7 +354,7 @@ TRADINGAGENTS_STARTUP_MODEL_CHECK=0
 
 健康检查会对 quick、deep 两个槽位的所有候选模型分别发送一个内容为 `ping` 的真实 `invoke()`，不是只探测当前模型。
 
-IBM ICA 默认目录包含 4 个 quick 候选和 5 个 deep 候选，因此一次 FastAPI 启动通常产生 9 次模型请求。`claude-sonnet-4-6` 同时存在于两个槽位，会被分别探测。
+IBM ICA 默认目录包含 2 个 quick 候选和 3 个 deep 候选，因此一次 FastAPI 启动通常产生 5 次模型请求。`claude-sonnet-4-6` 同时存在于两个槽位，会被分别探测。
 
 选择规则：
 
@@ -387,7 +371,6 @@ IBM ICA 默认目录包含 4 个 quick 候选和 5 个 deep 候选，因此一�
 |---|---|---|
 | OpenAI-compatible 成功响应被 SDK 解析为 `None` | 自动重试一次 | 1 次推理 |
 | 结构化输出调用失败 | 改用 free-text 再调用一次 | 1 次推理 |
-| ICA 返回 `Model not found` | 请求 `{base_url}/models` 丰富错误 | 1 次非推理 GET |
 | Agent 返回 tool calls | 执行工具后再次调用 | 每轮 1 次推理 |
 | Chat 返回 tool calls | 最多 6 个工具轮次 | 最多 6 次推理 |
 
@@ -448,7 +431,7 @@ TRADINGAGENTS_QUICK_THINK_LLM=claude-haiku-4-5
 只在租户端点不同时覆盖：
 
 ```dotenv
-IBM_ICA_BASE_URL=https://your-tenant.example/ica/v1/chat-models
+IBM_ICA_BASE_URL=https://your-tenant.example/ica
 ```
 
 不要同时设置一个不同的 `TRADINGAGENTS_LLM_BACKEND_URL`，因为它的优先级更高。
@@ -533,7 +516,8 @@ pytest tests/test_openai_compatible_provider.py \
 | `tradingagents/default_config.py` | LLM 默认配置和环境覆盖 |
 | `tradingagents/__init__.py` | `.env` / `.env.enterprise` 加载 |
 | `tradingagents/llm_clients/factory.py` | Provider 总入口 |
-| `tradingagents/llm_clients/openai_client.py` | OpenAI-compatible 注册表和 IBM ICA 逻辑 |
+| `tradingagents/llm_clients/anthropic_client.py` | 原生 Anthropic 和 IBM ICA Messages 客户端 |
+| `tradingagents/llm_clients/openai_client.py` | OpenAI-compatible Provider 注册表 |
 | `tradingagents/llm_clients/api_key_env.py` | Provider 到 Key 环境变量映射 |
 | `tradingagents/llm_clients/model_catalog.py` | CLI 模型目录和健康检查候选 |
 | `tradingagents/llm_clients/capabilities.py` | 模型参数和结构化输出能力 |

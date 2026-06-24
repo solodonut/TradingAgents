@@ -159,7 +159,8 @@ A 股的 alpha 计算基准已内置于 `default_config.py` 的 `benchmark_map`�
 
 - `tradingagents/dataflows/interface.py` — 注册 akshare vendor + 自动路由
 - `tradingagents/default_config.py` — `akshare_auto_route` 开关 + vendor 选项说明
-- `tradingagents/llm_clients/openai_client.py` — 注册 `ibm_ica` provider
+- `tradingagents/llm_clients/anthropic_client.py` — ICA Anthropic Messages 客户端
+- `tradingagents/llm_clients/factory.py` — 注册 `ibm_ica` 原生协议 provider
 - `tradingagents/llm_clients/api_key_env.py` — `ibm_ica` → `IBM_ICA_API_KEY`
 - `tradingagents/llm_clients/model_catalog.py` — ICA 模型列表
 - `tradingagents/llm_clients/validators.py` — `ibm_ica` 接受任意模型名
@@ -171,14 +172,14 @@ A 股的 alpha 计算基准已内置于 `default_config.py` 的 `benchmark_map`�
 
 ## 9. LLM 用 IBM ICA
 
-ICA 是 OpenAI 兼容端点，已注册为命名 provider `ibm_ica`。
+ICA 使用 Anthropic Messages API，并以命名 provider `ibm_ica` 接入统一 LLM 工厂。
 
 | 配置项 | 值 |
 |---|---|
 | `llm_provider` | `ibm_ica` |
-| baseURL（默认，内置） | `https://api.nextgen-beta.ica.ibm.com/ica/v1/chat-models`（业务层端点） |
-| 最终推理 URL | `.../ica/v1/chat-models/chat/completions` |
-| API key 环境变量 | `IBM_ICA_API_KEY`（业务层长 key） |
+| baseURL（默认，内置） | `https://api.nextgen-beta.ica.ibm.com/ica` |
+| 最终推理 URL | `.../ica/v1/messages` |
+| API key 环境变量 | `IBM_ICA_API_KEY`（通过 `x-api-key` 发送） |
 | baseURL 覆盖（可选） | `IBM_ICA_BASE_URL` |
 
 ### 当前启用的模型（默认配置）
@@ -192,13 +193,13 @@ ICA 是 OpenAI 兼容端点，已注册为命名 provider `ibm_ica`。
 
 完整的 Provider 矩阵、Agent 模型分配、Chat/视觉/导出调用链、健康检查成本和 ICA 请求细节见 [LLM API 架构与调用参考](docs/llm-api-architecture.md)。
 
-> ICA 走的是**业务层端点** `/chat-models`，由**长 key**（ICA REST API key）认证；langchain 会在 baseURL 后自动追加 `/chat/completions`。该端点实测支持 streaming 与 tool calling，满足 agent 的 ReAct 循环需求。
+> ICA 走 Anthropic Messages API。LangChain/Anthropic SDK 会在 Base URL 后追加 `/v1/messages`，并使用标准 Anthropic tool use 支撑 Agent 的 ReAct 循环。
 
 ### 可选模型（实测可用）
 
-- **深度推理**：`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`gpt-5.4-gus`、`gemini-3.1-pro-preview`
-- **快速任务**：`claude-haiku-4-5`、`claude-sonnet-4-6`、`gpt-5.1-chat-gus`、`ibm/granite-4-h-small`
-- 其他模型可在 CLI 选 “Custom model ID” 手填
+- **深度推理**：`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`
+- **快速任务**：`claude-haiku-4-5`、`claude-sonnet-4-6`
+- 新发布或租户专用的 Claude 模型可在 CLI 选 “Custom model ID” 手填
 
 > 注意：模型名是**裸名**（`claude-opus-4-8`），不带 opencode 的 `ibm_ica/` 前缀。
 
