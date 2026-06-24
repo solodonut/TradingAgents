@@ -5,6 +5,7 @@ import type {
   ConfigOptions,
   HistorySummary,
   PortfolioHolding,
+  QueueState,
   RunResult,
   RunStatusDetail,
   SessionProfile,
@@ -27,6 +28,57 @@ export async function startAnalysis(req: AnalysisRequest): Promise<string> {
   if (r.status === 409) throw new Error("已有分析正在运行");
   if (!r.ok) throw new Error("failed to start analysis");
   return (await r.json()).run_id as string;
+}
+
+export interface EnqueueRequest {
+  tickers: string[];
+  trade_date: string;
+  asset_type: AnalysisRequest["asset_type"];
+  analysts: string[];
+  research_depth: 1 | 3 | 5;
+  output_language: string;
+  llm_provider: string | null;
+  deep_think_llm: string | null;
+  quick_think_llm: string | null;
+}
+
+export async function enqueueAnalysis(
+  req: EnqueueRequest,
+): Promise<{ run_ids: string[]; running_run_id: string | null; queue: QueueState }> {
+  const r = await fetch(`${BASE}/api/queue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) throw new Error("无法加入分析队列");
+  return r.json();
+}
+
+export async function getQueue(): Promise<QueueState> {
+  const r = await fetch(`${BASE}/api/queue`);
+  return r.ok ? r.json() : { running: null, pending: [] };
+}
+
+export async function removeQueueItem(runId: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/queue/${runId}`, { method: "DELETE" });
+  if (r.status === 409) throw new Error("该项已在分析中，无法移除");
+  if (!r.ok && r.status !== 204) throw new Error("移除排队项失败");
+}
+
+export async function clearQueue(): Promise<number> {
+  const r = await fetch(`${BASE}/api/queue`, { method: "DELETE" });
+  if (!r.ok) throw new Error("清空队列失败");
+  return (await r.json()).removed as number;
+}
+
+export async function reorderQueue(orderedRunIds: string[]): Promise<QueueState> {
+  const r = await fetch(`${BASE}/api/queue/order`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ordered_run_ids: orderedRunIds }),
+  });
+  if (!r.ok) throw new Error("调整顺序失败");
+  return r.json();
 }
 
 export async function cancelAnalysis(runId: string): Promise<void> {

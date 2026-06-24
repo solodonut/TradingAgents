@@ -1,6 +1,6 @@
 export type AssetType = "stock" | "crypto";
 export type Decision = "Buy" | "Overweight" | "Hold" | "Underweight" | "Sell";
-export type RunStatus = "running" | "completed" | "error" | "cancelled";
+export type RunStatus = "pending" | "running" | "completed" | "error" | "cancelled";
 
 export interface AnalysisRequest {
   ticker: string;
@@ -31,6 +31,19 @@ export interface HistorySummary {
   decision: Decision | null;
   status: RunStatus;
   created_at: string;
+}
+
+export interface QueueItem {
+  run_id: string;
+  ticker: string;
+  status: RunStatus;
+  queue_position: number | null;
+  created_at: string;
+}
+
+export interface QueueState {
+  running: QueueItem | null;
+  pending: QueueItem[];
 }
 
 export interface RunResult {
