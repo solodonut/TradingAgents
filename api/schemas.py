@@ -95,6 +95,7 @@ class SessionProfile(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    chat_llm: str | None = None
 
 
 class ChatSessionCreate(BaseModel):

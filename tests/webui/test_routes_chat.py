@@ -28,12 +28,16 @@ def _install_fake_chat(client, chat_responses, vision_content="[]"):
         def invoke(self, messages):  # vision path
             return AIMessage(content=self._vision_content)
 
-    def factory():
+    received = {}
+
+    def factory(model=None):
+        received["model"] = model
         chain = _FakeChain(chat_responses)
         llm = _FakeLLM(chain, vision_content)
         return llm, llm
 
     main.app.state.chat_llm_factory = factory
+    return received
 
 
 def _create_completed_run(store, run_id: str, ticker: str) -> None:
@@ -570,7 +574,7 @@ def test_stream_chat_registers_profile_tools_and_injects_profile(client):
         def invoke(self, messages):
             return AIMessage(content="[]")
 
-    main.app.state.chat_llm_factory = lambda: (_LLM(), _LLM())
+    main.app.state.chat_llm_factory = lambda model=None: (_LLM(), _LLM())
 
     sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
     client.put(
@@ -586,3 +590,25 @@ def test_stream_chat_registers_profile_tools_and_injects_profile(client):
     assert "propose_session_facts" in captured["tool_names"]
     assert "300000" in captured["system"]
     assert "done" in body
+
+
+def test_stream_chat_passes_chat_llm_to_factory(client):
+    received = _install_fake_chat(client, [AIMessage(content="ok")])
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    with client.stream(
+        "POST",
+        f"/api/chat/sessions/{sid}/stream",
+        json={"message": "hi", "chat_llm": "claude-opus-4-8"},
+    ) as stream:
+        "".join(stream.iter_text())
+    assert received["model"] == "claude-opus-4-8"
+
+
+def test_stream_chat_defaults_model_to_none_when_absent(client):
+    received = _install_fake_chat(client, [AIMessage(content="ok")])
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    with client.stream(
+        "POST", f"/api/chat/sessions/{sid}/stream", json={"message": "hi"}
+    ) as stream:
+        "".join(stream.iter_text())
+    assert received["model"] is None

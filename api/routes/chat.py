@@ -337,7 +337,7 @@ async def stream_chat(
 
     history = _chat_history(store, session_id)
 
-    chat_llm, _ = request.app.state.chat_llm_factory()
+    chat_llm, _ = request.app.state.chat_llm_factory(model=req.chat_llm)
 
     def load_export_context() -> ExportContext:
         current_session = store.get_chat_session(session_id)
