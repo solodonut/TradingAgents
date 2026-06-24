@@ -9,6 +9,7 @@ import { DecisionCard } from "@/components/DecisionCard";
 import { HistorySidebar } from "@/components/HistorySidebar";
 import { RunDetail } from "@/components/RunDetail";
 import { RuntimeStatusPanel } from "@/components/RuntimeStatusPanel";
+import { QueuePanel } from "@/components/QueuePanel";
 import {
   deleteHistory,
   getConfigOptions,
@@ -16,13 +17,18 @@ import {
   getHistoryDetail,
   getAnalysisStatus,
   cancelAnalysis,
-  startAnalysis,
+  enqueueAnalysis,
+  getQueue,
+  removeQueueItem,
+  clearQueue,
+  reorderQueue,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
 import type {
   ConfigOptions,
   Decision,
   HistorySummary,
+  QueueState,
   RunResult,
   RunStatusDetail,
   SSEEvent,
@@ -51,6 +57,13 @@ const SECTION_LABELS: Record<string, string> = {
   trader_investment_plan: "交易员",
   final_trade_decision: "组合经理",
 };
+
+function workingAgentLabel(statuses: Record<string, string>): string | null {
+  const id = Object.entries(statuses).find(([, v]) => v === "working")?.[0];
+  if (!id) return null;
+  const section = AGENT_SECTION_MAP.find((m) => m.agent === id)?.section;
+  return (section && SECTION_LABELS[section]) || id;
+}
 
 const BUSY_ERROR = "已有分析正在运行，请等待当前分析完成后再试。";
 
@@ -99,6 +112,13 @@ export default function Home() {
   const [canceling, setCanceling] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
+  const [queue, setQueue] = useState<QueueState>({ running: null, pending: [] });
+
+  const refreshQueue = () =>
+    getQueue()
+      .then(setQueue)
+      .catch(() => setQueue({ running: null, pending: [] }));
+
   // Detail (history replay) mode
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunResult | null>(null);
@@ -120,6 +140,7 @@ export default function Home() {
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
     refreshHistory();
+    refreshQueue();
     return () => unsubscribeRef.current?.();
   }, []);
 
@@ -212,52 +233,68 @@ export default function Home() {
     deleteHistory(id).then(refreshHistory);
   };
 
-  const onStart = async (req: Parameters<typeof startAnalysis>[0]) => {
-    exitDetail();
+  const resetRunView = () => {
     setStatuses({});
     setMessages([]);
     setDecision(null);
-    setError(null);
-    setRunning(true);
     setLiveRuntimeStatus(null);
     setLiveRuntimeError(null);
     setCanceling(false);
+  };
+
+  const followRun = (runId: string) => {
+    setCurrentRunId(runId);
+    setRunning(true);
+    unsubscribeRef.current = subscribe(
+      runId,
+      (e: SSEEvent) => {
+        if (e.event === "agent_status")
+          setStatuses((s) => ({ ...s, [e.data.agent]: e.data.status }));
+        else if (e.event === "message")
+          setMessages((m) => [...m, { agent: e.data.agent, content: e.data.content }]);
+        else if (e.event === "done")
+          setDecision({ d: e.data.decision, detail: e.data.final_trade_decision });
+        else if (e.event === "error") setError(e.data.message);
+        else if (e.event === "cancelled") setError("分析已停止");
+      },
+      () => {
+        unsubscribeRef.current = null;
+        refreshHistory();
+        // follow the next running item, if the scheduler advanced
+        getQueue()
+          .then((q) => {
+            setQueue(q);
+            if (q.running) {
+              resetRunView();
+              followRun(q.running.run_id);
+            } else {
+              setRunning(false);
+              setCanceling(false);
+              setCurrentRunId(null);
+              setError((current) => (current === BUSY_ERROR ? null : current));
+            }
+          })
+          .catch(() => {
+            setRunning(false);
+            setCurrentRunId(null);
+          });
+      },
+    );
+  };
+
+  const onStart = async (req: Parameters<typeof enqueueAnalysis>[0]) => {
+    exitDetail();
+    resetRunView();
+    setError(null);
     try {
-      const runId = await startAnalysis(req);
-      setCurrentRunId(runId);
-      unsubscribeRef.current = subscribe(
-        runId,
-        (e: SSEEvent) => {
-          if (e.event === "agent_status")
-            setStatuses((s) => ({ ...s, [e.data.agent]: e.data.status }));
-          else if (e.event === "message")
-            setMessages((m) => [...m, { agent: e.data.agent, content: e.data.content }]);
-          else if (e.event === "done")
-            setDecision({ d: e.data.decision, detail: e.data.final_trade_decision });
-          else if (e.event === "error") setError(e.data.message);
-          else if (e.event === "cancelled") setError("分析已停止");
-        },
-        () => {
-          setRunning(false);
-          setCanceling(false);
-          setCurrentRunId(null);
-          setError((current) => (current === BUSY_ERROR ? null : current));
-          unsubscribeRef.current = null;
-          refreshHistory();
-        },
-      );
+      const { running_run_id, queue: nextQueue } = await enqueueAnalysis(req);
+      setQueue(nextQueue);
+      refreshHistory();
+      if (running_run_id) followRun(running_run_id);
     } catch (err) {
       setRunning(false);
-      setCanceling(false);
       setCurrentRunId(null);
-      setLiveRuntimeStatus(null);
-      setLiveRuntimeError(null);
-      const msg = (err as Error).message;
-      setError(
-        msg === "已有分析正在运行"
-          ? BUSY_ERROR
-          : msg,
-      );
+      setError((err as Error).message);
     }
   };
 
@@ -272,6 +309,7 @@ export default function Home() {
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       refreshHistory();
+      refreshQueue();
       if (selectedId === runId) {
         const next = await getHistoryDetail(runId);
         setDetail(next);
@@ -293,6 +331,15 @@ export default function Home() {
     if (!currentRunId) return;
     void cancelRun(currentRunId);
   };
+
+  const onRemoveQueueItem = (runId: string) =>
+    removeQueueItem(runId).then(refreshQueue).catch((e) => setError((e as Error).message));
+
+  const onClearQueue = () =>
+    clearQueue().then(refreshQueue).catch((e) => setError((e as Error).message));
+
+  const onReorderQueue = (orderedRunIds: string[]) =>
+    reorderQueue(orderedRunIds).then(setQueue).catch((e) => setError((e as Error).message));
 
   const inDetailMode = selectedId !== null;
   const selectedRunning = detail?.status === "running";
@@ -384,6 +431,7 @@ export default function Home() {
                     run={detail}
                     runtime={runtimeStatus}
                     runtimeError={runtimeError}
+                    currentAgentLabel={workingAgentLabel(sidebarStatuses)}
                     onCancel={detail.status === "running" ? cancelRun : undefined}
                     canceling={canceling}
                   />
@@ -435,6 +483,7 @@ export default function Home() {
                   <RuntimeStatusPanel
                     runtime={liveRuntimeStatus}
                     runtimeError={liveRuntimeError}
+                    currentAgentLabel={workingAgentLabel(statuses)}
                   />
                 )}
                 {messages.map((m, i) => (
@@ -503,6 +552,7 @@ export default function Home() {
                 <RuntimeStatusPanel
                   runtime={sidebarRuntime}
                   runtimeError={sidebarRuntimeError}
+                  currentAgentLabel={workingAgentLabel(sidebarStatuses)}
                 />
               </>
             ) : (
@@ -514,6 +564,15 @@ export default function Home() {
                 {error}
               </div>
             )}
+
+            <QueuePanel
+              queue={queue}
+              onRemove={onRemoveQueueItem}
+              onClear={onClearQueue}
+              onReorder={onReorderQueue}
+              onCancelRunning={(runId) => void cancelRun(runId)}
+              canceling={canceling}
+            />
 
             <AgentProgress statuses={sidebarStatuses} />
 

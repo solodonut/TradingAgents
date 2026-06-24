@@ -1,6 +1,6 @@
 "use client";
-import { LoaderCircle, Play } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Cpu, LoaderCircle, Play, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
 export function ConfigCard({
@@ -9,10 +9,10 @@ export function ConfigCard({
   running = false,
 }: {
   options: ConfigOptions;
-  onStart: (req: AnalysisRequest) => void;
+  onStart: (req: { tickers: string[] } & Omit<AnalysisRequest, "ticker">) => void;
   running?: boolean;
 }) {
-  const [ticker, setTicker] = useState("NVDA");
+  const [tickersText, setTickersText] = useState("NVDA");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [assetType, setAssetType] = useState<"stock" | "crypto">("stock");
   const [analysts, setAnalysts] = useState<string[]>([
@@ -25,6 +25,8 @@ export function ConfigCard({
   const [language, setLanguage] = useState("Chinese");
   const [deepLlm, setDeepLlm] = useState(options.configured_deep_llm ?? "");
   const [quickLlm, setQuickLlm] = useState(options.configured_quick_llm ?? "");
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const modelsRef = useRef<HTMLDivElement>(null);
 
   // 挂载后从 localStorage 回填用户上次的选择（仅当仍是当前 provider 的有效选项）
   useEffect(() => {
@@ -36,8 +38,34 @@ export function ConfigCard({
     if (savedQuick && validQuick.has(savedQuick)) setQuickLlm(savedQuick);
   }, [options]);
 
+  // 弹出卡片：点击外部或按 Esc 关闭
+  useEffect(() => {
+    if (!modelsOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!modelsRef.current?.contains(e.target as Node)) setModelsOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModelsOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [modelsOpen]);
+
   const toggle = (v: string) =>
     setAnalysts((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
+
+  const parsedTickers = Array.from(
+    new Set(
+      tickersText
+        .split(/[\s,，、\n]+/)
+        .map((t) => t.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  );
 
   const activeAnalysts = analysts.filter(
     (a) => !(assetType === "crypto" && a === "fundamentals"),
@@ -49,7 +77,7 @@ export function ConfigCard({
       onSubmit={(e) => {
         e.preventDefault();
         onStart({
-          ticker,
+          tickers: parsedTickers,
           trade_date: date,
           asset_type: assetType,
           analysts: activeAnalysts,
@@ -61,11 +89,86 @@ export function ConfigCard({
         });
       }}
     >
-      <div className="border-b border-border px-3 py-2">
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-          Run Console
+      <div ref={modelsRef} className="relative border-b border-border px-3 py-2">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+              Run Console
+            </div>
+            <div className="mt-0.5 text-sm text-foreground">新分析配置</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModelsOpen((v) => !v)}
+            aria-expanded={modelsOpen}
+            aria-haspopup="dialog"
+            title="选择模型"
+            className={`glass-control inline-flex size-8 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:border-primary ${
+              modelsOpen
+                ? "border-primary/50 text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <span className="sr-only">选择模型</span>
+            <Cpu className="size-4" aria-hidden="true" />
+          </button>
         </div>
-        <div className="mt-0.5 text-sm text-foreground">新分析配置</div>
+
+        {modelsOpen && (
+          <div
+            role="dialog"
+            aria-label="模型选择"
+            className="absolute left-2 right-2 top-[calc(100%-0.25rem)] z-50 space-y-3 rounded-lg border border-white/10 bg-popover/98 p-3 shadow-2xl backdrop-blur-2xl backdrop-saturate-150 animate-in fade-in-0 zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between">
+              <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+                Models
+              </div>
+              <button
+                type="button"
+                onClick={() => setModelsOpen(false)}
+                aria-label="关闭"
+                className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:border-primary"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-[0.7rem] text-muted-foreground">深度思考模型</span>
+              <select
+                value={deepLlm}
+                onChange={(e) => {
+                  setDeepLlm(e.target.value);
+                  localStorage.setItem("ta:deep_think_llm", e.target.value);
+                }}
+                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
+              >
+                {options.model_options.deep.map(([label, id]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-[0.7rem] text-muted-foreground">快速思考模型</span>
+              <select
+                value={quickLlm}
+                onChange={(e) => {
+                  setQuickLlm(e.target.value);
+                  localStorage.setItem("ta:quick_think_llm", e.target.value);
+                }}
+                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
+              >
+                {options.model_options.quick.map(([label, id]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 p-3">
@@ -75,12 +178,13 @@ export function ConfigCard({
           </legend>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9.5rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_9.5rem]">
             <label className="space-y-1">
-              <span className="sr-only">Ticker</span>
-              <input
-                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
-                value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                placeholder="159241.SZ"
+              <span className="sr-only">Tickers</span>
+              <textarea
+                rows={2}
+                className="glass-control w-full resize-y rounded-md px-2.5 py-1.5 font-mono text-sm tracking-wide text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary"
+                value={tickersText}
+                onChange={(e) => setTickersText(e.target.value)}
+                placeholder="NVDA, AAPL, 159241.SZ"
               />
             </label>
             <label className="space-y-1">
@@ -183,49 +287,9 @@ export function ConfigCard({
           </label>
         </fieldset>
 
-        <fieldset className="space-y-2">
-          <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-            Models
-          </legend>
-          <label className="block space-y-1">
-            <span className="text-[0.7rem] text-muted-foreground">深度思考模型</span>
-            <select
-              value={deepLlm}
-              onChange={(e) => {
-                setDeepLlm(e.target.value);
-                localStorage.setItem("ta:deep_think_llm", e.target.value);
-              }}
-              className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
-            >
-              {options.model_options.deep.map(([label, id]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-[0.7rem] text-muted-foreground">快速思考模型</span>
-            <select
-              value={quickLlm}
-              onChange={(e) => {
-                setQuickLlm(e.target.value);
-                localStorage.setItem("ta:quick_think_llm", e.target.value);
-              }}
-              className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
-            >
-              {options.model_options.quick.map(([label, id]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </fieldset>
-
         <button
           type="submit"
-          disabled={running || activeAnalysts.length === 0}
+          disabled={running || activeAnalysts.length === 0 || parsedTickers.length === 0}
           className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-md px-3 font-mono text-xs font-bold uppercase tracking-[0.18em] transition-colors focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed ${
             running
               ? "thinking-border"
@@ -237,7 +301,11 @@ export function ConfigCard({
           ) : (
             <Play className="size-4" />
           )}
-          {running ? "分析进行中" : "开始分析"}
+          {running
+            ? "分析进行中"
+            : parsedTickers.length > 1
+              ? `分析 ${parsedTickers.length} 个标的`
+              : "开始分析"}
         </button>
       </div>
     </form>
