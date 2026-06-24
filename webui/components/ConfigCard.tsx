@@ -16,6 +16,7 @@ export function ConfigCard({
   running?: boolean;
 }) {
   const [tickers, setTickers] = useState<TickerItem[]>([{ ticker: "NVDA", name: "" }]);
+  const [tickersLoaded, setTickersLoaded] = useState(false);
   const [tickerInput, setTickerInput] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [assetType, setAssetType] = useState<"stock" | "crypto">("stock");
@@ -59,23 +60,27 @@ export function ConfigCard({
     };
   }, [modelsOpen]);
 
-  // 挂载后从 localStorage 回填代码清单
+  // 挂载后从 localStorage 回填代码清单（读完才标记 loaded，解锁下面的写回）
   useEffect(() => {
     const saved = localStorage.getItem("ta:ticker_list");
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) setTickers(parsed);
-    } catch {
-      // 损坏的数据：忽略，保留默认清单
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setTickers(parsed);
+      } catch {
+        // 损坏的数据：忽略，保留默认清单
+      }
     }
+    setTickersLoaded(true);
   }, []);
 
-  // 写 effect 在读 effect 之后以恢复的正确值收敛，SSR 安全；不要改成惰性 useState 初始化（会在服务端崩溃 / hydration 不一致）。
-  // 清单每次变化都写回
+  // 清单每次变化都写回。必须等读 effect 完成（tickersLoaded）才写，否则挂载时会用默认值
+  // 覆盖掉 localStorage 里已保存的清单（React 19 严格模式下 effect 双调用尤其明显）。
+  // 不要改成惰性 useState 初始化：本组件会在服务端 SSR，读 localStorage 会崩溃 / hydration 不一致。
   useEffect(() => {
+    if (!tickersLoaded) return;
     localStorage.setItem("ta:ticker_list", JSON.stringify(tickers));
-  }, [tickers]);
+  }, [tickers, tickersLoaded]);
 
   const toggle = (v: string) =>
     setAnalysts((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
