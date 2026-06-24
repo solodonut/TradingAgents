@@ -1,6 +1,6 @@
 "use client";
 import { LoaderCircle, Play } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
 export function ConfigCard({
@@ -23,6 +23,18 @@ export function ConfigCard({
   ]);
   const [depth, setDepth] = useState<1 | 3 | 5>(3);
   const [language, setLanguage] = useState("Chinese");
+  const [deepLlm, setDeepLlm] = useState(options.configured_deep_llm ?? "");
+  const [quickLlm, setQuickLlm] = useState(options.configured_quick_llm ?? "");
+
+  // 挂载后从 localStorage 回填用户上次的选择（仅当仍是当前 provider 的有效选项）
+  useEffect(() => {
+    const validDeep = new Set(options.model_options.deep.map(([, id]) => id));
+    const validQuick = new Set(options.model_options.quick.map(([, id]) => id));
+    const savedDeep = localStorage.getItem("ta:deep_think_llm");
+    const savedQuick = localStorage.getItem("ta:quick_think_llm");
+    if (savedDeep && validDeep.has(savedDeep)) setDeepLlm(savedDeep);
+    if (savedQuick && validQuick.has(savedQuick)) setQuickLlm(savedQuick);
+  }, [options]);
 
   const toggle = (v: string) =>
     setAnalysts((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
@@ -44,8 +56,8 @@ export function ConfigCard({
           research_depth: depth,
           output_language: language,
           llm_provider: null,
-          deep_think_llm: null,
-          quick_think_llm: null,
+          deep_think_llm: deepLlm || null,
+          quick_think_llm: quickLlm || null,
         });
       }}
     >
@@ -165,6 +177,46 @@ export function ConfigCard({
               {options.languages.map((l) => (
                 <option key={l} value={l}>
                   {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+            Models
+          </legend>
+          <label className="block space-y-1">
+            <span className="text-[0.7rem] text-muted-foreground">深度思考模型</span>
+            <select
+              value={deepLlm}
+              onChange={(e) => {
+                setDeepLlm(e.target.value);
+                localStorage.setItem("ta:deep_think_llm", e.target.value);
+              }}
+              className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
+            >
+              {options.model_options.deep.map(([label, id]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[0.7rem] text-muted-foreground">快速思考模型</span>
+            <select
+              value={quickLlm}
+              onChange={(e) => {
+                setQuickLlm(e.target.value);
+                localStorage.setItem("ta:quick_think_llm", e.target.value);
+              }}
+              className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
+            >
+              {options.model_options.quick.map(([label, id]) => (
+                <option key={id} value={id}>
+                  {label}
                 </option>
               ))}
             </select>

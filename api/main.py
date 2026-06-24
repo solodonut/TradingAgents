@@ -154,12 +154,14 @@ def real_graph_factory(req):
     return graph, init_state, None, None
 
 
-def real_chat_llm_factory():
+def real_chat_llm_factory(model: str | None = None):
     """Build (chat_llm, vision_llm) LangChain models from DEFAULT_CONFIG.
 
-    Both use the configured provider/model. The vision model must support image
-    input (anthropic / google / openai families). set_config() makes the
-    dataflows vendor routing match the configured data_vendors.
+    Both use the configured provider. ``model`` overrides the chat model when
+    provided (still on the configured provider); otherwise falls back to the
+    configured quick_think_llm. The vision model must support image input
+    (anthropic / google / openai families). set_config() makes the dataflows
+    vendor routing match the configured data_vendors.
     """
     from tradingagents.dataflows.config import set_config
     from tradingagents.llm_clients import create_llm_client
@@ -168,10 +170,10 @@ def real_chat_llm_factory():
     set_config(config)
 
     provider = config["llm_provider"]
-    model = config["quick_think_llm"]
+    chat_model = model or config["quick_think_llm"]
     base_url = config.get("backend_url")
 
-    client = create_llm_client(provider=provider, model=model, base_url=base_url)
+    client = create_llm_client(provider=provider, model=chat_model, base_url=base_url)
     chat_llm = client.get_llm()
     vision_llm = chat_llm
     return chat_llm, vision_llm
