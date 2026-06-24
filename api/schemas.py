@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 AssetType = Literal["stock", "crypto"]
 AnalystName = Literal["market", "social", "news", "fundamentals"]
 Decision = Literal["Buy", "Overweight", "Hold", "Underweight", "Sell"]
-RunStatus = Literal["running", "completed", "error", "cancelled"]
+RunStatus = Literal["pending", "running", "completed", "error", "cancelled"]
 
 
 class AnalysisRequest(BaseModel):
@@ -29,6 +29,56 @@ class AnalysisRequest(BaseModel):
         if not v:
             raise ValueError("at least one analyst is required")
         return v
+
+
+class EnqueueRequest(BaseModel):
+    tickers: list[str]
+    trade_date: str
+    asset_type: AssetType = "stock"
+    analysts: list[AnalystName] = Field(
+        default_factory=lambda: ["market", "social", "news", "fundamentals"]
+    )
+    research_depth: Literal[1, 3, 5] = 3
+    output_language: str = "Chinese"
+    llm_provider: str | None = None
+    deep_think_llm: str | None = None
+    quick_think_llm: str | None = None
+
+    @field_validator("tickers")
+    @classmethod
+    def _at_least_one_ticker(cls, v: list[str]) -> list[str]:
+        seen: list[str] = []
+        for raw in v:
+            t = raw.strip().upper()
+            if t and t not in seen:
+                seen.append(t)
+        if not seen:
+            raise ValueError("at least one ticker is required")
+        return seen
+
+    @field_validator("analysts")
+    @classmethod
+    def _at_least_one_analyst(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("at least one analyst is required")
+        return v
+
+
+class QueueItem(BaseModel):
+    run_id: str
+    ticker: str
+    status: RunStatus
+    queue_position: int | None
+    created_at: str
+
+
+class QueueState(BaseModel):
+    running: QueueItem | None
+    pending: list[QueueItem]
+
+
+class ReorderRequest(BaseModel):
+    ordered_run_ids: list[str]
 
 
 class HistorySummary(BaseModel):
