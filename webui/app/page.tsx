@@ -109,6 +109,7 @@ export default function Home() {
   const [liveRuntimeError, setLiveRuntimeError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const followGenRef = useRef(0);
 
   const [queue, setQueue] = useState<QueueState>({ running: null, pending: [] });
 
@@ -241,6 +242,7 @@ export default function Home() {
   };
 
   const followRun = (runId: string) => {
+    followGenRef.current += 1;
     setCurrentRunId(runId);
     setRunning(true);
     unsubscribeRef.current = subscribe(
@@ -267,7 +269,9 @@ export default function Home() {
   // after a cancel the backend advances only once the runner thread notices the
   // cancel between graph chunks — the next run may not be `running` on the first poll.
   const followNextInQueue = async (attempt = 0): Promise<void> => {
+    const gen = followGenRef.current;
     const q = await getQueue().catch(() => null);
+    if (followGenRef.current !== gen) return; // a newer follow-origin superseded us
     if (!q) {
       setRunning(false);
       setCanceling(false);
@@ -281,7 +285,10 @@ export default function Home() {
       return;
     }
     if (q.pending.length > 0 && attempt < 5) {
-      window.setTimeout(() => void followNextInQueue(attempt + 1), 600);
+      window.setTimeout(() => {
+        if (followGenRef.current !== gen) return; // superseded before retry fired
+        void followNextInQueue(attempt + 1);
+      }, 600);
       return;
     }
     setRunning(false);
@@ -290,6 +297,7 @@ export default function Home() {
   };
 
   const onStart = async (req: Parameters<typeof enqueueAnalysis>[0]) => {
+    followGenRef.current += 1;
     exitDetail();
     resetRunView();
     setError(null);
