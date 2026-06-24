@@ -19,6 +19,19 @@ export async function getConfigOptions(): Promise<ConfigOptions> {
   return r.json();
 }
 
+export async function lookupTicker(
+  code: string,
+): Promise<{ ticker: string; name: string | null; valid: boolean }> {
+  const t = code.trim().toUpperCase();
+  try {
+    const r = await fetch(`${BASE}/api/ticker/${encodeURIComponent(t)}`);
+    if (!r.ok) return { ticker: t, name: null, valid: false };
+    return await r.json();
+  } catch {
+    return { ticker: t, name: null, valid: false };
+  }
+}
+
 export async function startAnalysis(req: AnalysisRequest): Promise<string> {
   const r = await fetch(`${BASE}/api/analysis`, {
     method: "POST",
