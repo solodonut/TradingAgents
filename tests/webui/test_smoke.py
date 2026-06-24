@@ -21,3 +21,11 @@ def test_chat_routes_registered():
     # optional), so an empty body returns 200 — never 404 — when the chat
     # router is registered.
     assert client.post("/api/chat/sessions", json={}).status_code != 404
+
+
+@pytest.mark.smoke
+def test_queue_routes_registered():
+    from api.main import app
+
+    client = TestClient(app)
+    assert client.get("/api/queue").status_code == 200

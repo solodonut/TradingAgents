@@ -114,6 +114,10 @@ from api.routes import chat as chat_routes  # noqa: E402
 
 app.include_router(chat_routes.router)
 
+from api.routes import queue as queue_routes  # noqa: E402
+
+app.include_router(queue_routes.router)
+
 
 def real_graph_factory(req):
     """Build a TradingAgentsGraph from a request.
