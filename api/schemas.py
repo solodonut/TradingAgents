@@ -60,6 +60,7 @@ class ConfigOptions(BaseModel):
     configured_provider: str | None
     configured_deep_llm: str | None
     configured_quick_llm: str | None
+    model_options: dict[str, list[tuple[str, str]]]
 
 
 ChatRole = Literal["user", "assistant"]
