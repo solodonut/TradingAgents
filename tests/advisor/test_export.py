@@ -202,10 +202,11 @@ def test_export_chat_report_loads_current_context_at_invocation_and_returns_real
     )
 
     assert load_count == 2
-    assert first == {"status": "saved", "path": "report/2026-06-22-Old.md"}
+    today = date.today().isoformat()
+    assert first == {"status": "saved", "path": f"report/{today}-Old.md"}
     assert second == {
         "status": "saved",
-        "path": "report/2026-06-22-Current title.md",
+        "path": f"report/{today}-Current title.md",
     }
     assert (project_root / first["path"]).read_text(encoding="utf-8") == (
         "# Confirmed report\n"
