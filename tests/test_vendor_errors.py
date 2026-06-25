@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 import pytest
+import requests
 
 import tradingagents.dataflows.config as config_module
 import tradingagents.default_config as default_config
@@ -98,6 +99,41 @@ class RouterHandlesBaseTypesTests(unittest.TestCase):
             {"get_stock_data": {"alpha_vantage": _unconfigured}},
             clear=False,
         ), self.assertRaises(AlphaVantageNotConfiguredError):
+            interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
+
+    def test_sole_vendor_network_error_returns_unavailable_sentinel(self):
+        # A transient connectivity failure from the only vendor (e.g. East Money
+        # refusing the connection) must NOT crash the run: it degrades to an
+        # explicit UNAVAILABLE sentinel so the agent reports the source as down.
+        set_config({"data_vendors": {"core_stock_apis": "alpha_vantage"}})
+
+        def _disconnected(*a, **k):
+            raise requests.exceptions.ConnectionError(
+                "('Connection aborted.', RemoteDisconnected('Remote end closed "
+                "connection without response'))"
+            )
+
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {"get_stock_data": {"alpha_vantage": _disconnected}},
+            clear=False,
+        ):
+            out = interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
+        self.assertIn("DATA_SOURCE_UNAVAILABLE", out)
+
+    def test_sole_vendor_non_network_error_still_raises(self):
+        # The network-sentinel path must NOT swallow genuine bugs: a non-network
+        # exception from the sole vendor still surfaces loudly.
+        set_config({"data_vendors": {"core_stock_apis": "alpha_vantage"}})
+
+        def _bug(*a, **k):
+            raise ValueError("unexpected parse failure")
+
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {"get_stock_data": {"alpha_vantage": _bug}},
+            clear=False,
+        ), self.assertRaises(ValueError):
             interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
 
 

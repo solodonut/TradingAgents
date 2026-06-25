@@ -1,5 +1,7 @@
 import logging
 
+import requests
+
 from .akshare_fundamentals import (
     get_balance_sheet as get_akshare_balance_sheet,
     get_cashflow as get_akshare_cashflow,
@@ -43,6 +45,20 @@ from .yfinance_news import get_global_news_yfinance, get_news_yfinance
 logger = logging.getLogger(__name__)
 
 DISABLED_VENDOR_SENTINELS = {"disabled", "none", "off"}
+
+# Transient connectivity failures (host unreachable, proxy refuses to tunnel,
+# timeout, chunked-read abort). When the configured vendor chain fails ONLY
+# with these — and no vendor reports clean "no data" — route_to_vendor returns
+# an UNAVAILABLE sentinel instead of re-raising, so one unreachable data source
+# degrades to "data unavailable" for that single tool call rather than crashing
+# the whole multi-agent run. Honors the "never raises" contract in AGENTS.md.
+# requests wraps the underlying urllib3 RemoteDisconnected in ConnectionError.
+_NETWORK_ERRORS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.ProxyError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
 
 # Tools organized by category
 TOOLS_CATEGORIES = {
@@ -279,8 +295,28 @@ def route_to_vendor(method: str, *args, **kwargs):
             f"fabricate values — report that data is unavailable for this symbol."
         )
 
-    # No vendor returned data and none reported clean "no data" — surface the
-    # first real error (e.g. the primary vendor's network failure).
+    # No vendor returned data and none reported clean "no data". If the only
+    # failures were transient connectivity errors (upstream host unreachable or
+    # blocked, e.g. East Money refusing non-mainland egress), do NOT crash the
+    # run: return an explicit UNAVAILABLE sentinel so the agent reports the
+    # source as down instead of aborting the whole analysis (honors the
+    # "never raises" contract). Genuine non-network errors (bad symbol, parse
+    # bug) still raise — those are programming/data errors that must surface.
+    if isinstance(first_error, _NETWORK_ERRORS):
+        logger.warning(
+            "All vendors for %s failed with a network error; returning "
+            "DATA_SOURCE_UNAVAILABLE sentinel instead of raising: %s",
+            method, first_error,
+        )
+        return (
+            f"DATA_SOURCE_UNAVAILABLE: Could not reach any data source for "
+            f"'{method}' due to a network/connectivity error ({first_error}). "
+            f"The data vendor host may be unreachable or blocked from this "
+            f"network. Do not estimate or fabricate values — report that this "
+            f"data is temporarily unavailable."
+        )
+
+    # A non-network error from the primary vendor — surface it loudly.
     if first_error is not None:
         raise first_error
 

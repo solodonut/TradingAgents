@@ -58,6 +58,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **数据源不可达不再崩整轮分析.** 当配置的 vendor 链仅因网络/连接错误
+  (`ConnectionError`/`ProxyError`/`Timeout`/`ChunkedEncodingError`,如 East Money
+  对非大陆出口直接关连接的 `RemoteDisconnected`) 全部失败、且无 vendor 报告 clean
+  no-data 时,`route_to_vendor` 改为返回 `DATA_SOURCE_UNAVAILABLE` 哨兵而非
+  `raise first_error`,兑现 AGENTS.md “永不抛错” 契约——analyst 报告 “数据暂不可用”
+  而不是让单个不可达数据源杀死整个多智能体 run。非网络的真错误(坏符号、解析 bug)
+  仍照常抛出。
 - **Empty provider response retry.** `NormalizedChatOpenAI.invoke` now retries
   once when an OpenAI-compatible gateway returns an empty successful response
   that the SDK parses as `None` (surfacing as
