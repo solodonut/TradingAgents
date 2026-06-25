@@ -58,6 +58,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **WebUI Agent Matrix 不再把风险辩论阶段误标为「组合经理」.** Agent Matrix 之前没有
+  风险辩论(激进/保守/中立)这一格,交易员之后直接跳到组合经理。流水线跑到风险辩论时
+  (该阶段用 quick 模型),进度兜底逻辑会把第一个未完成的格子=组合经理标成 WORKING,而
+  RUNTIME STATUS 的「模型」字段又显示风险辩论在飞的 quick 模型,拼成「组合经理 / quick 模型」
+  的假象,看起来像组合经理用错了模型(组合经理实际正确绑定 deep 模型,且此时尚未启动)。
+  现新增「风险辩论」行,并用在飞模型是否等于 deep 模型来区分「风险辩论中(quick)」与
+  「组合经理裁决中(deep)」,与已有的多空辩论/研究经理判别逻辑同构。
 - **LLM 请求不再因网关 hang 住而无限挂死.** `llm_request_timeout` 默认从 `None` 改为
   `300`(秒)。此前注释声称「None 留给各 SDK 自己的默认值」是错的:langchain_anthropic
   把 `default_request_timeout=None` 当成*有意义*的值,会显式把 `timeout=None` 传给自建

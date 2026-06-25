@@ -58,10 +58,12 @@ const SECTION_LABELS: Record<string, string> = {
   final_trade_decision: "组合经理",
 };
 
-// Agent Matrix row order, including the bull/bear debate phase. The debate has no
-// report section of its own (it only produces investment_plan via the research
-// manager), so it lives between the analysts and the research manager and is
-// derived from runtime signals rather than a section field.
+// Agent Matrix row order, including the bull/bear debate and 3-way risk debate
+// phases. Neither debate has a report section of its own (the bull/bear debate
+// only produces investment_plan via the research manager; the risk debate only
+// produces final_trade_decision via the portfolio manager), so each lives just
+// before the manager that consumes it and is derived from runtime signals
+// rather than a section field.
 const MATRIX_ORDER = [
   "market_analyst",
   "social_analyst",
@@ -70,6 +72,7 @@ const MATRIX_ORDER = [
   "debate",
   "research_manager",
   "trader",
+  "risk_debate",
   "portfolio_manager",
 ];
 
@@ -77,6 +80,7 @@ function workingAgentLabel(statuses: Record<string, string>): string | null {
   const id = Object.entries(statuses).find(([, v]) => v === "working")?.[0];
   if (!id) return null;
   if (id === "debate") return "多空辩论";
+  if (id === "risk_debate") return "风险辩论";
   const section = AGENT_SECTION_MAP.find((m) => m.agent === id)?.section;
   return (section && SECTION_LABELS[section]) || id;
 }
@@ -98,6 +102,9 @@ function deriveHistoryProgress(
   }
   // The debate feeds the research manager; once investment_plan exists it's over.
   if (hasSection(run.result, "investment_plan")) next["debate"] = "done";
+  // The risk debate feeds the portfolio manager; once final_trade_decision
+  // exists it's over.
+  if (hasSection(run.result, "final_trade_decision")) next["risk_debate"] = "done";
 
   if (run.status === "running") {
     const lastAgent = runtime?.last_report_section
@@ -107,20 +114,30 @@ function deriveHistoryProgress(
 
     if (!Object.values(next).includes("working")) {
       const working = MATRIX_ORDER.find((agent) => next[agent] !== "done");
+      // Two windows have no report section of their own, so a debate phase
+      // (quick model) and the manager that consumes it (deep model) share one
+      // window. Tell them apart by the live model: deep ⇒ manager judging,
+      // otherwise still debating. If deep == quick we can't distinguish, so it
+      // stays on the debate row until the manager's section lands.
+      const deep =
+        typeof run.config?.deep_think_llm === "string" ? run.config.deep_think_llm : null;
+      const model = runtime?.last_llm_model ?? null;
+      const managerJudging = deep != null && model === deep;
       if (working === "debate" || working === "research_manager") {
-        // Same section window (analysts done, no investment_plan yet) covers both
-        // the bull/bear debate (quick model) and the research manager's verdict
-        // (deep model). Tell them apart by the live model: deep ⇒ manager judging,
-        // otherwise still debating. If deep == quick we can't distinguish, so it
-        // stays on the debate row until investment_plan lands.
-        const deep =
-          typeof run.config?.deep_think_llm === "string" ? run.config.deep_think_llm : null;
-        const model = runtime?.last_llm_model ?? null;
-        if (deep && model === deep) {
+        // analysts done, no investment_plan yet: bull/bear debate vs research manager
+        if (managerJudging) {
           next["debate"] = "done";
           next["research_manager"] = "working";
         } else {
           next["debate"] = "working";
+        }
+      } else if (working === "risk_debate" || working === "portfolio_manager") {
+        // trader done, no final_trade_decision yet: 3-way risk debate vs portfolio manager
+        if (managerJudging) {
+          next["risk_debate"] = "done";
+          next["portfolio_manager"] = "working";
+        } else {
+          next["risk_debate"] = "working";
         }
       } else if (working) {
         next[working] = "working";
@@ -291,6 +308,10 @@ export default function Home() {
             // research manager reports, so mirror that into the debate row.
             ...(e.data.agent === "research_manager" && e.data.status === "done"
               ? { debate: "done" }
+              : {}),
+            // Likewise the risk debate finishes once the portfolio manager reports.
+            ...(e.data.agent === "portfolio_manager" && e.data.status === "done"
+              ? { risk_debate: "done" }
               : {}),
           }));
         else if (e.event === "message")
