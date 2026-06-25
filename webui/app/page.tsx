@@ -195,6 +195,24 @@ export default function Home() {
     return () => unsubscribeRef.current?.();
   }, []);
 
+  // The backend advances the queue whenever a runner thread finishes
+  // (scheduler.advance). The live SSE stream-close callback drives the UI in the
+  // common case, but it can't cover every path: a page reload re-mounts with no
+  // SSE subscription, and viewing a running run's history detail only polls that
+  // one run. While the queue has items the backend is still progressing, so poll
+  // both the queue panel and the history sidebar independently — otherwise both
+  // freeze on stale state until the page is reloaded. Keep the last known values
+  // on a transient error instead of blanking them.
+  const queueActive = queue.running !== null || queue.pending.length > 0;
+  useEffect(() => {
+    if (!queueActive) return;
+    const timer = window.setInterval(() => {
+      getQueue().then(setQueue).catch(() => {});
+      getHistory().then(setHistory).catch(() => {});
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [queueActive]);
+
   useEffect(() => {
     if (!currentRunId || !running) return;
     let alive = true;
