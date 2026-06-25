@@ -19,6 +19,8 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_DOMESTIC_CHINA_ONLY":  "domestic_china_only",
+    "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
+    "TRADINGAGENTS_LLM_REQUEST_TIMEOUT":  "llm_request_timeout",
 }
 
 
@@ -71,6 +73,18 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # variation on models that honor it; reasoning models largely ignore it
     # and no setting makes LLM output bit-identical across runs (see README).
     "temperature": None,
+    # Transient-failure resilience for LLM calls. Provider gateways (incl. the
+    # IBM ICA / Cloudflare front) intermittently return 5xx/429; the underlying
+    # SDK retries 408/409/429/>=500 with exponential backoff + jitter, but its
+    # default budget (2) is too small to ride out a multi-second gateway blip,
+    # so a single 502 in any node (e.g. a researcher's llm.invoke) crashes the
+    # whole multi-agent run. Forwarded to every provider client as max_retries.
+    # Override with TRADINGAGENTS_LLM_MAX_RETRIES.
+    "llm_max_retries": 6,
+    # Per-request timeout (seconds) forwarded to every provider client. None
+    # leaves each SDK at its own default. Override with
+    # TRADINGAGENTS_LLM_REQUEST_TIMEOUT.
+    "llm_request_timeout": None,
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,

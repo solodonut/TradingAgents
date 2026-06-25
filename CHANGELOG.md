@@ -58,6 +58,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **LLM 网关瞬时故障不再崩整轮分析.** Provider 网关(含 IBM ICA / Cloudflare 前端)
+  偶发 5xx/429;底层 SDK 虽会对 408/409/429/≥500 做指数退避重试,但默认预算仅 2,
+  撑不过数秒级网关抖动,任一节点(如 researcher 的 `llm.invoke`)收到一个 502 就崩掉
+  整个多智能体 run。新增跨 provider 的 `llm_max_retries`(默认 6)与
+  `llm_request_timeout`,经 `_get_provider_kwargs` 注入所有 provider client,
+  由 SDK 退避吸收瞬时故障。可用 `TRADINGAGENTS_LLM_MAX_RETRIES` /
+  `TRADINGAGENTS_LLM_REQUEST_TIMEOUT` 覆盖。
 - **数据源不可达不再崩整轮分析.** 当配置的 vendor 链仅因网络/连接错误
   (`ConnectionError`/`ProxyError`/`Timeout`/`ChunkedEncodingError`,如 East Money
   对非大陆出口直接关连接的 `RemoteDisconnected`) 全部失败、且无 vendor 报告 clean

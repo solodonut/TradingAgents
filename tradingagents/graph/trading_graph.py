@@ -173,6 +173,17 @@ class TradingAgentsGraph:
         if temperature is not None and temperature != "":
             kwargs["temperature"] = float(temperature)
 
+        # Transient-failure resilience: forward retry budget and timeout to
+        # every provider client (all list both as passthrough kwargs). The SDK
+        # absorbs transient 5xx/429/timeouts with backoff instead of crashing
+        # the run. int()/float() so env-string values coerce like temperature.
+        max_retries = self.config.get("llm_max_retries")
+        if max_retries is not None and max_retries != "":
+            kwargs["max_retries"] = int(max_retries)
+        request_timeout = self.config.get("llm_request_timeout")
+        if request_timeout is not None and request_timeout != "":
+            kwargs["timeout"] = float(request_timeout)
+
         return kwargs
 
     def _create_tool_nodes(self) -> dict[str, ToolNode]:
