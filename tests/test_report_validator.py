@@ -131,3 +131,24 @@ def test_structured_output_unsupported_marks_unverified(monkeypatch):
 
     assert "market_report" not in out
     assert "未校验" in out["validation_report"]
+
+
+@pytest.mark.unit
+def test_silent_correction_recorded_in_report(monkeypatch):
+    """当 LLM 修改了文本但 corrections 列表为空时，validation_report 必须有该字段的记录。"""
+    monkeypatch.setattr(rv, "build_verified_market_snapshot", lambda s, d: "SNAPSHOT")
+    # LLM 修改了文本，但没有给出逐项 corrections
+    llm, _ = _structured_llm(
+        invoke_return=CorrectedReport(
+            corrected_text="航空航天ETF天弘 近期走强。",
+            corrections=[],
+        )
+    )
+    node = rv.create_report_validator(llm, enabled=True)
+    out = node(_state(market_report="某基金 近期走强。"))
+
+    # (a) 字段必须被写回修正后的文本
+    assert out["market_report"] == "航空航天ETF天弘 近期走强。"
+    # (b) validation_report 必须包含该字段的兜底记录
+    assert "市场分析" in out["validation_report"]
+    assert "文本已被校验器修正" in out["validation_report"]

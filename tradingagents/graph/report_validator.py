@@ -141,6 +141,14 @@ def create_report_validator(llm, enabled: bool = True) -> Callable[[dict], dict]
             )
             if note is None and corrected != text:
                 updates[field] = corrected
+                if not items:
+                    items = [
+                        CorrectionItem(
+                            original="(未逐项列出)",
+                            fixed="(文本已被校验器修正)",
+                            reason="校验器修改了文本但未提供逐项明细",
+                        )
+                    ]
             entries.append((label, items, note))
 
         updates["validation_report"] = _render_validation_report(entries, snapshot)
