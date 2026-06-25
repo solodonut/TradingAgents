@@ -6,6 +6,7 @@ const AGENTS: { id: string; label: string }[] = [
   { id: "social_analyst", label: "情绪" },
   { id: "news_analyst", label: "新闻" },
   { id: "fundamentals_analyst", label: "基本面" },
+  { id: "debate", label: "多空辩论" },
   { id: "research_manager", label: "研究经理" },
   { id: "trader", label: "交易员" },
   { id: "portfolio_manager", label: "组合经理" },

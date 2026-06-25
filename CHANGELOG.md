@@ -58,6 +58,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **Agent Matrix 不再把多空辩论误挂在研究经理名下.** 此前矩阵无「研究员」行，多头/空头
+  辩论（用 quick 模型）整段被归到「研究经理 WORKING」，导致 RUNTIME STATUS 显示的模型是
+  quick 而非研究经理实际使用的 deep 模型，看起来像配置错乱。现矩阵在分析师与研究经理之间
+  新增「多空辩论」行；辩论与研究经理判定处于同一报告窗口（分析师已完成、investment_plan
+  未出），用 runtime 的当前模型与 run 配置的 `deep_think_llm` 是否一致来区分：deep ⇒
+  研究经理判定中，否则 ⇒ 多空辩论中（deep 与 quick 相同时无法区分，停留在辩论行直至出
+  investment_plan）。「当前 Agent」标签同步修正。
 - **LLM 网关瞬时故障不再崩整轮分析.** Provider 网关(含 IBM ICA / Cloudflare 前端)
   偶发 5xx/429;底层 SDK 虽会对 408/409/429/≥500 做指数退避重试,但默认预算仅 2,
   撑不过数秒级网关抖动,任一节点(如 researcher 的 `llm.invoke`)收到一个 502 就崩掉

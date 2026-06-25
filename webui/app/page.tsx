@@ -58,9 +58,25 @@ const SECTION_LABELS: Record<string, string> = {
   final_trade_decision: "组合经理",
 };
 
+// Agent Matrix row order, including the bull/bear debate phase. The debate has no
+// report section of its own (it only produces investment_plan via the research
+// manager), so it lives between the analysts and the research manager and is
+// derived from runtime signals rather than a section field.
+const MATRIX_ORDER = [
+  "market_analyst",
+  "social_analyst",
+  "news_analyst",
+  "fundamentals_analyst",
+  "debate",
+  "research_manager",
+  "trader",
+  "portfolio_manager",
+];
+
 function workingAgentLabel(statuses: Record<string, string>): string | null {
   const id = Object.entries(statuses).find(([, v]) => v === "working")?.[0];
   if (!id) return null;
+  if (id === "debate") return "多空辩论";
   const section = AGENT_SECTION_MAP.find((m) => m.agent === id)?.section;
   return (section && SECTION_LABELS[section]) || id;
 }
@@ -80,6 +96,8 @@ function deriveHistoryProgress(
   for (const { agent, section } of AGENT_SECTION_MAP) {
     if (hasSection(run.result, section)) next[agent] = "done";
   }
+  // The debate feeds the research manager; once investment_plan exists it's over.
+  if (hasSection(run.result, "investment_plan")) next["debate"] = "done";
 
   if (run.status === "running") {
     const lastAgent = runtime?.last_report_section
@@ -88,8 +106,25 @@ function deriveHistoryProgress(
     if (lastAgent && next[lastAgent] !== "done") next[lastAgent] = "working";
 
     if (!Object.values(next).includes("working")) {
-      const working = AGENT_SECTION_MAP.find(({ agent }) => next[agent] !== "done");
-      if (working) next[working.agent] = "working";
+      const working = MATRIX_ORDER.find((agent) => next[agent] !== "done");
+      if (working === "debate" || working === "research_manager") {
+        // Same section window (analysts done, no investment_plan yet) covers both
+        // the bull/bear debate (quick model) and the research manager's verdict
+        // (deep model). Tell them apart by the live model: deep ⇒ manager judging,
+        // otherwise still debating. If deep == quick we can't distinguish, so it
+        // stays on the debate row until investment_plan lands.
+        const deep =
+          typeof run.config?.deep_think_llm === "string" ? run.config.deep_think_llm : null;
+        const model = runtime?.last_llm_model ?? null;
+        if (deep && model === deep) {
+          next["debate"] = "done";
+          next["research_manager"] = "working";
+        } else {
+          next["debate"] = "working";
+        }
+      } else if (working) {
+        next[working] = "working";
+      }
     }
   }
 
@@ -249,7 +284,15 @@ export default function Home() {
       runId,
       (e: SSEEvent) => {
         if (e.event === "agent_status")
-          setStatuses((s) => ({ ...s, [e.data.agent]: e.data.status }));
+          setStatuses((s) => ({
+            ...s,
+            [e.data.agent]: e.data.status,
+            // The debate has no status event of its own; it's finished once the
+            // research manager reports, so mirror that into the debate row.
+            ...(e.data.agent === "research_manager" && e.data.status === "done"
+              ? { debate: "done" }
+              : {}),
+          }));
         else if (e.event === "message")
           setMessages((m) => [...m, { agent: e.data.agent, content: e.data.content }]);
         else if (e.event === "done")
