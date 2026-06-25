@@ -11,7 +11,7 @@ import requests
 
 import tradingagents.dataflows.config as config_module
 import tradingagents.default_config as default_config
-from tradingagents.dataflows import interface
+from tradingagents.dataflows import akshare_utils, interface
 from tradingagents.dataflows.alpha_vantage_common import (
     AlphaVantageNotConfiguredError,
     AlphaVantageRateLimitError,
@@ -135,6 +135,32 @@ class RouterHandlesBaseTypesTests(unittest.TestCase):
             clear=False,
         ), self.assertRaises(ValueError):
             interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
+
+
+@pytest.mark.unit
+class AkShareRetryCircuitTests(unittest.TestCase):
+    def tearDown(self):
+        akshare_utils.reset_akshare_network_circuit()
+
+    def test_network_failure_opens_short_circuit_for_repeated_calls(self):
+        calls = 0
+
+        def _disconnected():
+            nonlocal calls
+            calls += 1
+            raise requests.exceptions.ConnectionError("Remote end closed connection")
+
+        with mock.patch("tradingagents.dataflows.akshare_utils.time.sleep"), \
+                self.assertRaises(requests.exceptions.ConnectionError):
+            akshare_utils.ak_retry(_disconnected, max_retries=1, circuit_key="stock_zh_a_hist")
+
+        self.assertEqual(calls, 2)
+
+        with self.assertRaises(requests.exceptions.ConnectionError) as ctx:
+            akshare_utils.ak_retry(_disconnected, max_retries=1, circuit_key="stock_zh_a_hist")
+
+        self.assertEqual(calls, 2)
+        self.assertIn("temporarily unavailable", str(ctx.exception))
 
 
 if __name__ == "__main__":
