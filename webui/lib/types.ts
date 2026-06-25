@@ -31,6 +31,7 @@ export interface HistorySummary {
   decision: Decision | null;
   status: RunStatus;
   created_at: string;
+  instrument_name?: string | null;
 }
 
 export interface QueueItem {

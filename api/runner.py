@@ -77,6 +77,9 @@ class AnalysisRunner:
         seen: set[str] = set()
         accumulated: dict = {}
         stream_args = getattr(graph, "_stream_args", {}) or {}
+        instrument_name = getattr(graph, "_instrument_name", None)
+        if instrument_name:
+            self._store.set_instrument_name(run_id, instrument_name)
         try:
             for chunk in graph.graph.stream(init_state, **stream_args):
                 if self._is_cancelled():

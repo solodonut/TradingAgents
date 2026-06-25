@@ -88,6 +88,7 @@ class HistorySummary(BaseModel):
     decision: Decision | None
     status: RunStatus
     created_at: str
+    instrument_name: str | None = None
 
 
 class RunResult(BaseModel):

@@ -87,6 +87,37 @@ def test_runner_emits_done_and_calls_store(tmp_path):
     assert store.get_run("r1").status == "completed"
 
 
+def test_runner_persists_instrument_name_from_graph(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "SPY", "2024-05-10", "stock", {})
+
+    fake = _FakeGraph(chunks=[{"market_report": "m"}], final_state=None, decision=None)
+    fake._instrument_name = "SPDR S&P 500 ETF Trust"
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q)
+
+    runner.run(run_id="r1", graph=fake, init_state={}, decision=None, final_state=None)
+
+    assert store.list_runs()[0].instrument_name == "SPDR S&P 500 ETF Trust"
+
+
+def test_runner_without_instrument_name_does_not_error(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    # _FakeGraph has no _instrument_name attribute -> should be skipped silently.
+    fake = _FakeGraph(chunks=[{"market_report": "m"}], final_state=None, decision=None)
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q)
+
+    runner.run(run_id="r1", graph=fake, init_state={}, decision=None, final_state=None)
+
+    assert store.list_runs()[0].instrument_name is None
+
+
 def test_runner_persists_partial_sections_while_running(tmp_path):
     from api.store import Store
 

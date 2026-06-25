@@ -10,6 +10,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- WebUI 历史记录列表在标的代码下方显示标的可读名称（A 股/ETF 中文名、其余 yfinance 公司全名）。
+  名称在分析启动时由 `resolve_instrument_identity` 解析并落库到 `analysis_runs.instrument_name`
+  新列（动态迁移，兼容旧库），经 `GET /api/history` 返回；解析不到时留空、前端回退为仅显示代码。
+  旧记录可用 `scripts/backfill_instrument_names.py` 回填（先解析已存上下文文本、否则联网兜底）。
 - 决策流水线末尾新增报告校验节点：对各报告中的标的名称与可验证市场数字做事实校对、自动修正不一致，并产出 `validation_report` 校验报告。可经 `TRADINGAGENTS_REPORT_VALIDATION_ENABLED` 关闭。
 - WebUI 分析配置改用可持久化的代码清单：单代码输入框逐个添加、可增删排序、localStorage
   长期保存（刷新/重开不变，分析后保留），开始分析按清单顺序入队。名称查询
