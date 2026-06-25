@@ -80,9 +80,16 @@ def test_sentiment_analyst_skips_stocktwits_and_reddit_in_china_mode():
 
 @pytest.mark.unit
 def test_domestic_china_identity_resolution_skips_yfinance():
+    # A-shares resolve their name from the domestic source (not overseas
+    # yfinance) so the analyst prompt carries the real instrument name.
     resolve_instrument_identity.cache_clear()
-    with mock.patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as ticker:
-        assert resolve_instrument_identity("159241.SZ") == {}
+    with mock.patch(
+        "tradingagents.dataflows.ticker_name.resolve_ticker_name",
+        return_value="航空航天ETF天弘",
+    ), mock.patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as ticker:
+        assert resolve_instrument_identity("159241.SZ") == {
+            "company_name": "航空航天ETF天弘"
+        }
     ticker.assert_not_called()
 
 

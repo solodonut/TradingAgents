@@ -58,6 +58,12 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **A 股/ETF 分析报告标题不再编造标的名称.** 反幻觉的标的身份注入此前在
+  `domestic_china_only`（默认开启）下对 A 股直接返回空身份，分析管线只拿到纯代码、
+  没有名称，LLM 便自行虚构（如 `159241` 写成「中证全球半导体ETF」，实为「航空航天ETF天弘」），
+  与 WebUI 侧栏的 AKShare 真名对不上、令人怀疑报告真实性。现 `resolve_instrument_identity`
+  对 A 股改走与 WebUI 同一套域内名称解析（`resolve_ticker_name`，AKShare 优先、不触碰海外
+  yfinance），把真实中文名注入每个 agent 的 prompt；查不到名时仍 fail-open 退回纯代码。
 - **WebUI 队列面板与历史侧栏不再卡在旧状态.** 两者此前只靠实时 SSE 流关闭回调推进,
   没有独立轮询:停在某条运行中 run 的历史详情、或刷新过页面时,后台队列已串行推进到
   下一个,但右侧「分析队列」仍显示上一个运行中、左侧历史的 RUNNING/COMPLETED 状态也不更新,

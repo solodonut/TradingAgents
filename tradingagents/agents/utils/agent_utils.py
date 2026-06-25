@@ -122,10 +122,24 @@ def _resolve_instrument_identity_with_yfinance(ticker: str) -> dict:
 def resolve_instrument_identity(ticker: str) -> dict:
     """Resolve deterministic identity metadata for a ticker when enabled.
 
-    Domestic China-only deployments deliberately skip the yfinance identity
-    lookup so a mainland stock/ETF run does not touch overseas data services
-    before analysis starts.
+    Mainland A-shares/ETFs resolve their Chinese name from the domestic source
+    (AKShare-first, same path the WebUI ticker lookup uses) so the analyst
+    prompt is anchored to the real instrument instead of the LLM inventing a
+    name from the code (e.g. ETF ``159241`` is "航空航天ETF天弘", not a
+    hallucinated semiconductor ETF). Without this, ``domestic_china_only``
+    deployments injected only the bare code and the report title was fabricated.
+
+    Other instruments keep the yfinance identity lookup; domestic-only
+    deployments still skip that overseas call for non-A-share tickers.
     """
+    from tradingagents.dataflows.akshare_utils import is_a_share
+
+    if is_a_share(ticker):
+        from tradingagents.dataflows.ticker_name import resolve_ticker_name
+
+        name = resolve_ticker_name(ticker)
+        return {"company_name": name} if name else {}
+
     from tradingagents.dataflows.config import get_config
 
     if get_config().get("domestic_china_only", False):

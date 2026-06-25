@@ -66,6 +66,28 @@ class ResolveInstrumentIdentityTests(unittest.TestCase):
         mock.assert_called_once()  # second call served from cache
         self.assertEqual(first, second)
 
+    def test_a_share_uses_domestic_name_not_yfinance(self):
+        # Regression: domestic A-share/ETF must resolve its real Chinese name
+        # from the AKShare-first domestic source so the report title is not a
+        # hallucinated instrument. ETF 159241 is "航空航天ETF天弘".
+        with patch(
+            "tradingagents.dataflows.ticker_name.resolve_ticker_name",
+            return_value="航空航天ETF天弘",
+        ) as name_mock, patch(
+            "tradingagents.agents.utils.agent_utils.yf.Ticker"
+        ) as yf_mock:
+            identity = resolve_instrument_identity("159241")
+        name_mock.assert_called_once_with("159241")
+        yf_mock.assert_not_called()  # no overseas lookup for an A-share
+        self.assertEqual(identity["company_name"], "航空航天ETF天弘")
+
+    def test_a_share_falls_open_when_domestic_name_missing(self):
+        with patch(
+            "tradingagents.dataflows.ticker_name.resolve_ticker_name",
+            return_value=None,
+        ):
+            self.assertEqual(resolve_instrument_identity("159241"), {})
+
 
 @pytest.mark.unit
 class BuildInstrumentContextTests(unittest.TestCase):
