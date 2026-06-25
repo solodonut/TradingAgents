@@ -519,6 +519,17 @@ export default function Home() {
 
         <main className="order-2 min-h-0 border-border lg:order-2 lg:h-screen lg:overflow-y-auto lg:border-r">
           <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-4 lg:px-5">
+            <div className="mb-3">
+              <ServiceHealthPanel
+                items={Object.values(healthItems)}
+                summary={healthSummary}
+                checking={healthChecking}
+                error={healthError}
+                lastCheckedAt={healthLastCheckedAt}
+                onCheck={runServiceHealthCheck}
+              />
+            </div>
+
             <header className="glass mb-3 rounded-lg px-3 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -681,15 +692,6 @@ export default function Home() {
               onReorder={onReorderQueue}
               onCancelRunning={(runId) => void cancelRun(runId)}
               canceling={canceling}
-            />
-
-            <ServiceHealthPanel
-              items={Object.values(healthItems)}
-              summary={healthSummary}
-              checking={healthChecking}
-              error={healthError}
-              lastCheckedAt={healthLastCheckedAt}
-              onCheck={runServiceHealthCheck}
             />
 
             <AgentProgress statuses={sidebarStatuses} />

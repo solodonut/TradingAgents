@@ -4,10 +4,12 @@ import {
   AlertTriangle,
   Ban,
   CheckCircle2,
+  ChevronDown,
   LoaderCircle,
   RefreshCw,
   Wifi,
 } from "lucide-react";
+import { useState } from "react";
 import type { ServiceHealthItem, ServiceHealthSummary } from "@/lib/types";
 
 function statusLabel(status: ServiceHealthItem["status"]): string {
@@ -43,6 +45,36 @@ function formatCheckedAt(iso: string | null): string {
   return date.toLocaleTimeString();
 }
 
+function trafficLight({
+  items,
+  checking,
+  error,
+}: {
+  items: ServiceHealthItem[];
+  checking: boolean;
+  error: string | null;
+}): { className: string; label: string } {
+  if (error || items.some((item) => item.status === "error")) {
+    return {
+      className: "bg-destructive shadow-[0_0_14px_rgba(255,82,82,0.55)]",
+      label: "异常",
+    };
+  }
+  if (checking || items.some((item) => item.status === "checking")) {
+    return {
+      className: "bg-amber-300 shadow-[0_0_14px_rgba(252,211,77,0.55)]",
+      label: "检查中",
+    };
+  }
+  if (items.some((item) => item.status === "ok")) {
+    return {
+      className: "bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.55)]",
+      label: "正常",
+    };
+  }
+  return { className: "bg-muted-foreground/60", label: "待检查" };
+}
+
 export function ServiceHealthPanel({
   items,
   summary,
@@ -58,57 +90,87 @@ export function ServiceHealthPanel({
   lastCheckedAt: string | null;
   onCheck: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const visible = items.length > 0 || checking || error;
-  const hasFailures = items.some((item) => item.status === "error");
+  const hasFailures = Boolean(error) || items.some((item) => item.status === "error");
+  const light = trafficLight({ items, checking, error });
 
   return (
     <div
-      className={`glass rounded-lg px-3 py-3 ${
+      className={`glass rounded-lg px-3 py-2 ${
         hasFailures ? "border-destructive/60 bg-destructive/10" : ""
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-          <Wifi className="size-3.5" aria-hidden="true" />
-          Service Health
-        </div>
         <button
           type="button"
-          onClick={onCheck}
-          disabled={checking}
-          className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-70"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:text-primary"
         >
-          {checking ? (
-            <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <RefreshCw className="size-3.5" />
-          )}
-          检查
-        </button>
-      </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
-        <span>{checking ? "正在检查" : `更新 ${formatCheckedAt(lastCheckedAt)}`}</span>
-        {summary && (
-          <span>
-            OK {summary.ok} · Error {summary.error} · Disabled {summary.disabled}
+          <span
+            className={`size-3 shrink-0 rounded-full ${light.className}`}
+            aria-label={`服务状态：${light.label}`}
+          />
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="flex items-center gap-1.5 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+              <Wifi className="size-3.5" aria-hidden="true" />
+              Service Health
+            </span>
+            <span className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-foreground">
+              {light.label}
+            </span>
+            <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
+              {checking ? "正在检查" : `更新 ${formatCheckedAt(lastCheckedAt)}`}
+            </span>
+            {summary && (
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
+                OK {summary.ok} · Error {summary.error} · Disabled {summary.disabled}
+              </span>
+            )}
           </span>
-        )}
+          <ChevronDown
+            className={`ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform ${
+              expanded ? "rotate-180" : ""
+            }`}
+            aria-hidden="true"
+          />
+        </button>
+        <div className="flex items-center gap-2">
+          {hasFailures && !expanded && (
+            <span className="hidden font-mono text-[0.65rem] uppercase tracking-[0.12em] text-destructive sm:inline">
+              有服务不可达
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onCheck}
+            disabled={checking}
+            className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {checking ? (
+              <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
+            检查
+          </button>
+        </div>
       </div>
 
-      {error && (
+      {expanded && error && (
         <div className="glass-readable mt-3 rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
           {error}
         </div>
       )}
 
-      {!visible && (
+      {expanded && !visible && (
         <div className="glass-readable mt-3 rounded-md border-dashed border-border px-3 py-3 font-mono text-xs text-muted-foreground">
           等待服务可达性检查。
         </div>
       )}
 
-      {items.length > 0 && (
+      {expanded && items.length > 0 && (
         <div className="mt-3 space-y-2">
           {items.map((item) => (
             <div key={item.id} className="glass-readable rounded-md px-3 py-2">
