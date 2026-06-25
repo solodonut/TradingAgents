@@ -69,6 +69,16 @@ def test_list_runs_returns_summaries_newest_first(tmp_path):
     assert [s.run_id for s in summaries] == ["r2", "r1"]
 
 
+def test_set_instrument_name_surfaces_in_list_runs(tmp_path):
+    store = Store(tmp_path / "test.db")
+    store.insert_run("r1", "SPY", "2024-05-10", "stock", {})
+    # No name set yet -> None (backward compatible).
+    assert store.list_runs()[0].instrument_name is None
+
+    store.set_instrument_name("r1", "SPDR S&P 500 ETF Trust")
+    assert store.list_runs()[0].instrument_name == "SPDR S&P 500 ETF Trust"
+
+
 def test_delete_run(tmp_path):
     store = Store(tmp_path / "test.db")
     store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})

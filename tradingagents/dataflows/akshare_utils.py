@@ -29,6 +29,7 @@ import contextlib
 import logging
 import os
 import re
+import threading
 import time
 
 import pandas as pd
@@ -50,6 +51,14 @@ _RETRYABLE_EXCEPTIONS = (
     requests.exceptions.Timeout,
     requests.exceptions.ChunkedEncodingError,
 )
+
+# If an AKShare endpoint just exhausted its retry budget, fail repeated same-endpoint
+# calls fast for a short window. A single analysis can ask for price, indicators, and
+# a verified snapshot back-to-back; without this, one East Money outage burns the full
+# retry ladder for every tool call.
+_NETWORK_CIRCUIT_COOLDOWN_SECONDS = 60
+_NETWORK_CIRCUIT_LOCK = threading.Lock()
+_NETWORK_CIRCUIT: dict[str, tuple[float, str]] = {}
 
 # A bare A-share code is exactly six digits. Suffix forms append a market tag.
 _BARE_CODE = re.compile(r"^\d{6}$")
@@ -103,7 +112,39 @@ def no_proxy_session():
             os.environ["no_proxy"] = prior_no_proxy_lc
 
 
-def ak_retry(func, max_retries: int = 6, base_delay: float = 1.0):
+def reset_akshare_network_circuit():
+    """Clear the in-process AKShare network circuit, primarily for tests."""
+    with _NETWORK_CIRCUIT_LOCK:
+        _NETWORK_CIRCUIT.clear()
+
+
+def _raise_if_circuit_open(circuit_key: str | None):
+    if not circuit_key:
+        return
+    now = time.monotonic()
+    with _NETWORK_CIRCUIT_LOCK:
+        entry = _NETWORK_CIRCUIT.get(circuit_key)
+        if entry is None:
+            return
+        until, reason = entry
+        if until <= now:
+            _NETWORK_CIRCUIT.pop(circuit_key, None)
+            return
+    raise requests.exceptions.ConnectionError(
+        f"AKShare endpoint {circuit_key!r} is temporarily unavailable "
+        f"after a recent network failure: {reason}"
+    )
+
+
+def _open_circuit(circuit_key: str | None, exc: Exception):
+    if not circuit_key:
+        return
+    until = time.monotonic() + _NETWORK_CIRCUIT_COOLDOWN_SECONDS
+    with _NETWORK_CIRCUIT_LOCK:
+        _NETWORK_CIRCUIT[circuit_key] = (until, str(exc))
+
+
+def ak_retry(func, max_retries: int = 6, base_delay: float = 1.0, circuit_key: str | None = None):
     """Run an AKShare call with proxy bypass and exponential backoff.
 
     East Money intermittently drops connections (``RemoteDisconnected``), often
@@ -112,6 +153,7 @@ def ak_retry(func, max_retries: int = 6, base_delay: float = 1.0):
     capped exponential backoff. Non-network exceptions (bad symbol, parse
     errors) propagate immediately — retrying them would only waste time.
     """
+    _raise_if_circuit_open(circuit_key)
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
@@ -128,6 +170,7 @@ def ak_retry(func, max_retries: int = 6, base_delay: float = 1.0):
                 time.sleep(delay)
             else:
                 logger.warning("AKShare exhausted %d retries: %s", max_retries, exc)
+    _open_circuit(circuit_key, last_exc)
     raise last_exc
 
 

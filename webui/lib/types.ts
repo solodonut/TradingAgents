@@ -31,6 +31,7 @@ export interface HistorySummary {
   decision: Decision | null;
   status: RunStatus;
   created_at: string;
+  instrument_name?: string | null;
 }
 
 export interface QueueItem {
@@ -76,6 +77,30 @@ export interface RunStatusDetail {
   last_report_at: string | null;
   updated_at: string | null;
 }
+
+export type ServiceHealthStatus = "checking" | "ok" | "error" | "disabled";
+export type ServiceHealthKind = "llm" | "data" | "system";
+
+export interface ServiceHealthItem {
+  id: string;
+  name: string;
+  kind: ServiceHealthKind;
+  status: ServiceHealthStatus;
+  message: string;
+  latency_ms: number | null;
+}
+
+export interface ServiceHealthSummary {
+  total: number;
+  checking: number;
+  ok: number;
+  error: number;
+  disabled: number;
+}
+
+export type ServiceHealthEvent =
+  | { event: "service_status"; data: ServiceHealthItem }
+  | { event: "summary"; data: ServiceHealthSummary };
 
 export type SSEEvent =
   | { event: "agent_status"; data: { agent: string; team: string; status: string } }

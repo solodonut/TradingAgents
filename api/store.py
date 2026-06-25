@@ -105,6 +105,8 @@ class Store:
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(analysis_runs)")}
             if "queue_position" not in cols:
                 conn.execute("ALTER TABLE analysis_runs ADD COLUMN queue_position INTEGER")
+            if "instrument_name" not in cols:
+                conn.execute("ALTER TABLE analysis_runs ADD COLUMN instrument_name TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, check_same_thread=False)
@@ -121,6 +123,13 @@ class Store:
                 " config_json, result_json, created_at, completed_at) "
                 "VALUES (?, ?, ?, ?, NULL, 'running', ?, NULL, ?, NULL)",
                 (run_id, ticker, trade_date, asset_type, _dumps(config), _now()),
+            )
+
+    def set_instrument_name(self, run_id: str, name: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE analysis_runs SET instrument_name=? WHERE run_id=?",
+                (name, run_id),
             )
 
     def complete_run(self, run_id: str, decision: str, result: dict) -> None:
@@ -197,7 +206,7 @@ class Store:
     def list_runs(self) -> list[HistorySummary]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT run_id, ticker, trade_date, decision, status, created_at "
+                "SELECT run_id, ticker, trade_date, decision, status, created_at, instrument_name "
                 "FROM analysis_runs WHERE status != 'pending' "
                 "ORDER BY created_at DESC, rowid DESC"
             ).fetchall()
@@ -209,6 +218,7 @@ class Store:
                 decision=r["decision"],
                 status=r["status"],
                 created_at=r["created_at"],
+                instrument_name=r["instrument_name"],
             )
             for r in rows
         ]

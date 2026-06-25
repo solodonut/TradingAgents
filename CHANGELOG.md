@@ -10,6 +10,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- WebUI 历史记录列表在标的代码下方显示标的可读名称（A 股/ETF 中文名、其余 yfinance 公司全名）。
+  名称在分析启动时由 `resolve_instrument_identity` 解析并落库到 `analysis_runs.instrument_name`
+  新列（动态迁移，兼容旧库），经 `GET /api/history` 返回；解析不到时留空、前端回退为仅显示代码。
+  旧记录可用 `scripts/backfill_instrument_names.py` 回填（先解析已存上下文文本、否则联网兜底）。
 - 决策流水线末尾新增报告校验节点：对各报告中的标的名称与可验证市场数字做事实校对、自动修正不一致，并产出 `validation_report` 校验报告。可经 `TRADINGAGENTS_REPORT_VALIDATION_ENABLED` 关闭。
 - WebUI 分析配置改用可持久化的代码清单：单代码输入框逐个添加、可增删排序、localStorage
   长期保存（刷新/重开不变，分析后保留），开始分析按清单顺序入队。名称查询
@@ -59,6 +63,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **AKShare 连接被远端关闭不再中断整个分析.** `get_verified_market_snapshot`
+  工具直连 `build_verified_market_snapshot`，绕过了 `route_to_vendor` 的「永不抛异常」
+  保护：东财行情瞬时断连（`RemoteDisconnected`，A 股/ETF 重试 6 次后仍失败）、无数据或
+  数据过期时，原始异常会穿过 LangGraph ToolNode 冒泡到 `api/runner.py` 并把整条 run 标记
+  为 error 终止。现工具边界统一捕获网络错误 / `NoMarketDataError` / 空数据，返回
+  `MARKET_SNAPSHOT_UNAVAILABLE` 哨兵串（提示分析师如实报告数据不可用、不要编造数字），
+  与数据层 `DATA_SOURCE_UNAVAILABLE` 契约一致；分析继续而非崩溃。
 - **A 股/ETF 分析报告标题不再编造标的名称.** 反幻觉的标的身份注入此前在
   `domestic_china_only`（默认开启）下对 A 股直接返回空身份，分析管线只拿到纯代码、
   没有名称，LLM 便自行虚构（如 `159241` 写成「中证全球半导体ETF」，实为「航空航天ETF天弘」），

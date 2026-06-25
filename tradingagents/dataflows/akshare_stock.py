@@ -66,7 +66,7 @@ def _fetch_hist(code: str, start: str, end: str, adjust: str = "qfq") -> pd.Data
             start_date=start_compact,
             end_date=end_compact,
             adjust=adjust,
-        ))
+        ), circuit_key=endpoint.__name__)
 
     return cached_call(cache_key, _PRICE_TTL_SECONDS, _fetch)
 

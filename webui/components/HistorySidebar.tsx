@@ -64,6 +64,11 @@ export function HistorySidebar({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate font-mono text-sm text-foreground">{it.ticker}</div>
+                  {it.instrument_name && (
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {it.instrument_name}
+                    </div>
+                  )}
                   <div className="mt-0.5 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-muted-foreground">
                     {it.trade_date}
                   </div>

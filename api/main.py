@@ -118,6 +118,10 @@ from api.routes import queue as queue_routes  # noqa: E402
 
 app.include_router(queue_routes.router)
 
+from api.routes import health as health_routes  # noqa: E402
+
+app.include_router(health_routes.router)
+
 from api.routes import ticker as ticker_routes  # noqa: E402
 
 app.include_router(ticker_routes.router)
@@ -151,6 +155,12 @@ def real_graph_factory(req):
 
     past_context = graph.memory_log.get_past_context(req.ticker)
     instrument_context = graph.resolve_instrument_context(req.ticker, req.asset_type)
+
+    # Resolve the human-readable name once for the history list (cache hit after
+    # resolve_instrument_context above; no extra network). Best-effort: None if unresolved.
+    from tradingagents.agents.utils.agent_utils import resolve_instrument_identity
+
+    graph._instrument_name = resolve_instrument_identity(req.ticker).get("company_name")
     init_state = graph.propagator.create_initial_state(
         req.ticker,
         req.trade_date,

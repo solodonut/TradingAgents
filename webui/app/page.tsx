@@ -1,7 +1,7 @@
 "use client";
 import { ArrowLeft, Activity, LoaderCircle, MessageCircle, OctagonX, Terminal } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ConfigCard } from "@/components/ConfigCard";
 import { AgentProgress } from "@/components/AgentProgress";
 import { MessageBubble } from "@/components/MessageBubble";
@@ -10,6 +10,7 @@ import { HistorySidebar } from "@/components/HistorySidebar";
 import { RunDetail } from "@/components/RunDetail";
 import { RuntimeStatusPanel } from "@/components/RuntimeStatusPanel";
 import { QueuePanel } from "@/components/QueuePanel";
+import { ServiceHealthPanel } from "@/components/ServiceHealthPanel";
 import {
   deleteHistory,
   getConfigOptions,
@@ -22,6 +23,7 @@ import {
   removeQueueItem,
   clearQueue,
   reorderQueue,
+  subscribeServiceHealth,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
 import type {
@@ -31,6 +33,8 @@ import type {
   QueueState,
   RunResult,
   RunStatusDetail,
+  ServiceHealthItem,
+  ServiceHealthSummary,
   SSEEvent,
 } from "@/lib/types";
 
@@ -161,9 +165,16 @@ export default function Home() {
   const [liveRuntimeError, setLiveRuntimeError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const healthUnsubscribeRef = useRef<(() => void) | null>(null);
   const followGenRef = useRef(0);
 
   const [queue, setQueue] = useState<QueueState>({ running: null, pending: [] });
+  const [healthItems, setHealthItems] = useState<Record<string, ServiceHealthItem>>({});
+  const [healthSummary, setHealthSummary] = useState<ServiceHealthSummary | null>(null);
+  const [healthChecking, setHealthChecking] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [healthLastCheckedAt, setHealthLastCheckedAt] = useState<string | null>(null);
+  const lastFailureHealthRunRef = useRef<string | null>(null);
 
   const refreshQueue = () =>
     getQueue()
@@ -188,12 +199,40 @@ export default function Home() {
       })
       .catch(() => setHistory([]));
 
+  const runServiceHealthCheck = useCallback(() => {
+    healthUnsubscribeRef.current?.();
+    setHealthChecking(true);
+    setHealthError(null);
+    setHealthSummary(null);
+    setHealthItems({});
+    healthUnsubscribeRef.current = subscribeServiceHealth(
+      (event) => {
+        if (event.event === "service_status") {
+          setHealthItems((items) => ({ ...items, [event.data.id]: event.data }));
+        } else {
+          setHealthSummary(event.data);
+        }
+      },
+      () => {
+        healthUnsubscribeRef.current = null;
+        setHealthChecking(false);
+        setHealthLastCheckedAt(new Date().toISOString());
+      },
+      (message) => setHealthError(message),
+    );
+  }, []);
+
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
     refreshHistory();
     refreshQueue();
-    return () => unsubscribeRef.current?.();
-  }, []);
+    const healthTimer = window.setTimeout(runServiceHealthCheck, 0);
+    return () => {
+      window.clearTimeout(healthTimer);
+      unsubscribeRef.current?.();
+      healthUnsubscribeRef.current?.();
+    };
+  }, [runServiceHealthCheck]);
 
   // The backend advances the queue whenever a runner thread finishes
   // (scheduler.advance). The live SSE stream-close callback drives the UI in the
@@ -280,6 +319,10 @@ export default function Home() {
           if (nextDetail) setDetail(nextDetail);
           if (nextDetail && nextDetail.status !== "running") {
             refreshHistory();
+            if (nextDetail.status === "error" && lastFailureHealthRunRef.current !== selectedId) {
+              lastFailureHealthRunRef.current = selectedId;
+              runServiceHealthCheck();
+            }
           }
         })
         .catch((err) => {
@@ -294,7 +337,7 @@ export default function Home() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [selectedId, detail?.status]);
+  }, [selectedId, detail?.status, runServiceHealthCheck]);
 
   const onDeleteHistory = (id: string) => {
     if (id === selectedId) exitDetail();
@@ -336,7 +379,11 @@ export default function Home() {
           setMessages((m) => [...m, { agent: e.data.agent, content: e.data.content }]);
         else if (e.event === "done")
           setDecision({ d: e.data.decision, detail: e.data.final_trade_decision });
-        else if (e.event === "error") setError(e.data.message);
+        else if (e.event === "error") {
+          setError(e.data.message);
+          lastFailureHealthRunRef.current = runId;
+          runServiceHealthCheck();
+        }
         else if (e.event === "cancelled") setError("分析已停止");
       },
       () => {
@@ -472,6 +519,17 @@ export default function Home() {
 
         <main className="order-2 min-h-0 border-border lg:order-2 lg:h-screen lg:overflow-y-auto lg:border-r">
           <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-4 lg:px-5">
+            <div className="mb-3">
+              <ServiceHealthPanel
+                items={Object.values(healthItems)}
+                summary={healthSummary}
+                checking={healthChecking}
+                error={healthError}
+                lastCheckedAt={healthLastCheckedAt}
+                onCheck={runServiceHealthCheck}
+              />
+            </div>
+
             <header className="glass mb-3 rounded-lg px-3 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
