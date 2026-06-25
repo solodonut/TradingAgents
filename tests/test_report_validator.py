@@ -75,7 +75,7 @@ def test_snapshot_unavailable_skips_number_dimension(monkeypatch):
     out = node(_state(market_report="X"))
 
     assert "market_report" not in out
-    assert "未校验" in out["validation_report"] or "快照不可用" in out["validation_report"]
+    assert "快照不可用" in out["validation_report"]
 
 
 @pytest.mark.unit
@@ -105,6 +105,9 @@ def test_signal_stable_after_final_decision_correction(monkeypatch):
     out = node(_state(final_trade_decision=original))
 
     assert parse_rating(out["final_trade_decision"]) == parse_rating(original) == "Buy"
+    assert "**Rating**: Buy" in out["final_trade_decision"]   # 评级词未被改动
+    assert "航空航天ETF天弘" in out["final_trade_decision"]    # 名称已修正
+    assert "某基金" not in out["final_trade_decision"]         # 旧名称已替换
 
 
 @pytest.mark.unit
