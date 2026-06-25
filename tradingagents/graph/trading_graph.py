@@ -128,6 +128,7 @@ class TradingAgentsGraph:
             self.tool_nodes,
             self.conditional_logic,
             analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
+            report_validation_enabled=self.config.get("report_validation_enabled", True),
         )
 
         self.propagator = Propagator(
