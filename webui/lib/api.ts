@@ -8,6 +8,7 @@ import type {
   QueueState,
   RunResult,
   RunStatusDetail,
+  ServiceHealthEvent,
   SessionProfile,
 } from "./types";
 
@@ -128,6 +129,43 @@ export function reportUrl(runId: string): string {
 
 export function streamUrl(runId: string): string {
   return `${BASE}/api/analysis/${runId}/stream`;
+}
+
+export function serviceHealthStreamUrl(): string {
+  return `${BASE}/api/health/services/stream`;
+}
+
+export function subscribeServiceHealth(
+  onEvent: (e: ServiceHealthEvent) => void,
+  onClose: () => void,
+  onError: (message: string) => void,
+): () => void {
+  const es = new EventSource(serviceHealthStreamUrl());
+  const serviceHandler = (ev: MessageEvent) => {
+    try {
+      onEvent({ event: "service_status", data: JSON.parse(ev.data) });
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  const summaryHandler = (ev: MessageEvent) => {
+    try {
+      onEvent({ event: "summary", data: JSON.parse(ev.data) });
+    } catch {
+      /* ignore malformed */
+    } finally {
+      es.close();
+      onClose();
+    }
+  };
+  es.addEventListener("service_status", serviceHandler);
+  es.addEventListener("summary", summaryHandler);
+  es.onerror = () => {
+    es.close();
+    onError("服务检查连接中断");
+    onClose();
+  };
+  return () => es.close();
 }
 
 export async function createChatSession(runIds: string[]): Promise<string> {
