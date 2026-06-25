@@ -316,3 +316,31 @@ def render_sentiment_report(report: SentimentReport) -> str:
         "",
         report.narrative,
     ])
+
+
+# ---------------------------------------------------------------------------
+# Report Validator
+# ---------------------------------------------------------------------------
+
+
+class CorrectionItem(BaseModel):
+    """A single fact-level fix the report validator applied."""
+
+    original: str = Field(description="原文中错误的标的名称或可验证数字片段（逐字摘录）。")
+    fixed: str = Field(description="修正后的正确值，取自权威身份或权威市场数据快照。")
+    reason: str = Field(description="为什么原值是错的——与哪个权威来源不符。")
+
+
+class CorrectedReport(BaseModel):
+    """A report text after fact-level correction, plus the list of fixes made."""
+
+    corrected_text: str = Field(
+        description=(
+            "修正后的完整报告文本。只允许改动错误的标的名称和可验证数字；"
+            "禁止改动分析、观点、结论、措辞或结构。若无任何错误，必须与原文逐字相同。"
+        ),
+    )
+    corrections: list[CorrectionItem] = Field(
+        default_factory=list,
+        description="本次所做的修正清单；没有修正时为空列表。",
+    )
