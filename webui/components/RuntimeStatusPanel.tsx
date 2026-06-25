@@ -2,15 +2,6 @@
 import { Activity, AlertTriangle, Clock3, Radio } from "lucide-react";
 import type { RunStatusDetail } from "@/lib/types";
 
-const SECTION_LABELS: Record<string, string> = {
-  market_report: "市场",
-  sentiment_report: "情绪",
-  news_report: "新闻",
-  fundamentals_report: "基本面",
-  investment_plan: "研究经理",
-  trader_investment_plan: "交易员",
-};
-
 function fmtTime(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -21,9 +12,11 @@ function fmtTime(iso: string | null): string {
 export function RuntimeStatusPanel({
   runtime,
   runtimeError,
+  currentAgentLabel,
 }: {
   runtime?: RunStatusDetail | null;
   runtimeError?: string | null;
+  currentAgentLabel?: string | null;
 }) {
   return (
     <div className="glass rounded-lg px-3 py-3">
@@ -90,12 +83,8 @@ export function RuntimeStatusPanel({
               <dd className="text-foreground">{fmtTime(runtime.last_llm_end_at)}</dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-border/60 pb-1">
-              <dt className="text-muted-foreground">最近阶段</dt>
-              <dd className="text-foreground">
-                {runtime.last_report_section
-                  ? (SECTION_LABELS[runtime.last_report_section] ?? runtime.last_report_section)
-                  : "—"}
-              </dd>
+              <dt className="text-muted-foreground">当前 Agent</dt>
+              <dd className="text-foreground">{currentAgentLabel ?? "—"}</dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-border/60 pb-1">
               <dt className="text-muted-foreground">阶段写入</dt>

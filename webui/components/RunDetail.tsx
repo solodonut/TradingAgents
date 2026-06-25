@@ -27,12 +27,14 @@ export function RunDetail({
   run,
   runtime,
   runtimeError,
+  currentAgentLabel,
   onCancel,
   canceling = false,
 }: {
   run: RunResult;
   runtime?: RunStatusDetail | null;
   runtimeError?: string | null;
+  currentAgentLabel?: string | null;
   onCancel?: (runId: string) => void;
   canceling?: boolean;
 }) {
@@ -85,7 +87,11 @@ export function RunDetail({
       )}
 
       {run.status === "running" && (
-        <RuntimeStatusPanel runtime={runtime} runtimeError={runtimeError} />
+        <RuntimeStatusPanel
+          runtime={runtime}
+          runtimeError={runtimeError}
+          currentAgentLabel={currentAgentLabel}
+        />
       )}
 
       {run.status === "error" && (

@@ -363,8 +363,6 @@ export default function Home() {
   const sidebarStatuses = selectedRunning
     ? deriveHistoryProgress(detail, runtimeStatus)
     : statuses;
-  const sidebarRuntime = selectedRunning ? runtimeStatus : liveRuntimeStatus;
-  const sidebarRuntimeError = selectedRunning ? runtimeError : liveRuntimeError;
   const sidebarLastSection = selectedRunning
     ? runtimeStatus?.last_report_section
     : liveRuntimeStatus?.last_report_section;
@@ -538,43 +536,8 @@ export default function Home() {
               </div>
             </div>
 
-            {selectedRunning ? (
-              <>
-                <div className="thinking-panel rounded-lg px-3 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-amber-300">
-                        Analysis Running
-                      </div>
-                      <div className="mt-1 font-mono text-sm text-foreground">
-                        {detail.ticker} · {detail.trade_date}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void cancelRun(detail.run_id)}
-                      disabled={canceling}
-                      className="thinking-border inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] transition-colors hover:brightness-110 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {canceling ? (
-                        <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
-                      ) : (
-                        <OctagonX className="size-3.5" />
-                      )}
-                      停止
-                    </button>
-                  </div>
-                </div>
-
-                <RuntimeStatusPanel
-                  runtime={sidebarRuntime}
-                  runtimeError={sidebarRuntimeError}
-                  currentAgentLabel={workingAgentLabel(sidebarStatuses)}
-                />
-              </>
-            ) : (
-              options && <ConfigCard options={options} onStart={onStart} running={running} />
-            )}
+            {!selectedRunning &&
+              options && <ConfigCard options={options} onStart={onStart} running={running} />}
 
             {error && (
               <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
