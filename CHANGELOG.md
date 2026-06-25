@@ -10,6 +10,7 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- 决策流水线末尾新增报告校验节点：对各报告中的标的名称与可验证市场数字做事实校对、自动修正不一致，并产出 `validation_report` 校验报告。可经 `TRADINGAGENTS_REPORT_VALIDATION_ENABLED` 关闭。
 - WebUI 分析配置改用可持久化的代码清单：单代码输入框逐个添加、可增删排序、localStorage
   长期保存（刷新/重开不变，分析后保留），开始分析按清单顺序入队。名称查询
   （`GET /api/ticker/{code}`）A 股/ETF 优先 AKShare 中文名、其余及失败回退 yfinance，

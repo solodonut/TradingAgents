@@ -21,6 +21,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_DOMESTIC_CHINA_ONLY":  "domestic_china_only",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_LLM_REQUEST_TIMEOUT":  "llm_request_timeout",
+    "TRADINGAGENTS_REPORT_VALIDATION_ENABLED": "report_validation_enabled",
 }
 
 
@@ -93,6 +94,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,
+    # Post-decision report validation: when True, a final graph node fact-checks
+    # every report's instrument name and verifiable market numbers against the
+    # resolved identity + verified snapshot, auto-correcting mismatches and
+    # writing a summary to ``validation_report``. Override with
+    # TRADINGAGENTS_REPORT_VALIDATION_ENABLED.
+    "report_validation_enabled": True,
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "Chinese",
