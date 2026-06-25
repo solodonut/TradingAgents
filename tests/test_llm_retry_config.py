@@ -57,11 +57,14 @@ class TestRetryEnvOverlay:
         importlib.reload(dc)
         assert dc.DEFAULT_CONFIG["llm_max_retries"] == 6
 
-    def test_default_request_timeout_is_none(self, monkeypatch):
+    def test_default_request_timeout_is_finite(self, monkeypatch):
+        # Must be non-None: langchain_anthropic maps None to httpx timeout=None
+        # (wait forever), so a hung gateway connection never times out and the
+        # retry budget never fires. A finite default bounds the hang.
         import tradingagents.default_config as dc
         monkeypatch.delenv("TRADINGAGENTS_LLM_REQUEST_TIMEOUT", raising=False)
         importlib.reload(dc)
-        assert dc.DEFAULT_CONFIG["llm_request_timeout"] is None
+        assert dc.DEFAULT_CONFIG["llm_request_timeout"] == 300
 
 
 @pytest.mark.unit

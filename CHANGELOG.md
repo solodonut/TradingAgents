@@ -58,6 +58,15 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **LLM 请求不再因网关 hang 住而无限挂死.** `llm_request_timeout` 默认从 `None` 改为
+  `300`(秒)。此前注释声称「None 留给各 SDK 自己的默认值」是错的:langchain_anthropic
+  把 `default_request_timeout=None` 当成*有意义*的值,会显式把 `timeout=None` 传给自建
+  httpx client(= 永不超时),绕过 Anthropic SDK 自带的 600s 默认。当 IBM ICA 等网关
+  「接了请求但一直不回包」时,`llm.invoke` 会卡在 socket 读上无限等待;而 `max_retries`
+  只在收到错误/超时响应时才重试,没有 timeout 就永远不抛 `APITimeoutError`,于是这一轮
+  分析既不报错也不结束(实测卡死 1 小时+)。改为有限默认后,hang 住的请求会超时 → 触发
+  现有重试预算 → 网关恢复即成功,全挂则让该轮**报错结束**而非永久挂起。可用
+  `TRADINGAGENTS_LLM_REQUEST_TIMEOUT` 覆盖。
 - **Agent Matrix 不再把多空辩论误挂在研究经理名下.** 此前矩阵无「研究员」行，多头/空头
   辩论（用 quick 模型）整段被归到「研究经理 WORKING」，导致 RUNTIME STATUS 显示的模型是
   quick 而非研究经理实际使用的 deep 模型，看起来像配置错乱。现矩阵在分析师与研究经理之间

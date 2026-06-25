@@ -81,10 +81,15 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # whole multi-agent run. Forwarded to every provider client as max_retries.
     # Override with TRADINGAGENTS_LLM_MAX_RETRIES.
     "llm_max_retries": 6,
-    # Per-request timeout (seconds) forwarded to every provider client. None
-    # leaves each SDK at its own default. Override with
-    # TRADINGAGENTS_LLM_REQUEST_TIMEOUT.
-    "llm_request_timeout": None,
+    # Per-request timeout (seconds) forwarded to every provider client. Must be
+    # non-None: langchain_anthropic treats default_request_timeout=None as a
+    # *meaningful* value and hands the httpx client timeout=None (wait forever),
+    # bypassing the Anthropic SDK's own 600s default. A gateway that accepts the
+    # request but never sends a response body then hangs the call indefinitely,
+    # and max_retries can't help because no APITimeoutError is ever raised. A
+    # finite default bounds the hang so the retry budget (and ultimately a run
+    # failure) can kick in. Override with TRADINGAGENTS_LLM_REQUEST_TIMEOUT.
+    "llm_request_timeout": 300,
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,
