@@ -57,13 +57,15 @@ def _yfinance_name(code: str) -> str | None:
 
 def resolve_ticker_name(code: str) -> str | None:
     """A 股/ETF 优先 AKShare 中文名（bounded），否则/失败回退 yfinance。fail-open。"""
-    from .akshare_utils import is_a_share
+    from .akshare_utils import display_symbol, is_a_share
 
     ticker = code.strip().upper()
     if not ticker:
         return None
 
+    yahoo_ticker = ticker
     if is_a_share(ticker):
+        yahoo_ticker = display_symbol(ticker)
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
             future = executor.submit(_akshare_name, ticker)
@@ -77,7 +79,7 @@ def resolve_ticker_name(code: str) -> str | None:
             executor.shutdown(wait=False)
 
     try:
-        return _yfinance_name(ticker)
+        return _yfinance_name(yahoo_ticker)
     except Exception as exc:
-        logger.debug("yfinance name lookup failed for %s: %s", ticker, exc)
+        logger.debug("yfinance name lookup failed for %s: %s", yahoo_ticker, exc)
         return None

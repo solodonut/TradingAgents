@@ -13,6 +13,20 @@ def test_a_share_falls_back_to_yfinance_when_akshare_empty(monkeypatch):
     assert tn.resolve_ticker_name("600519.SS") == "Kweichow Moutai"
 
 
+def test_bare_a_share_fallback_uses_yahoo_suffix(monkeypatch):
+    seen = []
+    monkeypatch.setattr(tn, "_akshare_name", lambda code: None)
+
+    def fake_yfinance(code):
+        seen.append(code)
+        return "China Southern CSI Semicon Idsty CstmETF"
+
+    monkeypatch.setattr(tn, "_yfinance_name", fake_yfinance)
+
+    assert tn.resolve_ticker_name("159325") == "China Southern CSI Semicon Idsty CstmETF"
+    assert seen == ["159325.SZ"]
+
+
 def test_a_share_falls_back_to_yfinance_when_akshare_raises(monkeypatch):
     def boom(code):
         raise RuntimeError("east money down")
