@@ -74,3 +74,38 @@ class TestTool:
             {"symbol": "COF", "curr_date": "2026-05-20"}
         )
         assert "Verified market data snapshot for COF" in out
+
+    def test_tool_returns_sentinel_on_network_error(self, monkeypatch):
+        """A transient AKShare/East Money disconnect must not crash the run.
+
+        Without the tool-boundary catch this raises ConnectionError, which
+        propagates through the LangGraph ToolNode and aborts the whole run via
+        api/runner.py (#route-to-vendor-network-error-crash, on the snapshot path).
+        """
+        import requests
+
+        from tradingagents.agents.utils.market_data_validation_tools import (
+            get_verified_market_snapshot,
+        )
+
+        def _boom(symbol, curr_date):
+            raise requests.exceptions.ConnectionError("Remote end closed connection")
+
+        monkeypatch.setattr(validator, "load_ohlcv", _boom)
+        out = get_verified_market_snapshot.invoke(
+            {"symbol": "159241", "curr_date": "2026-06-25"}
+        )
+        assert "MARKET_SNAPSHOT_UNAVAILABLE" in out
+        assert "ConnectionError" in out
+        assert "do not fabricate" in out.lower()
+
+    def test_tool_returns_sentinel_on_no_data(self, monkeypatch):
+        from tradingagents.agents.utils.market_data_validation_tools import (
+            get_verified_market_snapshot,
+        )
+
+        monkeypatch.setattr(validator, "load_ohlcv", lambda s, d: pd.DataFrame())
+        out = get_verified_market_snapshot.invoke(
+            {"symbol": "COF", "curr_date": "2026-05-13"}
+        )
+        assert "MARKET_SNAPSHOT_UNAVAILABLE" in out

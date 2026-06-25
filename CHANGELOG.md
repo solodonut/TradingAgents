@@ -63,6 +63,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **AKShare 连接被远端关闭不再中断整个分析.** `get_verified_market_snapshot`
+  工具直连 `build_verified_market_snapshot`，绕过了 `route_to_vendor` 的「永不抛异常」
+  保护：东财行情瞬时断连（`RemoteDisconnected`，A 股/ETF 重试 6 次后仍失败）、无数据或
+  数据过期时，原始异常会穿过 LangGraph ToolNode 冒泡到 `api/runner.py` 并把整条 run 标记
+  为 error 终止。现工具边界统一捕获网络错误 / `NoMarketDataError` / 空数据，返回
+  `MARKET_SNAPSHOT_UNAVAILABLE` 哨兵串（提示分析师如实报告数据不可用、不要编造数字），
+  与数据层 `DATA_SOURCE_UNAVAILABLE` 契约一致；分析继续而非崩溃。
 - **A 股/ETF 分析报告标题不再编造标的名称.** 反幻觉的标的身份注入此前在
   `domestic_china_only`（默认开启）下对 A 股直接返回空身份，分析管线只拿到纯代码、
   没有名称，LLM 便自行虚构（如 `159241` 写成「中证全球半导体ETF」，实为「航空航天ETF天弘」），
