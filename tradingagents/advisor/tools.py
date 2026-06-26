@@ -3,6 +3,7 @@
 from tradingagents.agents.utils.agent_utils import (
     get_balance_sheet,
     get_cashflow,
+    get_etf_profile,
     get_fundamentals,
     get_global_news,
     get_income_statement,
@@ -29,6 +30,7 @@ ADVISOR_TOOLS = [
     get_insider_transactions,
     get_macro_indicators,
     get_prediction_markets,
+    get_etf_profile,
 ]
 
 _NO_DATA_PREFIXES = (

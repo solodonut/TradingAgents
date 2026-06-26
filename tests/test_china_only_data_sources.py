@@ -9,11 +9,13 @@ from langchain_core.runnables import RunnableLambda
 from tradingagents.agents.analysts import news_analyst, sentiment_analyst
 from tradingagents.agents.utils.agent_utils import resolve_instrument_identity
 from tradingagents.dataflows.akshare_fundamentals import (
+    get_akshare_etf_profile,
     get_balance_sheet,
     get_cashflow,
     get_fundamentals,
     get_income_statement,
 )
+from tradingagents.dataflows.errors import NoMarketDataError
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
@@ -148,6 +150,60 @@ def test_akshare_etf_fundamentals_use_domestic_fund_data():
     assert "ETF Spot Snapshot" in result
     assert "Recent NAV History" in result
     stock_ratios.assert_not_called()
+
+
+@pytest.mark.unit
+def test_akshare_etf_profile_returns_premium_and_holdings():
+    spot = pd.DataFrame(
+        [
+            {
+                "代码": "510300",
+                "名称": "沪深300ETF",
+                "最新价": 3.95,
+                "IOPV实时估值": 3.94,
+                "基金折价率": 0.25,
+                "流通市值": 1.2e10,
+                "最新份额": 3.0e9,
+            }
+        ]
+    )
+    holdings = pd.DataFrame(
+        [
+            {"股票代码": "600519", "股票名称": "贵州茅台", "占净值比例": 5.8, "季度": "2026年1季度"},
+            {"股票代码": "601318", "股票名称": "中国平安", "占净值比例": 4.1, "季度": "2026年1季度"},
+        ]
+    )
+
+    def uncached(_key, _ttl, func):
+        return func()
+
+    with mock.patch(
+        "tradingagents.dataflows.akshare_fundamentals.cached_call",
+        side_effect=uncached,
+    ), mock.patch(
+        "tradingagents.dataflows.akshare_fundamentals.ak_retry",
+        side_effect=lambda func: func(),
+    ), mock.patch(
+        "tradingagents.dataflows.akshare_fundamentals.ak.fund_etf_spot_em",
+        return_value=spot,
+    ), mock.patch(
+        "tradingagents.dataflows.akshare_fundamentals.ak.fund_portfolio_hold_em",
+        return_value=holdings,
+    ):
+        result = get_akshare_etf_profile("510300", "2026-06-19")
+
+    assert "ETF Profile for 510300.SS" in result
+    assert "沪深300ETF" in result
+    assert "Discount/Premium" in result
+    assert "基金折价率" in result
+    assert "Top 10 Holdings" in result
+    assert "贵州茅台" in result
+
+
+@pytest.mark.unit
+def test_akshare_etf_profile_rejects_non_etf_symbol():
+    with pytest.raises(NoMarketDataError):
+        get_akshare_etf_profile("600519", "2026-06-19")
 
 
 @pytest.mark.unit

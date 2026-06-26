@@ -149,6 +149,85 @@ def _format_etf_fundamentals(symbol: str, curr_date: str | None) -> str:
     return result
 
 
+# ETF-specific snapshot fields from East Money's ETF spot table. These are the
+# discount/premium, valuation and scale fields an advisor needs; the rest of the
+# wide spot table (bid/ask levels, turnover ratio, etc.) is dropped as noise.
+_ETF_SPOT_FIELDS = (
+    "名称", "最新价", "涨跌幅", "IOPV实时估值", "基金折价率",
+    "成交额", "流通市值", "总市值", "最新份额",
+)
+
+
+def get_akshare_etf_profile(symbol: str, curr_date: str | None = None) -> str:
+    """ETF-only profile: discount/premium, IOPV, scale, and top-10 holdings.
+
+    Unlike ``get_fundamentals`` (which returns a generic snapshot), this is a
+    focused, advisor-callable view of the ETF-specific signals — premium/discount
+    vs IOPV, fund scale, and constituent holdings — so the advisor can reason
+    about arbitrage, concentration and tracking rather than company financials.
+    Raises ``NoMarketDataError`` for non-ETF symbols (routed to NO_DATA_AVAILABLE).
+    """
+    label = display_symbol(symbol)
+    if not _is_etf_symbol(symbol):
+        raise NoMarketDataError(symbol, label, "not a mainland China listed ETF/fund")
+    code = to_bare_code(symbol)
+
+    try:
+        spot = cached_call(
+            "fund_etf_spot_em",
+            15 * 60,
+            lambda: ak_retry(ak.fund_etf_spot_em),
+        )
+    except Exception as e:
+        raise NoMarketDataError(symbol, label, f"AKShare ETF spot unavailable: {e}") from e
+
+    if spot is None or spot.empty:
+        raise NoMarketDataError(symbol, label, "empty AKShare ETF spot table")
+
+    row = _pick_etf_spot_row(spot.copy(), code)
+    available = [field for field in _ETF_SPOT_FIELDS if field in row.index]
+    snapshot = row[available] if available else row
+    snapshot = snapshot.dropna()
+    snapshot = snapshot[snapshot.astype(str).str.strip() != ""]
+    snapshot_table = snapshot.rename("value").to_frame()
+    snapshot_table.index.name = "field"
+
+    # Top holdings disclose quarterly and may be missing for newly listed funds;
+    # degrade quietly like the NAV path so the snapshot still returns.
+    holdings_csv = ""
+    try:
+        year = (curr_date or datetime.now().strftime("%Y-%m-%d")).split("-")[0]
+        holdings = cached_call(
+            f"fund_portfolio_{code}_{year}",
+            _STATEMENT_TTL_SECONDS,
+            lambda: ak_retry(lambda: ak.fund_portfolio_hold_em(symbol=code, date=year)),
+        )
+        if holdings is not None and not holdings.empty:
+            cols = [
+                c
+                for c in ("序号", "股票代码", "股票名称", "占净值比例", "持股数", "持仓市值", "季度")
+                if c in holdings.columns
+            ]
+            top = holdings[cols] if cols else holdings
+            holdings_csv = top.head(10).to_csv(index=False)
+    except Exception:
+        holdings_csv = ""
+
+    header = f"# ETF Profile for {label} (AKShare, East Money)\n"
+    header += "# Instrument type: Mainland China listed fund/ETF\n"
+    header += "# 折价率为正=折价, 为负=溢价; 以 IOPV 实时估值衡量内在价值\n"
+    header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    result = header + "## Discount/Premium, IOPV & Scale\n\n" + snapshot_table.to_csv()
+    if holdings_csv:
+        result += "\n## Top 10 Holdings (latest disclosed quarter)\n\n" + holdings_csv
+    else:
+        result += (
+            "\n# Top holdings unavailable: funds disclose constituents quarterly; "
+            "may be missing for newly listed funds.\n"
+        )
+    return result
+
+
 def _fetch_statement(symbol: str, kind: str, curr_date: str | None) -> pd.DataFrame:
     """Fetch one statement type, drop future periods, keep populated line items.
 

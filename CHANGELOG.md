@@ -10,6 +10,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **投顾 ChatBot 的 ETF 专业能力。** 新增 `get_etf_profile` 工具(经 `route_to_vendor` 注册,
+  AKShare 实现):对中国 A 股场内 ETF/基金返回折溢价率/IOPV、规模与前十大成分股持仓,非 ETF 标的
+  返回 `NO_DATA_AVAILABLE`。投顾 system prompt 新增「ETF 专业分析框架」(折溢价/IOPV、跟踪误差、
+  规模与清盘风险、成分股集中度、定投/再平衡与 T+0/T+1 规则)及一条行为准则:标的为 ETF 时优先调用
+  `get_etf_profile` 并按 ETF 框架分析,不套用个股财报逻辑。
 - WebUI 历史分析详情页新增「导出 Markdown」按钮：把该次分析的各 agent 报告（市场/情绪/
   新闻/基本面/研究经理/交易员）与最终决策拼成一份 Markdown 文档，经浏览器直接下载为
   `{ticker}_{trade_date}_analysis.md`；纯前端实现、无需后端接口，仅在有可导出内容时显示。
