@@ -100,6 +100,78 @@ def test_service_health_stream_reports_internal_probe_error(client, monkeypatch)
     assert events[-1][1]["error"] == 1
 
 
+def test_single_service_health_returns_requested_status(client, monkeypatch):
+    import api.service_health as service_health
+
+    def fake_llm_probe(config):
+        yield {
+            "id": "llm:deep_think_llm:fast-model",
+            "name": "Deep LLM: fast-model",
+            "kind": "llm",
+            "status": "ok",
+            "message": "Reachable",
+            "latency_ms": 12,
+        }
+
+    def fake_data_probe(config):
+        yield {
+            "id": "data:akshare",
+            "name": "AKShare / Eastmoney",
+            "kind": "data",
+            "status": "error",
+            "message": "HTTP 503",
+            "latency_ms": 55,
+        }
+
+    monkeypatch.setattr(service_health, "_probe_llm_services", fake_llm_probe)
+    monkeypatch.setattr(service_health, "_probe_data_services", fake_data_probe)
+
+    response = client.get("/api/health/services/data:akshare")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "data:akshare",
+        "name": "AKShare / Eastmoney",
+        "kind": "data",
+        "status": "error",
+        "message": "HTTP 503",
+        "latency_ms": 55,
+    }
+
+
+def test_single_service_health_supports_slashes_in_service_id(client, monkeypatch):
+    import api.service_health as service_health
+
+    def fake_llm_probe(config):
+        yield {
+            "id": "llm:deep_think_llm:openrouter/anthropic/claude",
+            "name": "Deep LLM: openrouter/anthropic/claude",
+            "kind": "llm",
+            "status": "ok",
+            "message": "Reachable",
+            "latency_ms": 34,
+        }
+
+    monkeypatch.setattr(service_health, "_probe_llm_services", fake_llm_probe)
+    monkeypatch.setattr(service_health, "_probe_data_services", lambda config: iter(()))
+
+    response = client.get("/api/health/services/llm:deep_think_llm:openrouter/anthropic/claude")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "llm:deep_think_llm:openrouter/anthropic/claude"
+
+
+def test_single_service_health_returns_404_for_unknown_service(client, monkeypatch):
+    import api.service_health as service_health
+
+    monkeypatch.setattr(service_health, "_probe_llm_services", lambda config: iter(()))
+    monkeypatch.setattr(service_health, "_probe_data_services", lambda config: iter(()))
+
+    response = client.get("/api/health/services/data:missing")
+
+    assert response.status_code == 404
+
+
 def test_data_probe_marks_unconfigured_services_disabled(monkeypatch):
     import api.service_health as service_health
 

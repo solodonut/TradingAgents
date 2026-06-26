@@ -227,3 +227,20 @@ def generate_service_health_events(config: dict | None = None) -> Iterator[dict]
         "disabled": sum(1 for item in latest if item["status"] == "disabled"),
     }
     yield {"event": "summary", "data": summary}
+
+
+def probe_single_service_health(service_id: str, config: dict | None = None) -> dict | None:
+    """Return a fresh status for exactly one service id, or None if unknown."""
+    checks_config = dict(config or DEFAULT_CONFIG)
+
+    if service_id.startswith("data:"):
+        probes = _probe_data_services(checks_config)
+    elif service_id.startswith("llm:"):
+        probes = _probe_llm_services(checks_config)
+    else:
+        probes = iter(())
+
+    for status in probes:
+        if status["id"] == service_id:
+            return status
+    return None

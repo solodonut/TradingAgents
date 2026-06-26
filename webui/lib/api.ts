@@ -8,6 +8,7 @@ import type {
   QueueState,
   RunResult,
   RunStatusDetail,
+  ServiceHealthItem,
   ServiceHealthEvent,
   SessionProfile,
 } from "./types";
@@ -133,6 +134,13 @@ export function streamUrl(runId: string): string {
 
 export function serviceHealthStreamUrl(): string {
   return `${BASE}/api/health/services/stream`;
+}
+
+export async function checkServiceHealth(serviceId: string): Promise<ServiceHealthItem> {
+  const encodedId = serviceId.split("/").map(encodeURIComponent).join("/");
+  const r = await fetch(`${BASE}/api/health/services/${encodedId}`);
+  if (!r.ok) throw new Error("单项服务检查失败");
+  return r.json();
 }
 
 export function subscribeServiceHealth(

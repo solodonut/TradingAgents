@@ -23,6 +23,7 @@ import {
   removeQueueItem,
   clearQueue,
   reorderQueue,
+  checkServiceHealth,
   subscribeServiceHealth,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
@@ -63,6 +64,16 @@ const SECTION_LABELS: Record<string, string> = {
   final_trade_decision: "组合经理",
   validation_report: "报告校验",
 };
+
+function summarizeHealthItems(items: ServiceHealthItem[]): ServiceHealthSummary {
+  return {
+    total: items.length,
+    checking: items.filter((item) => item.status === "checking").length,
+    ok: items.filter((item) => item.status === "ok").length,
+    error: items.filter((item) => item.status === "error").length,
+    disabled: items.filter((item) => item.status === "disabled").length,
+  };
+}
 
 // Agent Matrix row order, including the bull/bear debate and 3-way risk debate
 // phases. Neither debate has a report section of its own (the bull/bear debate
@@ -192,6 +203,7 @@ export default function Home() {
   const [healthItems, setHealthItems] = useState<Record<string, ServiceHealthItem>>({});
   const [healthSummary, setHealthSummary] = useState<ServiceHealthSummary | null>(null);
   const [healthChecking, setHealthChecking] = useState(false);
+  const [healthCheckingIds, setHealthCheckingIds] = useState<Set<string>>(new Set());
   const [healthError, setHealthError] = useState<string | null>(null);
   const [healthLastCheckedAt, setHealthLastCheckedAt] = useState<string | null>(null);
   const lastFailureHealthRunRef = useRef<string | null>(null);
@@ -222,6 +234,7 @@ export default function Home() {
   const runServiceHealthCheck = useCallback(() => {
     healthUnsubscribeRef.current?.();
     setHealthChecking(true);
+    setHealthCheckingIds(new Set());
     setHealthError(null);
     setHealthSummary(null);
     setHealthItems({});
@@ -241,6 +254,52 @@ export default function Home() {
       (message) => setHealthError(message),
     );
   }, []);
+
+  const runSingleServiceHealthCheck = useCallback((serviceId: string) => {
+    const currentItem = healthItems[serviceId] ?? null;
+    if (!currentItem) return;
+
+    const checkingItems = {
+      ...healthItems,
+      [serviceId]: {
+        ...currentItem,
+        status: "checking" as const,
+        message: "Checking service",
+        latency_ms: null,
+      },
+    };
+    setHealthItems(checkingItems);
+    setHealthSummary(summarizeHealthItems(Object.values(checkingItems)));
+    setHealthCheckingIds((ids) => new Set(ids).add(serviceId));
+    checkServiceHealth(serviceId)
+      .then((item) => {
+        const next = { ...checkingItems, [item.id]: item };
+        setHealthItems(next);
+        setHealthSummary(summarizeHealthItems(Object.values(next)));
+        setHealthError(null);
+        setHealthLastCheckedAt(new Date().toISOString());
+      })
+      .catch((err) => {
+        const next = {
+          ...checkingItems,
+          [serviceId]: {
+            ...currentItem,
+            status: "error" as const,
+            message: (err as Error).message,
+            latency_ms: null,
+          },
+        };
+        setHealthItems(next);
+        setHealthSummary(summarizeHealthItems(Object.values(next)));
+      })
+      .finally(() => {
+        setHealthCheckingIds((ids) => {
+          const next = new Set(ids);
+          next.delete(serviceId);
+          return next;
+        });
+      });
+  }, [healthItems]);
 
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
@@ -537,6 +596,8 @@ export default function Home() {
                 error={healthError}
                 lastCheckedAt={healthLastCheckedAt}
                 onCheck={runServiceHealthCheck}
+                onCheckOne={runSingleServiceHealthCheck}
+                checkingIds={healthCheckingIds}
               />
             </div>
 

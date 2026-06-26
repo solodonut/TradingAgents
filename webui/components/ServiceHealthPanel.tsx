@@ -82,6 +82,8 @@ export function ServiceHealthPanel({
   error,
   lastCheckedAt,
   onCheck,
+  onCheckOne,
+  checkingIds = new Set(),
 }: {
   items: ServiceHealthItem[];
   summary: ServiceHealthSummary | null;
@@ -89,6 +91,8 @@ export function ServiceHealthPanel({
   error: string | null;
   lastCheckedAt: string | null;
   onCheck: () => void;
+  onCheckOne?: (serviceId: string) => void;
+  checkingIds?: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const visible = items.length > 0 || checking || error;
@@ -172,7 +176,9 @@ export function ServiceHealthPanel({
 
       {expanded && items.length > 0 && (
         <div className="mt-3 space-y-2">
-          {items.map((item) => (
+          {items.map((item) => {
+            const checkingOne = checkingIds.has(item.id) || item.status === "checking";
+            return (
             <div key={item.id} className="glass-readable rounded-md px-3 py-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -182,13 +188,31 @@ export function ServiceHealthPanel({
                     {item.latency_ms === null ? "" : ` · ${item.latency_ms}ms`}
                   </div>
                 </div>
-                <div
-                  className={`inline-flex shrink-0 items-center gap-1.5 font-mono text-[0.68rem] uppercase tracking-[0.12em] ${statusClass(
-                    item.status,
-                  )}`}
-                >
-                  <StatusIcon status={item.status} />
-                  {statusLabel(item.status)}
+                <div className="flex shrink-0 items-center gap-2">
+                  <div
+                    className={`inline-flex items-center gap-1.5 font-mono text-[0.68rem] uppercase tracking-[0.12em] ${statusClass(
+                      item.status,
+                    )}`}
+                  >
+                    <StatusIcon status={item.status} />
+                    {statusLabel(item.status)}
+                  </div>
+                  {onCheckOne && (
+                    <button
+                      type="button"
+                      onClick={() => onCheckOne(item.id)}
+                      disabled={checking || checkingOne}
+                      title={`重新检查 ${item.name}`}
+                      aria-label={`重新检查 ${item.name}`}
+                      className="glass-control inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {checkingOne ? (
+                        <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <RefreshCw className="size-3.5" />
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
               {item.message && (
@@ -197,7 +221,8 @@ export function ServiceHealthPanel({
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
