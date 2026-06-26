@@ -11,6 +11,7 @@ const AGENTS: { id: string; label: string }[] = [
   { id: "trader", label: "交易员" },
   { id: "risk_debate", label: "风险辩论" },
   { id: "portfolio_manager", label: "组合经理" },
+  { id: "report_validator", label: "报告校验" },
 ];
 
 export function AgentProgress({ statuses }: { statuses: Record<string, string> }) {

@@ -19,6 +19,7 @@ _REPORT_ORDER = [
     ("investment_plan", "研究经理决策"),
     ("trader_investment_plan", "交易计划"),
     ("final_trade_decision", "组合经理最终决策"),
+    ("validation_report", "报告一致性校验"),
 ]
 
 

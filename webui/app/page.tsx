@@ -46,6 +46,7 @@ const AGENT_SECTION_MAP: { agent: string; section: string }[] = [
   { agent: "research_manager", section: "investment_plan" },
   { agent: "trader", section: "trader_investment_plan" },
   { agent: "portfolio_manager", section: "final_trade_decision" },
+  { agent: "report_validator", section: "validation_report" },
 ];
 
 const SECTION_TO_AGENT = Object.fromEntries(
@@ -60,6 +61,7 @@ const SECTION_LABELS: Record<string, string> = {
   investment_plan: "研究经理",
   trader_investment_plan: "交易员",
   final_trade_decision: "组合经理",
+  validation_report: "报告校验",
 };
 
 // Agent Matrix row order, including the bull/bear debate and 3-way risk debate
@@ -78,6 +80,7 @@ const MATRIX_ORDER = [
   "trader",
   "risk_debate",
   "portfolio_manager",
+  "report_validator",
 ];
 
 function workingAgentLabel(statuses: Record<string, string>): string | null {
@@ -92,6 +95,23 @@ function workingAgentLabel(statuses: Record<string, string>): string | null {
 function hasSection(result: RunResult["result"], section: string): boolean {
   const value = result?.[section];
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function nextLiveStatuses(
+  prev: Record<string, string>,
+  doneAgent: string,
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [agent, status] of Object.entries(prev)) {
+    if (status === "done") next[agent] = "done";
+  }
+  next[doneAgent] = "done";
+  if (doneAgent === "research_manager") next["debate"] = "done";
+  if (doneAgent === "portfolio_manager") next["risk_debate"] = "done";
+
+  const working = MATRIX_ORDER.find((agent) => next[agent] !== "done");
+  if (working) next[working] = "working";
+  return next;
 }
 
 function deriveHistoryProgress(
@@ -362,19 +382,9 @@ export default function Home() {
       runId,
       (e: SSEEvent) => {
         if (e.event === "agent_status")
-          setStatuses((s) => ({
-            ...s,
-            [e.data.agent]: e.data.status,
-            // The debate has no status event of its own; it's finished once the
-            // research manager reports, so mirror that into the debate row.
-            ...(e.data.agent === "research_manager" && e.data.status === "done"
-              ? { debate: "done" }
-              : {}),
-            // Likewise the risk debate finishes once the portfolio manager reports.
-            ...(e.data.agent === "portfolio_manager" && e.data.status === "done"
-              ? { risk_debate: "done" }
-              : {}),
-          }));
+          setStatuses((s) =>
+            e.data.status === "done" ? nextLiveStatuses(s, e.data.agent) : s,
+          );
         else if (e.event === "message")
           setMessages((m) => [...m, { agent: e.data.agent, content: e.data.content }]);
         else if (e.event === "done")

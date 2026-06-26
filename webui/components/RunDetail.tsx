@@ -14,6 +14,7 @@ const SECTIONS: { field: string; label: string }[] = [
   { field: "fundamentals_report", label: "基本面" },
   { field: "investment_plan", label: "研究经理" },
   { field: "trader_investment_plan", label: "交易员" },
+  { field: "validation_report", label: "报告校验" },
 ];
 
 function fmtTime(iso: string | null): string {

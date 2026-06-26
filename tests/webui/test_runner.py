@@ -160,6 +160,38 @@ def test_runner_updates_last_report_telemetry(tmp_path):
     assert snapshot["last_report_at"] is not None
 
 
+def test_runner_streams_validation_report_as_final_stage(tmp_path):
+    from api.store import Store
+    from api.telemetry import RunTelemetry
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    telemetry = RunTelemetry("r1")
+    fake = _FakeGraph(
+        chunks=[
+            {"final_trade_decision": "**Rating**: Buy"},
+            {"validation_report": "## 报告一致性校验\n\n✅ 全部一致。"},
+        ],
+        final_state=None,
+        decision=None,
+    )
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q, telemetry=telemetry)
+
+    runner.run(run_id="r1", graph=fake, init_state={}, decision=None, final_state=None)
+
+    events = _drain(q)
+    assert any(
+        e["event"] == "agent_status"
+        and e["data"]["agent"] == "report_validator"
+        and e["data"]["status"] == "done"
+        for e in events
+    )
+    assert store.get_run("r1").result["validation_report"].startswith("## 报告一致性校验")
+    snapshot = telemetry.snapshot(db_status="completed", process_alive=False)
+    assert snapshot["last_report_section"] == "validation_report"
+
+
 def test_runner_persists_partial_sections_before_completion(tmp_path):
     from api.store import Store
 

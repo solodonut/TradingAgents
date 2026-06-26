@@ -17,6 +17,7 @@ REPORT_SECTIONS: dict[str, tuple[str, str]] = {
     "investment_plan": ("research_manager", "research"),
     "trader_investment_plan": ("trader", "trading"),
     "final_trade_decision": ("portfolio_manager", "portfolio"),
+    "validation_report": ("report_validator", "validation"),
 }
 
 REPORT_SECTION_KEYS = frozenset(REPORT_SECTIONS)
