@@ -54,18 +54,18 @@ def _fetch_daily(ts_code: str, start_date: str, end_date: str) -> pd.DataFrame:
 
 def _normalize_frame(raw: pd.DataFrame) -> pd.DataFrame:
     df = raw.rename(columns=_COLUMN_MAP).copy()
-    required = ["Date", "Open", "High", "Low", "Close", "Volume"]
+    value_columns = ["Open", "High", "Low", "Close", "Volume", "Amount"]
+    required = ["Date", *value_columns]
     if any(col not in df.columns for col in required):
         return pd.DataFrame()
 
     df["Date"] = pd.to_datetime(df["Date"], format="%Y%m%d", errors="coerce")
     df = df.dropna(subset=["Date"]).set_index("Date")
-    keep = [c for c in ("Open", "High", "Low", "Close", "Volume", "Amount") if c in df.columns]
-    df = df[keep]
+    df = df[value_columns]
 
-    for col in keep:
+    for col in value_columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna(subset=required[1:])
+    df = df.dropna(subset=value_columns)
     return df.sort_index()
 
 

@@ -8,7 +8,12 @@ import time
 import pandas as pd
 import requests
 
-from .akshare_utils import display_symbol, is_a_share, is_etf_code, to_bare_code
+from .akshare_utils import (
+    display_symbol as akshare_display_symbol,
+    is_a_share,
+    is_etf_code,
+    to_bare_code,
+)
 from .errors import VendorError, VendorNotConfiguredError, VendorRateLimitError
 
 try:
@@ -27,6 +32,7 @@ except ModuleNotFoundError as exc:
     ts = _MissingTushare()
 
 _CLIENT = None
+_TUSHARE_SUFFIX = re.compile(r"^(\d{6})\.(SH|SZ|BJ|SS)$", re.IGNORECASE)
 
 
 class TushareNotConfiguredError(VendorNotConfiguredError):
@@ -137,7 +143,7 @@ def cached_call(key: str, ttl_seconds: int, func):
 def to_ts_code(symbol: str) -> str:
     """Return a Tushare ``ts_code`` such as ``600519.SH`` or ``000001.SZ``."""
     s = symbol.strip()
-    m = re.match(r"^(\d{6})\.(SS|SH|SZ|BJ)$", s, re.IGNORECASE)
+    m = _TUSHARE_SUFFIX.match(s)
     if m:
         code, suffix = m.group(1), m.group(2).upper()
         if suffix == "SS":
@@ -150,13 +156,31 @@ def to_ts_code(symbol: str) -> str:
     return canonical
 
 
+def display_symbol(symbol: str) -> str:
+    """Return the canonical report label for a Tushare mainland instrument."""
+    s = symbol.strip()
+    m = _TUSHARE_SUFFIX.match(s)
+    if m:
+        code, suffix = m.group(1), m.group(2).upper()
+        if suffix == "SH":
+            suffix = "SS"
+        return f"{code}.{suffix}"
+    return akshare_display_symbol(symbol)
+
+
 def is_mainland_symbol(symbol: str) -> bool:
     """True when ``symbol`` denotes a mainland China market instrument."""
-    return is_a_share(symbol)
+    if not isinstance(symbol, str):
+        return False
+    return bool(_TUSHARE_SUFFIX.match(symbol.strip())) or is_a_share(symbol)
 
 
 def is_fund_symbol(symbol: str) -> bool:
     """True when ``symbol`` is a recognized mainland fund/ETF code."""
+    s = symbol.strip()
+    m = re.match(r"^(\d{6})", s)
+    if m:
+        return is_etf_code(m.group(1))
     try:
         return is_etf_code(to_bare_code(symbol))
     except ValueError:

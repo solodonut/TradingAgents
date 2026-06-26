@@ -7,7 +7,11 @@ import pytest
 
 from tradingagents.dataflows import tushare_utils
 from tradingagents.dataflows.config import set_config
-from tradingagents.dataflows.errors import VendorNotConfiguredError, VendorRateLimitError
+from tradingagents.dataflows.errors import (
+    NoMarketDataError,
+    VendorNotConfiguredError,
+    VendorRateLimitError,
+)
 
 
 @pytest.mark.unit
@@ -120,6 +124,30 @@ def test_tushare_stock_normalizes_fund_daily(monkeypatch):
 
 
 @pytest.mark.unit
+def test_tushare_stock_missing_amount_raises_no_market_data(monkeypatch):
+    from tradingagents.dataflows import tushare_stock
+
+    client = mock.Mock()
+    raw = pd.DataFrame(
+        {
+            "trade_date": ["20260619"],
+            "open": [1.23],
+            "high": [1.25],
+            "low": [1.21],
+            "close": [1.24],
+            "vol": [123456.0],
+        }
+    )
+    client.fund_daily.return_value = raw
+    monkeypatch.setattr(tushare_stock, "get_tushare_client", mock.Mock(return_value=client))
+    monkeypatch.setattr(tushare_stock, "call_tushare", lambda func: func())
+    monkeypatch.setattr(tushare_stock, "cached_call", lambda key, ttl, func: func())
+
+    with pytest.raises(NoMarketDataError):
+        tushare_stock.get_stock_data("159241", "2026-06-01", "2026-06-20")
+
+
+@pytest.mark.unit
 def test_tushare_stock_normalizes_a_share_daily(monkeypatch):
     from tradingagents.dataflows import tushare_stock
 
@@ -147,6 +175,47 @@ def test_tushare_stock_normalizes_a_share_daily(monkeypatch):
     assert "2026-06-19,1680.0,1701.5,1678.25,1699.0,98765.0,1234567.89" in result
     client.daily.assert_called_once_with(
         ts_code="600519.SH",
+        start_date="20260601",
+        end_date="20260620",
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("symbol", "expected_ts_code", "expected_label"),
+    [
+        ("600519.SH", "600519.SH", "600519.SS"),
+        ("430047.BJ", "430047.BJ", "430047.BJ"),
+    ],
+)
+def test_tushare_stock_accepts_tushare_suffixes(
+    monkeypatch, symbol, expected_ts_code, expected_label
+):
+    from tradingagents.dataflows import tushare_stock
+
+    client = mock.Mock()
+    raw = pd.DataFrame(
+        {
+            "trade_date": ["20260619"],
+            "open": [1680.0],
+            "high": [1701.5],
+            "low": [1678.25],
+            "close": [1699.0],
+            "vol": [98765.0],
+            "amount": [1234567.89],
+        }
+    )
+    client.daily.return_value = raw
+    monkeypatch.setattr(tushare_stock, "get_tushare_client", mock.Mock(return_value=client))
+    monkeypatch.setattr(tushare_stock, "call_tushare", lambda func: func())
+    monkeypatch.setattr(tushare_stock, "cached_call", lambda key, ttl, func: func())
+
+    result = tushare_stock.get_stock_data(symbol, "2026-06-01", "2026-06-20")
+
+    assert f"Stock data for {expected_label} (Tushare Pro)" in result
+    assert "Date,Open,High,Low,Close,Volume,Amount" in result
+    client.daily.assert_called_once_with(
+        ts_code=expected_ts_code,
         start_date="20260601",
         end_date="20260620",
     )
