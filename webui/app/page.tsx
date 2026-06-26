@@ -24,6 +24,7 @@ import {
   clearQueue,
   reorderQueue,
   checkServiceHealth,
+  historyReportsZipUrl,
   subscribeServiceHealth,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
@@ -219,6 +220,8 @@ export default function Home() {
   const [detail, setDetail] = useState<RunResult | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [exportingHistory, setExportingHistory] = useState(false);
+  const [selectedHistoryRunIds, setSelectedHistoryRunIds] = useState<Set<string>>(new Set());
   const [runtimeStatus, setRuntimeStatus] = useState<RunStatusDetail | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
@@ -226,6 +229,10 @@ export default function Home() {
     getHistory()
       .then((items) => {
         setHistory(items);
+        setSelectedHistoryRunIds((prev) => {
+          const existing = new Set(items.map((item) => item.run_id));
+          return new Set(Array.from(prev).filter((runId) => existing.has(runId)));
+        });
         if (!items.some((item) => item.status === "running")) {
           setError(null);
         }
@@ -421,7 +428,55 @@ export default function Home() {
 
   const onDeleteHistory = (id: string) => {
     if (id === selectedId) exitDetail();
+    setSelectedHistoryRunIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     deleteHistory(id).then(refreshHistory);
+  };
+
+  const onToggleHistoryRun = (runId: string) => {
+    setSelectedHistoryRunIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(runId)) next.delete(runId);
+      else next.add(runId);
+      return next;
+    });
+  };
+
+  const onToggleHistoryDate = (runIds: string[], selected: boolean) => {
+    setSelectedHistoryRunIds((prev) => {
+      const next = new Set(prev);
+      for (const runId of runIds) {
+        if (selected) next.add(runId);
+        else next.delete(runId);
+      }
+      return next;
+    });
+  };
+
+  const onExportHistoryReports = async () => {
+    const runIds = Array.from(selectedHistoryRunIds);
+    if (exportingHistory || runIds.length === 0) return;
+    setExportingHistory(true);
+    setError(null);
+    try {
+      const resp = await fetch(historyReportsZipUrl(runIds));
+      if (resp.status === 404) throw new Error("暂无可导出的历史报告");
+      if (!resp.ok) throw new Error("批量导出报告失败");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tradingagents_reports_${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExportingHistory(false);
+    }
   };
 
   const resetRunView = () => {
@@ -583,8 +638,13 @@ export default function Home() {
           <HistorySidebar
             items={history}
             selectedId={selectedId}
+            selectedRunIds={selectedHistoryRunIds}
             onOpen={onOpenDetail}
             onDelete={onDeleteHistory}
+            onToggleRun={onToggleHistoryRun}
+            onToggleDate={onToggleHistoryDate}
+            onExportSelected={() => void onExportHistoryReports()}
+            exporting={exportingHistory}
           />
         </div>
 

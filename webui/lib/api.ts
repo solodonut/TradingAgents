@@ -129,6 +129,12 @@ export function reportUrl(runId: string): string {
   return `${BASE}/api/analysis/${runId}/report`;
 }
 
+export function historyReportsZipUrl(runIds: string[] = []): string {
+  const url = new URL(`${BASE}/api/history/reports.zip`);
+  for (const runId of runIds) url.searchParams.append("run_ids", runId);
+  return url.toString();
+}
+
 export function streamUrl(runId: string): string {
   return `${BASE}/api/analysis/${runId}/stream`;
 }
