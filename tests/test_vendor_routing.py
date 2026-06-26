@@ -157,6 +157,19 @@ class VendorRoutingTests(unittest.TestCase):
         self.assertIn("tushare", joined)
         self.assertIn("not configured", joined)
 
+    def test_get_etf_profile_routes_to_akshare(self):
+        # etf_data has no explicit config -> "default" -> use all available
+        # vendors, which for get_etf_profile is just akshare.
+        akshare = mock.Mock(side_effect=_returns("ETF_PROFILE"))
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {"get_etf_profile": {"akshare": akshare}},
+            clear=False,
+        ):
+            result = interface.route_to_vendor("get_etf_profile", "510300", "2026-06-01")
+        self.assertEqual(result, "ETF_PROFILE")
+        akshare.assert_called_once()
+
     def test_production_vendor_methods_include_tushare_defaults(self):
         methods = [
             "get_stock_data",

@@ -7,6 +7,7 @@ def test_advisor_tools_are_langchain_tools():
     assert "get_news" in names
     assert "get_fundamentals" in names
     assert "get_indicators" in names
+    assert "get_etf_profile" in names
 
 
 def test_is_no_data_detects_sentinels():

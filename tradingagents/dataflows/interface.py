@@ -3,6 +3,7 @@ import logging
 import requests
 
 from .akshare_fundamentals import (
+    get_akshare_etf_profile,
     get_balance_sheet as get_akshare_balance_sheet,
     get_cashflow as get_akshare_cashflow,
     get_fundamentals as get_akshare_fundamentals,
@@ -110,6 +111,12 @@ TOOLS_CATEGORIES = {
         "tools": [
             "get_prediction_markets",
         ]
+    },
+    "etf_data": {
+        "description": "ETF-specific data: discount/premium, IOPV, scale, holdings",
+        "tools": [
+            "get_etf_profile",
+        ]
     }
 }
 
@@ -189,6 +196,10 @@ VENDOR_METHODS = {
     # prediction_markets
     "get_prediction_markets": {
         "polymarket": get_polymarket_prediction_markets,
+    },
+    # etf_data
+    "get_etf_profile": {
+        "akshare": get_akshare_etf_profile,
     },
 }
 
