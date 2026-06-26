@@ -27,6 +27,7 @@ import {
   subscribeServiceHealth,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
+import { sortServiceHealthItems } from "@/lib/service-health";
 import type {
   ConfigOptions,
   Decision,
@@ -572,6 +573,7 @@ export default function Home() {
   const latestMessage = messages.at(-1);
   const completedAgents = Object.values(sidebarStatuses).filter((s) => s === "done").length;
   const workingAgents = Object.values(sidebarStatuses).filter((s) => s === "working").length;
+  const sortedHealthItems = sortServiceHealthItems(Object.values(healthItems));
 
   return (
     <div className="min-h-screen text-foreground lg:h-screen lg:overflow-hidden">
@@ -590,7 +592,7 @@ export default function Home() {
           <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-4 lg:px-5">
             <div className="mb-3">
               <ServiceHealthPanel
-                items={Object.values(healthItems)}
+                items={sortedHealthItems}
                 summary={healthSummary}
                 checking={healthChecking}
                 error={healthError}
