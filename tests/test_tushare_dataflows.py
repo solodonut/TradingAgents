@@ -84,3 +84,69 @@ def test_tushare_cached_call_round_trips_dataframe(tmp_path):
     assert calls == 1
     pd.testing.assert_frame_equal(first, expected)
     pd.testing.assert_frame_equal(second, expected)
+
+
+@pytest.mark.unit
+def test_tushare_stock_normalizes_fund_daily(monkeypatch):
+    from tradingagents.dataflows import tushare_stock
+
+    client = mock.Mock()
+    raw = pd.DataFrame(
+        {
+            "trade_date": ["20260619"],
+            "open": [1.23],
+            "high": [1.25],
+            "low": [1.21],
+            "close": [1.24],
+            "vol": [123456.0],
+            "amount": [45678.9],
+        }
+    )
+    client.fund_daily.return_value = raw
+    monkeypatch.setattr(tushare_stock, "get_tushare_client", mock.Mock(return_value=client))
+    monkeypatch.setattr(tushare_stock, "call_tushare", lambda func: func())
+    monkeypatch.setattr(tushare_stock, "cached_call", lambda key, ttl, func: func())
+
+    result = tushare_stock.get_stock_data("159241", "2026-06-01", "2026-06-20")
+
+    assert "Stock data for 159241.SZ (Tushare Pro)" in result
+    assert "Date,Open,High,Low,Close,Volume,Amount" in result
+    assert "2026-06-19,1.23,1.25,1.21,1.24,123456.0,45678.9" in result
+    client.fund_daily.assert_called_once_with(
+        ts_code="159241.SZ",
+        start_date="20260601",
+        end_date="20260620",
+    )
+
+
+@pytest.mark.unit
+def test_tushare_stock_normalizes_a_share_daily(monkeypatch):
+    from tradingagents.dataflows import tushare_stock
+
+    client = mock.Mock()
+    raw = pd.DataFrame(
+        {
+            "trade_date": ["20260619"],
+            "open": [1680.0],
+            "high": [1701.5],
+            "low": [1678.25],
+            "close": [1699.0],
+            "vol": [98765.0],
+            "amount": [1234567.89],
+        }
+    )
+    client.daily.return_value = raw
+    monkeypatch.setattr(tushare_stock, "get_tushare_client", mock.Mock(return_value=client))
+    monkeypatch.setattr(tushare_stock, "call_tushare", lambda func: func())
+    monkeypatch.setattr(tushare_stock, "cached_call", lambda key, ttl, func: func())
+
+    result = tushare_stock.get_stock_data("600519", "2026-06-01", "2026-06-20")
+
+    assert "Stock data for 600519.SS (Tushare Pro)" in result
+    assert "Date,Open,High,Low,Close,Volume,Amount" in result
+    assert "2026-06-19,1680.0,1701.5,1678.25,1699.0,98765.0,1234567.89" in result
+    client.daily.assert_called_once_with(
+        ts_code="600519.SH",
+        start_date="20260601",
+        end_date="20260620",
+    )

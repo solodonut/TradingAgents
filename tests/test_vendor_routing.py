@@ -15,7 +15,9 @@ import tradingagents.dataflows.config as config_module
 import tradingagents.default_config as default_config
 from tradingagents.dataflows import interface
 from tradingagents.dataflows.config import set_config
+from tradingagents.dataflows.errors import VendorNotConfiguredError
 from tradingagents.dataflows.symbol_utils import NoMarketDataError
+from tradingagents.dataflows.tushare_stock import get_stock_data as get_tushare_stock
 
 
 def _reset_config():
@@ -132,13 +134,16 @@ class VendorRoutingTests(unittest.TestCase):
         self.assertEqual(result, "TS_DATA")
         self.assertEqual(calls, ["tushare"])
 
-    def test_production_tushare_placeholder_falls_back_to_akshare(self):
+    def test_production_tushare_price_not_configured_falls_back_to_akshare(self):
         set_config({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
 
         with mock.patch.dict(
             interface.VENDOR_METHODS["get_stock_data"],
             {"akshare": _returns("AK_DATA")},
             clear=False,
+        ), mock.patch(
+            "tradingagents.dataflows.tushare_stock.get_tushare_client",
+            side_effect=VendorNotConfiguredError("TUSHARE_TOKEN is not configured."),
         ), self.assertLogs("tradingagents.dataflows.interface", level="WARNING") as cm:
             result = interface.route_to_vendor(
                 "get_stock_data",
@@ -165,6 +170,7 @@ class VendorRoutingTests(unittest.TestCase):
         for method in methods:
             with self.subTest(method=method):
                 self.assertIn("tushare", interface.VENDOR_METHODS[method])
+        self.assertIs(interface.VENDOR_METHODS["get_stock_data"]["tushare"], get_tushare_stock)
 
 
 if __name__ == "__main__":
