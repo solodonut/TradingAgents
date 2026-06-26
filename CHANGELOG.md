@@ -10,6 +10,12 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **Tushare Pro 作为中国大陆数据主源,AKShare 兜底。** 新增 `tushare_utils`/`tushare_stock`/
+  `tushare_indicator`/`tushare_fundamentals` 四个数据模块,经 `route_to_vendor()` 注册;
+  默认价格/技术指标/基本面链改为 `tushare,akshare`(新闻仍 `akshare`),Tushare 成功即停止、
+  未配置/限流/无数据时自动回退 AKShare。指标沿用本地 `stockstats` 计算,ETF/基金财报返回
+  `not_applicable`,A 股财报按 `curr_date` 过滤防前视。需 `.env` 配置 `TUSHARE_TOKEN`;
+  WebUI 服务健康检查新增 Tushare Pro 探针(缺 token 报错、可达报 ok)。
 - WebUI 历史记录列表在标的代码下方显示标的可读名称（A 股/ETF 中文名、其余 yfinance 公司全名）。
   名称在分析启动时由 `resolve_instrument_identity` 解析并落库到 `analysis_runs.instrument_name`
   新列（动态迁移，兼容旧库），经 `GET /api/history` 返回；解析不到时留空、前端回退为仅显示代码。
