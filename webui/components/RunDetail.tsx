@@ -1,5 +1,5 @@
 "use client";
-import { LoaderCircle, OctagonX } from "lucide-react";
+import { Download, LoaderCircle, OctagonX } from "lucide-react";
 import { MessageBubble } from "@/components/MessageBubble";
 import { DecisionCard } from "@/components/DecisionCard";
 import { RuntimeStatusPanel } from "@/components/RuntimeStatusPanel";
@@ -21,6 +21,42 @@ function fmtTime(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
+}
+
+// Assemble the full run into a single Markdown document. Each report field is
+// already a Markdown string, so we just wrap them under `##` headings.
+function buildMarkdown(run: RunResult): string {
+  const result = run.result ?? {};
+  const lines: string[] = [
+    `# ${run.ticker} · ${run.trade_date} 分析报告`,
+    "",
+    `- 决策：${run.decision ?? "—"}`,
+    `- 状态：${run.status}`,
+    `- 开始：${fmtTime(run.created_at)}`,
+    `- 结束：${fmtTime(run.completed_at)}`,
+    "",
+  ];
+  for (const s of SECTIONS) {
+    const v = result[s.field];
+    if (typeof v === "string" && v.trim().length > 0) {
+      lines.push(`## ${s.label}`, "", v.trim(), "");
+    }
+  }
+  const final = result["final_trade_decision"];
+  if (typeof final === "string" && final.trim().length > 0) {
+    lines.push("## 最终决策", "", final.trim(), "");
+  }
+  return lines.join("\n");
+}
+
+function exportMarkdown(run: RunResult): void {
+  const blob = new Blob([buildMarkdown(run)], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${run.ticker}_${run.trade_date}_analysis.md`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function RunDetail({
@@ -50,8 +86,20 @@ export function RunDetail({
   return (
     <div className="space-y-3">
       <div className="glass rounded-lg px-3 py-3 font-mono text-sm">
-        <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-          Archived Run
+        <div className="flex items-start justify-between gap-2">
+          <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+            Archived Run
+          </div>
+          {(sections.length > 0 || hasFinal) && (
+            <button
+              type="button"
+              onClick={() => exportMarkdown(run)}
+              className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] transition-colors hover:brightness-110 focus-visible:outline-none"
+            >
+              <Download className="size-3.5" />
+              导出 Markdown
+            </button>
+          )}
         </div>
         <div className="mt-1 text-foreground">
           {run.ticker} · {run.trade_date}

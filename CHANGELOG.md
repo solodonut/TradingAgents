@@ -10,6 +10,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- WebUI 历史分析详情页新增「导出 Markdown」按钮：把该次分析的各 agent 报告（市场/情绪/
+  新闻/基本面/研究经理/交易员）与最终决策拼成一份 Markdown 文档，经浏览器直接下载为
+  `{ticker}_{trade_date}_analysis.md`；纯前端实现、无需后端接口，仅在有可导出内容时显示。
+
 - **Tushare Pro 作为中国大陆数据主源,AKShare 兜底。** 新增 `tushare_utils`/`tushare_stock`/
   `tushare_indicator`/`tushare_fundamentals` 四个数据模块,经 `route_to_vendor()` 注册;
   默认价格/技术指标/基本面链改为 `tushare,akshare`(新闻仍 `akshare`),Tushare 成功即停止、
