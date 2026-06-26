@@ -58,6 +58,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Changed
 
+- A 股/ETF 标的名称解析优先级改为 **tushare → AKShare → yfinance**（原 AKShare 优先）。
+  tushare 经 `fund_basic`/`stock_basic` 的 `name` 字段取名，复用基本面相同的磁盘缓存
+  （`fund_basic_`/`stock_basic_{ts_code}`），常可零额外请求命中；tushare 未配置/限流/超时
+  一律 fail-open 自动回退 AKShare，再不行回退 yfinance。与「tushare 为大陆数据主源」一致。
 - **IBM ICA now uses Anthropic Messages.** The Claude-only `ibm_ica` provider
   now sends native Anthropic requests to `/ica/v1/messages` with
   `IBM_ICA_API_KEY` as `x-api-key`. Core, CLI, Chat, vision, export, and startup

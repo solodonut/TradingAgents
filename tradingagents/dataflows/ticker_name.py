@@ -1,9 +1,10 @@
 """把代码解析成人类可读名称，供 WebUI 代码清单使用。
 
-大陆 A 股/ETF 优先用 AKShare 的中文名；其它标的（以及 AKShare 未命中/超时）
-回退 yfinance（英文名）。fail-open：任何来源都拿不到时返回 None，清单仍显示
-纯代码。AKShare 端点偶发慢/不稳，故用线程+超时 bounded，超时即回退；后台线程
-继续把全表写入磁盘缓存，下次命中即秒出中文名。
+大陆 A 股/ETF 的中文名优先级：tushare（fund_basic/stock_basic 的 name 字段，
+与基本面共用磁盘缓存，常可零请求命中）→ AKShare → yfinance（英文名）。
+其它标的直接走 yfinance。fail-open：任何来源都拿不到时返回 None，清单仍显示
+纯代码。各数据源端点偶发慢/不稳，故统一用线程+超时 bounded，超时即回退；后台
+线程继续把结果写入磁盘缓存，下次命中即秒出中文名。
 """
 
 import concurrent.futures
@@ -11,7 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_AKSHARE_TIMEOUT_S = 6.0
+_NAME_LOOKUP_TIMEOUT_S = 6.0
 
 
 def _akshare_name(code: str) -> str | None:
@@ -44,6 +45,40 @@ def _akshare_name(code: str) -> str | None:
     return name or None
 
 
+def _tushare_name(code: str) -> str | None:
+    """A 股/ETF 的中文名（tushare fund_basic/stock_basic 的 name 字段）。
+
+    复用 tushare_fundamentals 的缓存 key（``fund_basic_``/``stock_basic_{ts_code}``），
+    该标的若已分析过基本面即可命中磁盘缓存，零额外请求。无超时控制——由
+    resolve_ticker_name 包线程超时。
+    """
+    from .tushare_utils import (
+        cached_call,
+        call_tushare,
+        get_tushare_client,
+        is_fund_symbol,
+        to_ts_code,
+    )
+
+    ts_code = to_ts_code(code)
+    if is_fund_symbol(code):
+        df = cached_call(
+            f"fund_basic_{ts_code}",
+            24 * 3600,
+            lambda: call_tushare(lambda: get_tushare_client().fund_basic(ts_code=ts_code)),
+        )
+    else:
+        df = cached_call(
+            f"stock_basic_{ts_code}",
+            24 * 3600,
+            lambda: call_tushare(lambda: get_tushare_client().stock_basic(ts_code=ts_code)),
+        )
+    if df is None or df.empty or "name" not in df.columns:
+        return None
+    name = str(df["name"].iloc[0]).strip()
+    return name or None
+
+
 def _yfinance_name(code: str) -> str | None:
     """yfinance 公司名（直接调底层，绕过 domestic_china_only 门控）。"""
     from tradingagents.agents.utils.agent_utils import (
@@ -55,8 +90,21 @@ def _yfinance_name(code: str) -> str | None:
     return name or None
 
 
+def _bounded(fn, code: str) -> str | None:
+    """在独立线程里跑名称解析并加超时；超时/限频/任何异常一律 fail-open 返回 None。"""
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return executor.submit(fn, code).result(timeout=_NAME_LOOKUP_TIMEOUT_S)
+    except Exception as exc:  # 超时 / 解析错误 / 任何异常 → 回退
+        logger.debug("%s name lookup failed for %s: %s", getattr(fn, "__name__", fn), code, exc)
+        return None
+    finally:
+        # 不等待：超时的话让后台线程继续把结果写进磁盘缓存，下次秒出
+        executor.shutdown(wait=False)
+
+
 def resolve_ticker_name(code: str) -> str | None:
-    """A 股/ETF 优先 AKShare 中文名（bounded），否则/失败回退 yfinance。fail-open。"""
+    """A 股/ETF 优先 tushare→AKShare 中文名（bounded），否则/失败回退 yfinance。fail-open。"""
     from .akshare_utils import display_symbol, is_a_share
 
     ticker = code.strip().upper()
@@ -66,17 +114,10 @@ def resolve_ticker_name(code: str) -> str | None:
     yahoo_ticker = ticker
     if is_a_share(ticker):
         yahoo_ticker = display_symbol(ticker)
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        try:
-            future = executor.submit(_akshare_name, ticker)
-            name = future.result(timeout=_AKSHARE_TIMEOUT_S)
+        for source in (_tushare_name, _akshare_name):
+            name = _bounded(source, ticker)
             if name:
                 return name
-        except Exception as exc:  # 超时 / 解析错误 / 任何异常 → 回退
-            logger.debug("AKShare name lookup failed for %s: %s", ticker, exc)
-        finally:
-            # 不等待：超时的话让后台线程继续把全表写进磁盘缓存，下次秒出
-            executor.shutdown(wait=False)
 
     try:
         return _yfinance_name(yahoo_ticker)
