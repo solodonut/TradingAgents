@@ -43,6 +43,16 @@ class HierarchyTests(unittest.TestCase):
         # ... and therefore still ValueErrors
         self.assertTrue(issubclass(FredNotConfiguredError, ValueError))
 
+    def test_tushare_named_errors_subclass_generic_bases(self):
+        from tradingagents.dataflows.tushare_utils import (
+            TushareNotConfiguredError,
+            TushareRateLimitError,
+        )
+
+        self.assertTrue(issubclass(TushareNotConfiguredError, VendorNotConfiguredError))
+        self.assertTrue(issubclass(TushareRateLimitError, VendorRateLimitError))
+        self.assertTrue(issubclass(TushareNotConfiguredError, ValueError))
+
     def test_symbol_utils_reexports_no_market_data_error(self):
         from tradingagents.dataflows.symbol_utils import (
             NoMarketDataError as ReExported,
