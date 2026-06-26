@@ -3,6 +3,8 @@ condition derives from VendorError, so the router catches base types and any
 vendor slots in without new handling.
 """
 import copy
+import importlib
+import sys
 import unittest
 from unittest import mock
 
@@ -58,6 +60,24 @@ class HierarchyTests(unittest.TestCase):
             NoMarketDataError as ReExported,
         )
         self.assertIs(ReExported, NoMarketDataError)
+
+    def test_tushare_import_fallback_only_handles_missing_tushare_package(self):
+        import tradingagents.dataflows.tushare_utils as tushare_utils
+
+        original_import = __import__
+        sys.modules.pop("tushare", None)
+
+        def _raise_nested_missing(name, *args, **kwargs):
+            if name == "tushare":
+                raise ModuleNotFoundError("No module named 'tushare.extra'", name="tushare.extra")
+            return original_import(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", side_effect=_raise_nested_missing), \
+                self.assertRaises(ModuleNotFoundError) as ctx:
+            importlib.reload(tushare_utils)
+
+        self.assertEqual(ctx.exception.name, "tushare.extra")
+        importlib.reload(tushare_utils)
 
 
 @pytest.mark.unit

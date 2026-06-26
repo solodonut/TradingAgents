@@ -13,7 +13,10 @@ from .errors import VendorError, VendorNotConfiguredError, VendorRateLimitError
 
 try:
     import tushare as ts
-except ModuleNotFoundError:
+except ModuleNotFoundError as exc:
+    if exc.name != "tushare":
+        raise
+
     class _MissingTushare:
         def set_token(self, token: str):
             raise TushareNotConfiguredError("The tushare package is not installed.")
@@ -133,6 +136,14 @@ def cached_call(key: str, ttl_seconds: int, func):
 
 def to_ts_code(symbol: str) -> str:
     """Return a Tushare ``ts_code`` such as ``600519.SH`` or ``000001.SZ``."""
+    s = symbol.strip()
+    m = re.match(r"^(\d{6})\.(SS|SH|SZ|BJ)$", s, re.IGNORECASE)
+    if m:
+        code, suffix = m.group(1), m.group(2).upper()
+        if suffix == "SS":
+            suffix = "SH"
+        return f"{code}.{suffix}"
+
     canonical = display_symbol(symbol)
     if canonical.endswith(".SS"):
         return f"{to_bare_code(canonical)}.SH"
