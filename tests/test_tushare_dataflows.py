@@ -305,3 +305,17 @@ def test_tushare_a_share_statement_filters_future_periods(monkeypatch):
 
     assert "2026-03-31" in result
     assert "2026-06-30" not in result
+
+
+@pytest.mark.unit
+def test_tushare_stock_empty_frame_raises_no_market_data(monkeypatch):
+    from tradingagents.dataflows import tushare_stock
+
+    client = mock.Mock()
+    client.fund_daily.return_value = pd.DataFrame()
+    monkeypatch.setattr(tushare_stock, "get_tushare_client", lambda: client)
+    monkeypatch.setattr(tushare_stock, "call_tushare", lambda func: func())
+    monkeypatch.setattr(tushare_stock, "cached_call", lambda _key, _ttl, func: func())
+
+    with pytest.raises(NoMarketDataError):
+        tushare_stock.get_stock_data("159241", "2026-06-01", "2026-06-20")
