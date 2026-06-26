@@ -77,6 +77,22 @@ def test_set_instrument_name_surfaces_in_list_runs(tmp_path):
 
     store.set_instrument_name("r1", "SPDR S&P 500 ETF Trust")
     assert store.list_runs()[0].instrument_name == "SPDR S&P 500 ETF Trust"
+    assert store.get_run("r1").instrument_name == "SPDR S&P 500 ETF Trust"
+
+
+def test_enqueue_run_can_persist_instrument_name(tmp_path):
+    store = Store(tmp_path / "test.db")
+    store.enqueue_run(
+        "r1",
+        "159915",
+        "2026-06-26",
+        "stock",
+        {"ticker": "159915"},
+        instrument_name="创业板ETF易方达",
+    )
+
+    row = store.next_pending()
+    assert row.instrument_name == "创业板ETF易方达"
 
 
 def test_delete_run(tmp_path):

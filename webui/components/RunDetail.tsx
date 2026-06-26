@@ -28,8 +28,9 @@ function fmtTime(iso: string | null): string {
 // already a Markdown string, so we just wrap them under `##` headings.
 function buildMarkdown(run: RunResult): string {
   const result = run.result ?? {};
+  const title = run.instrument_name ? `${run.ticker} ${run.instrument_name}` : run.ticker;
   const lines: string[] = [
-    `# ${run.ticker} · ${run.trade_date} 分析报告`,
+    `# ${title} · ${run.trade_date} 分析报告`,
     "",
     `- 决策：${run.decision ?? "—"}`,
     `- 状态：${run.status}`,
@@ -76,6 +77,7 @@ export function RunDetail({
   canceling?: boolean;
 }) {
   const result = run.result ?? {};
+  const title = run.instrument_name ? `${run.ticker} ${run.instrument_name}` : run.ticker;
   const sections = SECTIONS.filter((s) => {
     const v = result[s.field];
     return typeof v === "string" && v.trim().length > 0;
@@ -103,7 +105,7 @@ export function RunDetail({
           )}
         </div>
         <div className="mt-1 text-foreground">
-          {run.ticker} · {run.trade_date}
+          {title} · {run.trade_date}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5 text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
           <span>状态 {run.status}</span>

@@ -47,6 +47,7 @@ export async function startAnalysis(req: AnalysisRequest): Promise<string> {
 
 export interface EnqueueRequest {
   tickers: string[];
+  ticker_names?: Record<string, string>;
   trade_date: string;
   asset_type: AnalysisRequest["asset_type"];
   analysts: string[];

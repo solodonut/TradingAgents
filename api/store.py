@@ -114,15 +114,29 @@ class Store:
         return conn
 
     def insert_run(
-        self, run_id: str, ticker: str, trade_date: str, asset_type: str, config: dict
+        self,
+        run_id: str,
+        ticker: str,
+        trade_date: str,
+        asset_type: str,
+        config: dict,
+        instrument_name: str | None = None,
     ) -> None:
         with self._lock, self._connect() as conn:
             conn.execute(
                 "INSERT INTO analysis_runs "
                 "(run_id, ticker, trade_date, asset_type, decision, status, "
-                " config_json, result_json, created_at, completed_at) "
-                "VALUES (?, ?, ?, ?, NULL, 'running', ?, NULL, ?, NULL)",
-                (run_id, ticker, trade_date, asset_type, _dumps(config), _now()),
+                " config_json, result_json, created_at, completed_at, instrument_name) "
+                "VALUES (?, ?, ?, ?, NULL, 'running', ?, NULL, ?, NULL, ?)",
+                (
+                    run_id,
+                    ticker,
+                    trade_date,
+                    asset_type,
+                    _dumps(config),
+                    _now(),
+                    instrument_name,
+                ),
             )
 
     def set_instrument_name(self, run_id: str, name: str) -> None:
@@ -186,6 +200,7 @@ class Store:
             ticker=row["ticker"],
             trade_date=row["trade_date"],
             asset_type=row["asset_type"],
+            instrument_name=row["instrument_name"],
             decision=row["decision"],
             status=row["status"],
             config=json.loads(row["config_json"]),
@@ -248,7 +263,13 @@ class Store:
         )
 
     def enqueue_run(
-        self, run_id: str, ticker: str, trade_date: str, asset_type: str, config: dict
+        self,
+        run_id: str,
+        ticker: str,
+        trade_date: str,
+        asset_type: str,
+        config: dict,
+        instrument_name: str | None = None,
     ) -> None:
         with self._lock, self._connect() as conn:
             row = conn.execute(
@@ -259,9 +280,18 @@ class Store:
             conn.execute(
                 "INSERT INTO analysis_runs "
                 "(run_id, ticker, trade_date, asset_type, decision, status, "
-                " config_json, result_json, created_at, completed_at, queue_position) "
-                "VALUES (?, ?, ?, ?, NULL, 'pending', ?, NULL, ?, NULL, ?)",
-                (run_id, ticker, trade_date, asset_type, _dumps(config), _now(), pos),
+                " config_json, result_json, created_at, completed_at, queue_position, instrument_name) "
+                "VALUES (?, ?, ?, ?, NULL, 'pending', ?, NULL, ?, NULL, ?, ?)",
+                (
+                    run_id,
+                    ticker,
+                    trade_date,
+                    asset_type,
+                    _dumps(config),
+                    _now(),
+                    pos,
+                    instrument_name,
+                ),
             )
 
     def start_run(self, run_id: str) -> bool:

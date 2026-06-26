@@ -52,6 +52,7 @@ export interface RunResult {
   ticker: string;
   trade_date: string;
   asset_type: string;
+  instrument_name?: string | null;
   decision: Decision | null;
   status: RunStatus;
   config: Record<string, unknown>;

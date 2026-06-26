@@ -14,7 +14,7 @@ def enqueue(req: EnqueueRequest, request: Request) -> dict:
     from api.main import get_store
 
     store = get_store()
-    shared = req.model_dump(exclude={"tickers"})
+    shared = req.model_dump(exclude={"tickers", "ticker_names"})
     run_ids: list[str] = []
     for ticker in req.tickers:
         run_id = uuid.uuid4().hex
@@ -25,6 +25,7 @@ def enqueue(req: EnqueueRequest, request: Request) -> dict:
             trade_date=req.trade_date,
             asset_type=req.asset_type,
             config=analysis.model_dump(),
+            instrument_name=req.ticker_names.get(ticker),
         )
         run_ids.append(run_id)
 

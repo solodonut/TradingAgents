@@ -33,6 +33,7 @@ class AnalysisRequest(BaseModel):
 
 class EnqueueRequest(BaseModel):
     tickers: list[str]
+    ticker_names: dict[str, str] = Field(default_factory=dict)
     trade_date: str
     asset_type: AssetType = "stock"
     analysts: list[AnalystName] = Field(
@@ -96,6 +97,7 @@ class RunResult(BaseModel):
     ticker: str
     trade_date: str
     asset_type: str
+    instrument_name: str | None = None
     decision: Decision | None
     status: RunStatus
     config: dict

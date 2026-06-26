@@ -139,7 +139,8 @@ def download_report(run_id: str) -> str:
     if run is None or run.result is None:
         raise HTTPException(status_code=404, detail="report not available")
 
-    parts = [f"# TradingAgents 分析报告 — {run.ticker} ({run.trade_date})\n"]
+    title = f"{run.ticker} {run.instrument_name}" if run.instrument_name else run.ticker
+    parts = [f"# TradingAgents 分析报告 — {title} ({run.trade_date})\n"]
     if run.decision:
         parts.append(f"**决策: {run.decision}**\n")
     for key, title in _REPORT_ORDER:

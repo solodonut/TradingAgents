@@ -21,11 +21,44 @@ def test_list_history(client):
     assert items[0]["decision"] == "Buy"
 
 
+def test_list_history_backfills_missing_instrument_name(client, monkeypatch):
+    import api.routes.history as history_routes
+
+    store = client.app.state.store or _force_store(client)
+    store.insert_run("r1", "159915", "2026-06-26", "stock", {"x": 1})
+    store.complete_run("r1", decision="Hold", result={"final_trade_decision": "x"})
+    monkeypatch.setattr(
+        history_routes, "resolve_ticker_name", lambda ticker: "创业板ETF易方达"
+    )
+
+    resp = client.get("/api/history")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["instrument_name"] == "创业板ETF易方达"
+    assert store.get_run("r1").instrument_name == "创业板ETF易方达"
+
+
 def test_get_history_detail(client):
     _seed(client)
     resp = client.get("/api/history/r1")
     assert resp.status_code == 200
     assert resp.json()["result"]["final_trade_decision"] == "**Rating**: Buy"
+
+
+def test_get_history_detail_backfills_missing_instrument_name(client, monkeypatch):
+    import api.routes.history as history_routes
+
+    store = client.app.state.store or _force_store(client)
+    store.insert_run("r1", "159915", "2026-06-26", "stock", {"x": 1})
+    store.complete_run("r1", decision="Hold", result={"final_trade_decision": "x"})
+    monkeypatch.setattr(
+        history_routes, "resolve_ticker_name", lambda ticker: "创业板ETF易方达"
+    )
+
+    resp = client.get("/api/history/r1")
+
+    assert resp.status_code == 200
+    assert resp.json()["instrument_name"] == "创业板ETF易方达"
 
 
 def test_get_missing_returns_404(client):

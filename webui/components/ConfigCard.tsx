@@ -12,7 +12,12 @@ export function ConfigCard({
   running = false,
 }: {
   options: ConfigOptions;
-  onStart: (req: { tickers: string[] } & Omit<AnalysisRequest, "ticker">) => void;
+  onStart: (
+    req: { tickers: string[]; ticker_names?: Record<string, string> } & Omit<
+      AnalysisRequest,
+      "ticker"
+    >,
+  ) => void;
   running?: boolean;
 }) {
   const [tickers, setTickers] = useState<TickerItem[]>([{ ticker: "NVDA", name: "" }]);
@@ -150,6 +155,9 @@ export function ConfigCard({
         e.preventDefault();
         onStart({
           tickers: tickers.map((t) => t.ticker),
+          ticker_names: Object.fromEntries(
+            tickers.filter((t) => t.name).map((t) => [t.ticker, t.name]),
+          ),
           trade_date: date,
           asset_type: assetType,
           analysts: activeAnalysts,
