@@ -142,10 +142,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "prediction_markets": "disabled",    # Options: polymarket, disabled
     },
     # A-share auto-routing. When True, mainland A-share tickers (600519,
-    # 600519.SS, sh600519, ...) are served by AKShare for price, indicator, and
-    # fundamental calls regardless of the data_vendors above, because Yahoo /
-    # Alpha Vantage barely cover Chinese financial statements. Non-A-share
-    # tickers are unaffected. Set False to honor data_vendors for every market.
+    # 600519.SS, sh600519, ...) are served by AKShare first for legacy
+    # Yahoo/Alpha Vantage chains because those sources barely cover Chinese
+    # financial statements. Explicit Tushare chains keep their configured
+    # order, so the default "tushare,akshare" still tries Tushare before
+    # falling back to AKShare. Non-A-share tickers are unaffected. Set False
+    # to honor data_vendors for every market.
     "akshare_auto_route": True,
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {

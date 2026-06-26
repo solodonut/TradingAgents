@@ -110,8 +110,14 @@ VENDOR_LIST = [
     "fred",
     "polymarket",
     "alpha_vantage",
+    "tushare",
     "akshare",
 ]
+
+
+def _tushare_not_ready(*args, **kwargs):
+    raise VendorNotConfiguredError("Tushare vendor is not implemented/configured yet.")
+
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
@@ -119,33 +125,39 @@ VENDOR_METHODS = {
     "get_stock_data": {
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
+        "tushare": _tushare_not_ready,
         "akshare": get_akshare_stock,
     },
     # technical_indicators
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
+        "tushare": _tushare_not_ready,
         "akshare": get_akshare_indicators,
     },
     # fundamental_data
     "get_fundamentals": {
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
+        "tushare": _tushare_not_ready,
         "akshare": get_akshare_fundamentals,
     },
     "get_balance_sheet": {
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
+        "tushare": _tushare_not_ready,
         "akshare": get_akshare_balance_sheet,
     },
     "get_cashflow": {
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
+        "tushare": _tushare_not_ready,
         "akshare": get_akshare_cashflow,
     },
     "get_income_statement": {
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
+        "tushare": _tushare_not_ready,
         "akshare": get_akshare_income_statement,
     },
     # news_data
@@ -231,10 +243,11 @@ def route_to_vendor(method: str, *args, **kwargs):
 
     # A-share auto-routing: when the requested symbol is a mainland A-share
     # (600519, 600519.SS, sh600519, ...) and AKShare implements this method,
-    # try AKShare first regardless of the configured vendor. Yahoo/Alpha
-    # Vantage barely cover A-share fundamentals, so without this the agent gets
-    # NO_DATA for Chinese tickers. The configured vendors stay in the chain as
-    # fallback. Disable with config ``akshare_auto_route = False``.
+    # try AKShare first for legacy Yahoo/Alpha Vantage chains. Explicit chains
+    # that include Tushare keep their configured order, so the production
+    # default "tushare,akshare" tries Tushare first and falls back to AKShare
+    # while the Tushare implementation is still a placeholder. Disable with
+    # config ``akshare_auto_route = False``.
     config = get_config()
     explicit_vendor_names = {v.lower() for v in explicit}
     if (

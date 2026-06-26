@@ -132,6 +132,40 @@ class VendorRoutingTests(unittest.TestCase):
         self.assertEqual(result, "TS_DATA")
         self.assertEqual(calls, ["tushare"])
 
+    def test_production_tushare_placeholder_falls_back_to_akshare(self):
+        set_config({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+
+        with mock.patch.dict(
+            interface.VENDOR_METHODS["get_stock_data"],
+            {"akshare": _returns("AK_DATA")},
+            clear=False,
+        ), self.assertLogs("tradingagents.dataflows.interface", level="WARNING") as cm:
+            result = interface.route_to_vendor(
+                "get_stock_data",
+                "159241",
+                "2026-06-01",
+                "2026-06-20",
+            )
+
+        self.assertEqual(result, "AK_DATA")
+        joined = "\n".join(cm.output)
+        self.assertIn("tushare", joined)
+        self.assertIn("not configured", joined)
+
+    def test_production_vendor_methods_include_tushare_defaults(self):
+        methods = [
+            "get_stock_data",
+            "get_indicators",
+            "get_fundamentals",
+            "get_balance_sheet",
+            "get_cashflow",
+            "get_income_statement",
+        ]
+
+        for method in methods:
+            with self.subTest(method=method):
+                self.assertIn("tushare", interface.VENDOR_METHODS[method])
+
 
 if __name__ == "__main__":
     unittest.main()
