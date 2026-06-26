@@ -242,3 +242,66 @@ def test_tushare_indicator_uses_local_stockstats(monkeypatch):
     assert "## close_10_ema values from 2026-06-12 to 2026-06-15" in result
     assert "2026-06-15:" in result
     assert "10 EMA" in result
+
+
+@pytest.mark.unit
+def test_tushare_etf_fundamentals_include_basic_adj_and_portfolio(monkeypatch):
+    from tradingagents.dataflows import tushare_fundamentals
+
+    client = mock.Mock()
+    client.fund_basic.return_value = pd.DataFrame([{"ts_code": "159241.SZ", "name": "国防ETF"}])
+    client.fund_adj.return_value = pd.DataFrame([{"trade_date": "20260619", "adj_factor": 1.02}])
+    client.fund_portfolio.return_value = pd.DataFrame(
+        [{"end_date": "20260331", "symbol": "600519.SH", "mkv": 100.0, "amount": 10.0}]
+    )
+    client.fund_daily.return_value = pd.DataFrame([{"trade_date": "20260619", "close": 1.04}])
+    monkeypatch.setattr(tushare_fundamentals, "get_tushare_client", lambda: client)
+    monkeypatch.setattr(tushare_fundamentals, "call_tushare", lambda func: func())
+    monkeypatch.setattr(tushare_fundamentals, "cached_call", lambda _key, _ttl, func: func())
+
+    result = tushare_fundamentals.get_fundamentals("159241", "2026-06-19")
+
+    assert "Fund/ETF Fundamentals for 159241.SZ (Tushare Pro)" in result
+    assert "Fund Basic" in result
+    assert "Recent Fund Daily Data" in result
+    assert "Adjustment Factors" in result
+    assert "Portfolio Holdings" in result
+    assert "IOPV" not in result
+
+
+@pytest.mark.unit
+def test_tushare_etf_statements_are_not_applicable():
+    from tradingagents.dataflows.tushare_fundamentals import (
+        get_balance_sheet,
+        get_cashflow,
+        get_income_statement,
+    )
+
+    for result in (
+        get_balance_sheet("159241", curr_date="2026-06-19"),
+        get_income_statement("159241", curr_date="2026-06-19"),
+        get_cashflow("159241", curr_date="2026-06-19"),
+    ):
+        assert "ETF/Fund" in result
+        assert "not_applicable" in result
+
+
+@pytest.mark.unit
+def test_tushare_a_share_statement_filters_future_periods(monkeypatch):
+    from tradingagents.dataflows import tushare_fundamentals
+
+    client = mock.Mock()
+    client.balancesheet.return_value = pd.DataFrame(
+        [
+            {"ann_date": "20260430", "end_date": "20260331", "total_assets": 100},
+            {"ann_date": "20260731", "end_date": "20260630", "total_assets": 120},
+        ]
+    )
+    monkeypatch.setattr(tushare_fundamentals, "get_tushare_client", lambda: client)
+    monkeypatch.setattr(tushare_fundamentals, "call_tushare", lambda func: func())
+    monkeypatch.setattr(tushare_fundamentals, "cached_call", lambda _key, _ttl, func: func())
+
+    result = tushare_fundamentals.get_balance_sheet("600519", curr_date="2026-06-20")
+
+    assert "2026-03-31" in result
+    assert "2026-06-30" not in result
