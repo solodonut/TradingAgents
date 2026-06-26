@@ -125,6 +125,16 @@ _DATA_SERVICES = {
         "params": {"function": "GLOBAL_QUOTE", "symbol": "AAPL"},
         "env": "ALPHA_VANTAGE_API_KEY",
     },
+    "tushare": {
+        "name": "Tushare Pro",
+        "url": "https://api.tushare.pro",
+        "params": {
+            "api_name": "trade_cal",
+            "params": "{}",
+            "fields": "cal_date,is_open",
+        },
+        "env": "TUSHARE_TOKEN",
+    },
     "fred": {
         "name": "FRED",
         "url": "https://api.stlouisfed.org/fred/series/observations",
@@ -167,7 +177,12 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
                     message=f"{env_var} is not set",
                 )
                 continue
-            params["apikey" if service_id != "fred" else "api_key"] = api_key
+            if service_id == "fred":
+                params["api_key"] = api_key
+            elif service_id == "tushare":
+                params["token"] = api_key
+            else:
+                params["apikey"] = api_key
 
         ok, message, latency_ms = _http_probe(str(spec["url"]), params=params)
         yield _event(

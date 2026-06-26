@@ -127,3 +127,35 @@ def test_data_probe_reports_missing_required_api_key(monkeypatch):
     alpha = next(item for item in statuses if item["id"] == "data:alpha_vantage")
     assert alpha["status"] == "error"
     assert "ALPHA_VANTAGE_API_KEY" in alpha["message"]
+
+
+def test_data_probe_reports_missing_tushare_token(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+    )
+
+    tushare = next(item for item in statuses if item["id"] == "data:tushare")
+    assert tushare["status"] == "error"
+    assert "TUSHARE_TOKEN" in tushare["message"]
+
+
+def test_data_probe_reports_tushare_reachable(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setenv("TUSHARE_TOKEN", "token")
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None: (True, "Reachable", 12),
+    )
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+    )
+
+    tushare = next(item for item in statuses if item["id"] == "data:tushare")
+    assert tushare["status"] == "ok"
+    assert tushare["latency_ms"] == 12
