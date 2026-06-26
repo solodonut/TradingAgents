@@ -219,3 +219,26 @@ def test_tushare_stock_accepts_tushare_suffixes(
         start_date="20260601",
         end_date="20260620",
     )
+
+
+@pytest.mark.unit
+def test_tushare_indicator_uses_local_stockstats(monkeypatch):
+    from tradingagents.dataflows import tushare_indicator
+
+    frame = pd.DataFrame(
+        {
+            "Date": pd.date_range("2026-06-01", periods=15, freq="D"),
+            "Open": [1.0 + i / 100 for i in range(15)],
+            "High": [1.1 + i / 100 for i in range(15)],
+            "Low": [0.9 + i / 100 for i in range(15)],
+            "Close": [1.0 + i / 100 for i in range(15)],
+            "Volume": [1000 + i for i in range(15)],
+        }
+    )
+    monkeypatch.setattr(tushare_indicator, "_load_tushare_ohlcv", lambda symbol, curr_date: frame)
+
+    result = tushare_indicator.get_indicators("159241", "close_10_ema", "2026-06-15", 3)
+
+    assert "## close_10_ema values from 2026-06-12 to 2026-06-15" in result
+    assert "2026-06-15:" in result
+    assert "10 EMA" in result

@@ -31,6 +31,7 @@ from .errors import (
 )
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from .tushare_indicator import get_indicators as get_tushare_indicators
 from .tushare_stock import get_stock_data as get_tushare_stock
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
@@ -133,7 +134,7 @@ VENDOR_METHODS = {
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
-        "tushare": _tushare_not_ready,
+        "tushare": get_tushare_indicators,
         "akshare": get_akshare_indicators,
     },
     # fundamental_data
