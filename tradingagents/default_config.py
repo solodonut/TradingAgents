@@ -134,10 +134,10 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # routed to vendors you didn't choose. For ordered fallback, list several,
     # e.g. "yfinance,alpha_vantage". "default" uses all available vendors.
     "data_vendors": {
-        "core_stock_apis": "akshare",        # Options: alpha_vantage, yfinance, akshare
-        "technical_indicators": "akshare",   # Options: alpha_vantage, yfinance, akshare
-        "fundamental_data": "akshare",       # Options: alpha_vantage, yfinance, akshare
-        "news_data": "akshare",              # Options: alpha_vantage, yfinance, akshare
+        "core_stock_apis": "tushare,akshare",        # Options: alpha_vantage, yfinance, tushare, akshare
+        "technical_indicators": "tushare,akshare",   # Options: alpha_vantage, yfinance, tushare, akshare
+        "fundamental_data": "tushare,akshare",       # Options: alpha_vantage, yfinance, tushare, akshare
+        "news_data": "akshare",                      # Options: alpha_vantage, yfinance, tushare, akshare
         "macro_data": "disabled",            # Options: fred, disabled
         "prediction_markets": "disabled",    # Options: polymarket, disabled
     },

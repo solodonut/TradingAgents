@@ -30,9 +30,9 @@ class CapturingLLM:
 @pytest.mark.unit
 def test_default_config_uses_domestic_china_data_sources_only():
     assert DEFAULT_CONFIG["domestic_china_only"] is True
-    assert DEFAULT_CONFIG["data_vendors"]["core_stock_apis"] == "akshare"
-    assert DEFAULT_CONFIG["data_vendors"]["technical_indicators"] == "akshare"
-    assert DEFAULT_CONFIG["data_vendors"]["fundamental_data"] == "akshare"
+    assert DEFAULT_CONFIG["data_vendors"]["core_stock_apis"] == "tushare,akshare"
+    assert DEFAULT_CONFIG["data_vendors"]["technical_indicators"] == "tushare,akshare"
+    assert DEFAULT_CONFIG["data_vendors"]["fundamental_data"] == "tushare,akshare"
     assert DEFAULT_CONFIG["data_vendors"]["news_data"] == "akshare"
     assert DEFAULT_CONFIG["data_vendors"]["macro_data"] == "disabled"
     assert DEFAULT_CONFIG["data_vendors"]["prediction_markets"] == "disabled"

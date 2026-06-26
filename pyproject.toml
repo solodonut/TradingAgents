@@ -30,6 +30,7 @@ dependencies = [
     "stockstats>=0.6.5",
     "tqdm>=4.67.1",
     "typing-extensions>=4.14.0",
+    "tushare>=1.4.21",
     "yfinance>=1.4.1",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",

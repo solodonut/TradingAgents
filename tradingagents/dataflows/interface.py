@@ -236,7 +236,12 @@ def route_to_vendor(method: str, *args, **kwargs):
     # NO_DATA for Chinese tickers. The configured vendors stay in the chain as
     # fallback. Disable with config ``akshare_auto_route = False``.
     config = get_config()
-    if config.get("akshare_auto_route", True) and "akshare" in VENDOR_METHODS[method]:
+    explicit_vendor_names = {v.lower() for v in explicit}
+    if (
+        config.get("akshare_auto_route", True)
+        and "akshare" in VENDOR_METHODS[method]
+        and "tushare" not in explicit_vendor_names
+    ):
         symbol = args[0] if args else kwargs.get("symbol") or kwargs.get("ticker")
         if isinstance(symbol, str) and _is_a_share_symbol(symbol):
             vendor_chain = ["akshare"] + [v for v in vendor_chain if v != "akshare"]

@@ -109,6 +109,29 @@ class VendorRoutingTests(unittest.TestCase):
             result = interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
         self.assertEqual(result, "AV_DATA")
 
+    def test_explicit_tushare_chain_is_not_reordered_by_akshare_auto_route(self):
+        set_config({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+        calls = []
+
+        def tushare(symbol, *a, **k):
+            calls.append("tushare")
+            return "TS_DATA"
+
+        def akshare(symbol, *a, **k):
+            calls.append("akshare")
+            return "AK_DATA"
+
+        with self._route({"tushare": tushare, "akshare": akshare}):
+            result = interface.route_to_vendor(
+                "get_stock_data",
+                "159241",
+                "2026-06-01",
+                "2026-06-20",
+            )
+
+        self.assertEqual(result, "TS_DATA")
+        self.assertEqual(calls, ["tushare"])
+
 
 if __name__ == "__main__":
     unittest.main()
