@@ -269,6 +269,7 @@ def route_to_vendor(method: str, *args, **kwargs):
 
     last_no_data: NoMarketDataError | None = None
     first_error: Exception | None = None
+    network_error: Exception | None = None
     for vendor in vendor_chain:
         vendor_impl = VENDOR_METHODS[method][vendor]
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
@@ -291,6 +292,8 @@ def route_to_vendor(method: str, *args, **kwargs):
             # serve it, but never swallow silently: a broken primary must be
             # visible in the logs (#989), not hidden behind a fallback's verdict.
             logger.warning("Vendor %r failed for %s: %s", vendor, method, e)
+            if isinstance(e, _NETWORK_ERRORS) and network_error is None:
+                network_error = e
             if first_error is None:
                 first_error = e
             continue
@@ -328,15 +331,20 @@ def route_to_vendor(method: str, *args, **kwargs):
     # source as down instead of aborting the whole analysis (honors the
     # "never raises" contract). Genuine non-network errors (bad symbol, parse
     # bug) still raise — those are programming/data errors that must surface.
-    if isinstance(first_error, _NETWORK_ERRORS):
+    # Use the network error from ANY vendor in the chain, not just the first
+    # failure: when an unconfigured primary (e.g. Tushare without a token) fails
+    # before a secondary hits a transient outage, the network error lands second
+    # and must still win — otherwise the misleading "not configured" error gets
+    # raised and crashes the run instead of degrading gracefully.
+    if network_error is not None:
         logger.warning(
-            "All vendors for %s failed with a network error; returning "
+            "A vendor for %s failed with a network error; returning "
             "DATA_SOURCE_UNAVAILABLE sentinel instead of raising: %s",
-            method, first_error,
+            method, network_error,
         )
         return (
             f"DATA_SOURCE_UNAVAILABLE: Could not reach any data source for "
-            f"'{method}' due to a network/connectivity error ({first_error}). "
+            f"'{method}' due to a network/connectivity error ({network_error}). "
             f"The data vendor host may be unreachable or blocked from this "
             f"network. Do not estimate or fabricate values — report that this "
             f"data is temporarily unavailable."

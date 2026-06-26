@@ -77,6 +77,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **首选源未配置 + 兜底源网络故障不再以误导性「未配置」错误中断分析.** 默认中国链
+  `tushare,akshare` 下，未配置 `TUSHARE_TOKEN`（或未安装 tushare 包）时 Tushare 先抛
+  `VendorNotConfiguredError`，随后 AKShare 东财瞬时断连（`RemoteDisconnected`）。此前
+  `route_to_vendor()` 的网络兜底判断只看链中**第一个**错误（被 Tushare 的「未配置」占住），
+  网络错误不可见，于是 `raise` 出 Tushare 错误、整条 run 崩溃并显示误导性的「tushare 未安装」。
+  现单独追踪链中**任意** vendor 的网络错误：只要发生网络故障即返回 `DATA_SOURCE_UNAVAILABLE`
+  哨兵串、分析继续，不再被首选源的配置错误掩盖。回归测试见 `tests/test_vendor_errors.py`。
 - **AKShare 连接被远端关闭不再中断整个分析.** `get_verified_market_snapshot`
   工具直连 `build_verified_market_snapshot`，绕过了 `route_to_vendor` 的「永不抛异常」
   保护：东财行情瞬时断连（`RemoteDisconnected`，A 股/ETF 重试 6 次后仍失败）、无数据或

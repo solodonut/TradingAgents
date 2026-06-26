@@ -166,6 +166,32 @@ class RouterHandlesBaseTypesTests(unittest.TestCase):
         ), self.assertRaises(ValueError):
             interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
 
+    def test_unconfigured_primary_then_network_secondary_returns_sentinel(self):
+        # Default China chain is "tushare,akshare": the unconfigured Tushare
+        # primary fails first, then AKShare hits a transient connectivity error
+        # (East Money refusing egress). The network outage must NOT be masked by
+        # the primary's "not configured" error and crash the run — it degrades
+        # to a graceful UNAVAILABLE sentinel so the agent reports the source as
+        # temporarily down instead of aborting the whole analysis.
+        set_config({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+
+        def _unconfigured(*a, **k):
+            raise VendorNotConfiguredError("TUSHARE_TOKEN is not configured.")
+
+        def _disconnected(*a, **k):
+            raise requests.exceptions.ConnectionError(
+                "('Connection aborted.', RemoteDisconnected('Remote end closed "
+                "connection without response'))"
+            )
+
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {"get_stock_data": {"tushare": _unconfigured, "akshare": _disconnected}},
+            clear=False,
+        ):
+            out = interface.route_to_vendor("get_stock_data", "510330.SS", "2025-05-01", "2025-06-01")
+        self.assertIn("DATA_SOURCE_UNAVAILABLE", out)
+
 
 @pytest.mark.unit
 class AkShareRetryCircuitTests(unittest.TestCase):
