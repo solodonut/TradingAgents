@@ -3,33 +3,22 @@
 import { LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { exportScopeOptions, visibleDataSources } from "@/lib/chat-export";
-import { sessionFactsProposal } from "@/lib/chat-profile";
 import { MarkdownContent } from "@/components/MarkdownContent";
-import { ProfileProposalCard } from "@/components/chat/ProfileProposalCard";
-import type { ChatMessageT, SessionProfile } from "@/lib/types";
+import type { ChatMessageT } from "@/lib/types";
 
 export function ChatMessage({
   message,
   choicesEnabled = false,
   onChoice,
-  profile,
-  profileActionsEnabled = false,
-  onConfirmFacts,
-  onDismissFacts,
 }: {
   message: ChatMessageT;
   choicesEnabled?: boolean;
   onChoice?: (choice: string) => void;
-  profile?: SessionProfile;
-  profileActionsEnabled?: boolean;
-  onConfirmFacts?: (merged: SessionProfile) => void;
-  onDismissFacts?: () => void;
 }) {
   const isUser = message.role === "user";
   const isThinking = message.role === "assistant" && message.content.trim().length === 0;
   const choices = exportScopeOptions(message);
   const dataSources = visibleDataSources(message);
-  const proposal = sessionFactsProposal(message);
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
@@ -67,15 +56,6 @@ export function ChatMessage({
               </button>
             ))}
           </div>
-        )}
-        {proposal && profile && (
-          <ProfileProposalCard
-            proposal={proposal}
-            current={profile}
-            disabled={!profileActionsEnabled}
-            onConfirm={(merged) => onConfirmFacts?.(merged)}
-            onDismiss={() => onDismissFacts?.()}
-          />
         )}
         {dataSources.length > 0 && (
           <div className="mt-1 font-mono text-[0.6rem] text-muted-foreground">

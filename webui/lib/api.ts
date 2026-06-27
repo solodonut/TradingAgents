@@ -10,7 +10,6 @@ import type {
   RunStatusDetail,
   ServiceHealthItem,
   ServiceHealthEvent,
-  SessionProfile,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -301,23 +300,4 @@ export async function getPortfolio(
 
 export function chatStreamUrl(id: string): string {
   return `${BASE}/api/chat/sessions/${id}/stream`;
-}
-
-export async function getSessionProfile(id: string): Promise<SessionProfile> {
-  const r = await fetch(`${BASE}/api/chat/sessions/${id}/profile`);
-  if (!r.ok) throw new Error("无法加载会话参数");
-  return r.json();
-}
-
-export async function saveSessionProfile(
-  id: string,
-  profile: SessionProfile,
-): Promise<SessionProfile> {
-  const r = await fetch(`${BASE}/api/chat/sessions/${id}/profile`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(profile),
-  });
-  if (!r.ok) throw new Error("无法保存会话参数");
-  return r.json();
 }

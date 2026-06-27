@@ -24,22 +24,19 @@ import {
   getChatSession,
   getConfigOptions,
   getPortfolio,
-  getSessionProfile,
   listChatSessions,
   renameChatSession,
   savePortfolio,
-  saveSessionProfile,
   chatStreamUrl,
   updateChatSessionReports,
 } from "@/lib/api";
 import { streamChat } from "@/lib/sse";
 import { EXPORT_REPORT_PROMPT, exportScopeOptions } from "@/lib/chat-export";
-import type { ChatMessageT, ChatSessionT, PortfolioHolding, SessionProfile } from "@/lib/types";
+import type { ChatMessageT, ChatSessionT, PortfolioHolding } from "@/lib/types";
 import { RunPicker } from "@/components/chat/RunPicker";
 import { PortfolioUpload } from "@/components/chat/PortfolioUpload";
 import { HoldingsTable } from "@/components/chat/HoldingsTable";
 import { ChatMessage } from "@/components/chat/ChatMessage";
-import { ProfilePanel } from "@/components/chat/ProfilePanel";
 
 export default function ChatPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -48,16 +45,6 @@ export default function ChatPage() {
   const [showHistory, setShowHistory] = useState(true);
   const [messages, setMessages] = useState<ChatMessageT[]>([]);
   const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
-  const emptyProfile: SessionProfile = {
-    available_capital: null,
-    capital_currency: "CNY",
-    risk_tolerance: null,
-    max_single_position_pct: null,
-    horizon: null,
-    constraints: null,
-    confirmed_at: null,
-  };
-  const [profile, setProfile] = useState<SessionProfile>(emptyProfile);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
@@ -65,7 +52,6 @@ export default function ChatPage() {
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
-  const [dismissedProposals, setDismissedProposals] = useState<Set<string>>(new Set());
   const [savingReports, setSavingReports] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [chatModels, setChatModels] = useState<[string, string][]>([]);
@@ -90,10 +76,6 @@ export default function ChatPage() {
       source: "manual",
     }));
     setHoldings(portfolio.holdings);
-    const loadedProfile = await getSessionProfile(data.session.session_id).catch(
-      () => emptyProfile,
-    );
-    setProfile(loadedProfile);
   };
 
   const createNewSession = async (nextRunIds: string[] = runIds) => {
@@ -304,35 +286,6 @@ export default function ChatPage() {
   const persistHoldings = async (next: PortfolioHolding[]) => {
     setHoldings(next);
     if (sessionId) await savePortfolio(sessionId, next);
-  };
-
-  const persistProfile = async (
-    next: SessionProfile,
-  ): Promise<SessionProfile | null> => {
-    if (!sessionId) {
-      setProfile(next);
-      return next;
-    }
-    const prev = profile;
-    setProfile(next);
-    const saved = await saveSessionProfile(sessionId, next).catch(() => null);
-    if (saved) {
-      setProfile(saved);
-      return saved;
-    }
-    setProfile(prev);
-    return null;
-  };
-
-  const confirmFacts = async (messageId: string, merged: SessionProfile) => {
-    const saved = await persistProfile(merged);
-    if (!saved) return;
-    setDismissedProposals((ids) => new Set(ids).add(messageId));
-    void sendMessage("我已确认会话参数面板，请据此继续。");
-  };
-
-  const dismissFacts = (messageId: string) => {
-    setDismissedProposals((ids) => new Set(ids).add(messageId));
   };
 
   const changeReports = async (nextRunIds: string[]) => {
@@ -645,12 +598,6 @@ export default function ChatPage() {
                   message.message_id === activeChoiceMessageId && !streaming
                 }
                 onChoice={(choice) => void sendMessage(choice)}
-                profile={profile}
-                profileActionsEnabled={
-                  !streaming && !dismissedProposals.has(message.message_id)
-                }
-                onConfirmFacts={(merged) => void confirmFacts(message.message_id, merged)}
-                onDismissFacts={() => dismissFacts(message.message_id)}
               />
             ))}
             <div ref={messagesEndRef} aria-hidden="true" />
@@ -683,16 +630,6 @@ export default function ChatPage() {
                 {reportError}
               </div>
             )}
-          </div>
-          <div className="glass-readable shrink-0 rounded-lg px-3 py-3">
-            <div className="mb-2 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-              会话参数
-            </div>
-            <ProfilePanel
-              value={profile}
-              onChange={(next) => void persistProfile(next)}
-              disabled={streaming || !sessionId}
-            />
           </div>
           <div className="glass-readable flex min-h-0 flex-1 flex-col rounded-lg px-3 py-3">
             <div className="mb-2 flex shrink-0 items-center justify-between gap-2">

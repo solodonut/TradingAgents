@@ -85,6 +85,14 @@ Breaking changes within the 0.x line are called out explicitly.
   config, run detail, and shared UI primitives) with a liquid-glass visual
   style and updated global styles.
 
+### Removed
+
+- **投顾会话的「会话参数」前端 UI。** 移除聊天页右侧的会话参数面板（可用资金池/风险偏好/
+  单票最大仓位/投资期限/偏好禁投）、聊天内偏好提议卡片及相关连接逻辑与读写函数
+  （`ProfilePanel`、`ProfileProposalCard`、`lib/chat-profile`、`getSessionProfile`/
+  `saveSessionProfile`、`SessionProfile` 等前端类型）。后端 `GET/PUT .../profile` 路由、
+  `chat_profiles` 表与投顾 profile 工具保留未动。
+
 ### Fixed
 
 - **首选源未配置 + 兜底源网络故障不再以误导性「未配置」错误中断分析.** 默认中国链
