@@ -34,6 +34,24 @@ export async function lookupTicker(
   }
 }
 
+export type WatchlistItem = { ticker: string; name: string };
+
+export async function getWatchlist(): Promise<WatchlistItem[]> {
+  const r = await fetch(`${BASE}/api/watchlist`);
+  if (!r.ok) throw new Error("failed to load watchlist");
+  return r.json();
+}
+
+export async function saveWatchlist(items: WatchlistItem[]): Promise<WatchlistItem[]> {
+  const r = await fetch(`${BASE}/api/watchlist`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+  });
+  if (!r.ok) throw new Error("failed to save watchlist");
+  return r.json();
+}
+
 export async function startAnalysis(req: AnalysisRequest): Promise<string> {
   const r = await fetch(`${BASE}/api/analysis`, {
     method: "POST",

@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS chat_profiles (
     profile_json TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS watchlist (
+    ticker   TEXT PRIMARY KEY,
+    name     TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL
+);
 """
 
 
@@ -367,6 +373,26 @@ class Store:
                 (_dumps({"error": "服务重启中断"}), _now()),
             )
             return cur.rowcount
+
+    # ---- watchlist (persistent instrument list) ----
+
+    def get_watchlist(self) -> list[dict[str, str]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT ticker, name FROM watchlist ORDER BY position"
+            ).fetchall()
+            return [{"ticker": r["ticker"], "name": r["name"]} for r in rows]
+
+    def set_watchlist(self, items: list[dict[str, str]]) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute("DELETE FROM watchlist")
+            conn.executemany(
+                "INSERT INTO watchlist (ticker, name, position) VALUES (?, ?, ?)",
+                [
+                    (item["ticker"], item.get("name") or "", pos)
+                    for pos, item in enumerate(items)
+                ],
+            )
 
     # ---- chat sessions ----
 

@@ -1,7 +1,7 @@
 "use client";
 import { ChevronDown, ChevronUp, Cpu, LoaderCircle, Play, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { lookupTicker } from "@/lib/api";
+import { getWatchlist, lookupTicker, saveWatchlist } from "@/lib/api";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
 type TickerItem = { ticker: string; name: string };
@@ -65,26 +65,51 @@ export function ConfigCard({
     };
   }, [modelsOpen]);
 
-  // 挂载后从 localStorage 回填代码清单（读完才标记 loaded，解锁下面的写回）
+  // 挂载后从后端 DB 回填代码清单（跨浏览器/设备/清缓存都不丢，读完才标记 loaded）。
+  // DB 不可达或为空时回退到 localStorage 旧清单，并由下面的写回 effect 迁移进 DB。
   useEffect(() => {
-    const saved = localStorage.getItem("ta:ticker_list");
-    if (saved) {
+    let cancelled = false;
+    const readLocal = (): TickerItem[] | null => {
+      const saved = localStorage.getItem("ta:ticker_list");
+      if (!saved) return null;
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) setTickers(parsed);
+        return Array.isArray(parsed) ? parsed : null;
       } catch {
-        // 损坏的数据：忽略，保留默认清单
+        return null; // 损坏的数据：忽略
       }
-    }
-    setTickersLoaded(true);
+    };
+    (async () => {
+      let list: TickerItem[] | null = null;
+      try {
+        const remote = await getWatchlist();
+        if (remote.length > 0) list = remote;
+      } catch {
+        // DB 不可达：回退本地镜像
+      }
+      if (!list) list = readLocal();
+      if (cancelled) return;
+      if (list && list.length > 0) setTickers(list);
+      setTickersLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // 清单每次变化都写回。必须等读 effect 完成（tickersLoaded）才写，否则挂载时会用默认值
-  // 覆盖掉 localStorage 里已保存的清单（React 19 严格模式下 effect 双调用尤其明显）。
+  // 清单每次变化都持久化到后端 DB（防抖 500ms），localStorage 作为离线兜底镜像。
+  // 必须等读 effect 完成（tickersLoaded）才写，否则挂载时会用默认值覆盖掉已存清单
+  // （React 19 严格模式下 effect 双调用尤其明显）。
   // 不要改成惰性 useState 初始化：本组件会在服务端 SSR，读 localStorage 会崩溃 / hydration 不一致。
   useEffect(() => {
     if (!tickersLoaded) return;
     localStorage.setItem("ta:ticker_list", JSON.stringify(tickers));
+    const handle = setTimeout(() => {
+      saveWatchlist(tickers).catch(() => {
+        // 网络/后端异常：本地镜像已写，下次变更再试
+      });
+    }, 500);
+    return () => clearTimeout(handle);
   }, [tickers, tickersLoaded]);
 
   // 加载后给名称为空的项补查一次：A 股/ETF 名称走 AKShare，首次因冷缓存可能超时返回空，

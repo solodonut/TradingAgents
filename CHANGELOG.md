@@ -10,6 +10,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **代码清单长期持久化到后端 DB。** 新增 `watchlist` 表与 `GET/PUT /api/watchlist`，
+  WebUI「新分析配置」的标的清单不再只存浏览器 localStorage（换浏览器/设备、清缓存即丢），
+  改为变更时防抖写入 `~/.tradingagents/webui.db`，挂载时从 DB 回填；DB 不可达或为空时回退
+  localStorage 旧清单并迁移进 DB，localStorage 仍作为离线兜底镜像。
+
 - **投顾 ChatBot 的 ETF 专业能力。** 新增 `get_etf_profile` 工具(经 `route_to_vendor` 注册,
   AKShare 实现):对中国 A 股场内 ETF/基金返回折溢价率/IOPV、规模与前十大成分股持仓,非 ETF 标的
   返回 `NO_DATA_AVAILABLE`。投顾 system prompt 新增「ETF 专业分析框架」(折溢价/IOPV、跟踪误差、

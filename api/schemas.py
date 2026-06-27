@@ -82,6 +82,11 @@ class ReorderRequest(BaseModel):
     ordered_run_ids: list[str]
 
 
+class WatchlistItem(BaseModel):
+    ticker: str
+    name: str = ""
+
+
 class HistorySummary(BaseModel):
     run_id: str
     ticker: str
