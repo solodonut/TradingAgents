@@ -1,5 +1,5 @@
 "use client";
-import { ChevronDown, ChevronUp, Cpu, LoaderCircle, Play, Plus, X } from "lucide-react";
+import { Cpu, GripVertical, LoaderCircle, Play, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getWatchlist, lookupTicker, saveWatchlist } from "@/lib/api";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
@@ -23,6 +23,7 @@ export function ConfigCard({
   const [tickers, setTickers] = useState<TickerItem[]>([{ ticker: "NVDA", name: "" }]);
   const [tickersLoaded, setTickersLoaded] = useState(false);
   const [tickerInput, setTickerInput] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [assetType, setAssetType] = useState<"stock" | "crypto">("stock");
   const [analysts, setAnalysts] = useState<string[]>([
@@ -160,12 +161,13 @@ export function ConfigCard({
   const removeTicker = (code: string) =>
     setTickers((prev) => prev.filter((t) => t.ticker !== code));
 
-  const moveTicker = (index: number, delta: number) =>
+  // 拖拽排序：把 from 位置的项移动到 to 位置（HTML5 原生拖放，dragenter 时实时重排）。
+  const reorderTicker = (from: number, to: number) =>
     setTickers((prev) => {
+      if (from === to || to < 0 || to >= prev.length) return prev;
       const next = [...prev];
-      const j = index + delta;
-      if (j < 0 || j >= next.length) return prev;
-      [next[index], next[j]] = [next[j], next[index]];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
       return next;
     });
 
@@ -317,37 +319,44 @@ export function ConfigCard({
                 {tickers.map((t, i) => (
                   <li
                     key={t.ticker}
-                    className="glass-control flex items-center gap-2 rounded-md px-2 py-1.5"
+                    draggable
+                    onDragStart={() => setDragIndex(i)}
+                    onDragEnter={() => {
+                      if (dragIndex !== null && dragIndex !== i) {
+                        reorderTicker(dragIndex, i);
+                        setDragIndex(i);
+                      }
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDragEnd={() => setDragIndex(null)}
+                    className={`glass-control flex items-center gap-2 rounded-md px-2 py-1.5 transition-opacity ${
+                      dragIndex === i ? "opacity-50" : ""
+                    }`}
                   >
-                    <span className="min-w-0 flex-1">
-                      <span className="font-mono text-sm text-foreground">{t.ticker}</span>
+                    <span
+                      aria-hidden="true"
+                      className="flex shrink-0 cursor-grab items-center text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
+                    >
+                      <GripVertical className="size-3.5" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                      <span className="shrink-0 font-mono text-sm text-foreground">{t.ticker}</span>
                       {t.name ? (
-                        <span className="ml-2 truncate text-xs text-muted-foreground">{t.name}</span>
+                        <span
+                          title={t.name}
+                          className="group/name min-w-0 flex-1 overflow-hidden [container-type:inline-size]"
+                        >
+                          <span className="inline-block whitespace-nowrap text-xs text-muted-foreground transition-transform duration-[2000ms] ease-linear group-hover/name:translate-x-[min(0px,calc(100cqw_-_100%))]">
+                            {t.name}
+                          </span>
+                        </span>
                       ) : null}
                     </span>
                     <button
                       type="button"
-                      onClick={() => moveTicker(i, -1)}
-                      disabled={i === 0}
-                      aria-label="上移"
-                      className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:border-primary"
-                    >
-                      <ChevronUp className="size-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveTicker(i, 1)}
-                      disabled={i === tickers.length - 1}
-                      aria-label="下移"
-                      className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:border-primary"
-                    >
-                      <ChevronDown className="size-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => removeTicker(t.ticker)}
                       aria-label="移除"
-                      className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:border-primary"
+                      className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:border-primary"
                     >
                       <X className="size-3.5" aria-hidden="true" />
                     </button>

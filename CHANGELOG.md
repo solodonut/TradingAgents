@@ -72,6 +72,9 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Changed
 
+- WebUI「新分析配置」标的清单的交互优化：ETF/基金名称过长时不再换行撑高行高，改为单行截取，
+  鼠标悬停时按「容器宽 − 文本宽」横向滚动显示全名（并保留 `title` 悬浮提示）；标的排序由上移/下移
+  箭头按钮改为左侧拖拽手柄（HTML5 原生拖放，拖入即实时重排），排序结果照常持久化到后端 DB。
 - A 股/ETF 标的名称解析优先级改为 **tushare → AKShare → yfinance**（原 AKShare 优先）。
   tushare 经 `fund_basic`/`stock_basic` 的 `name` 字段取名，复用基本面相同的磁盘缓存
   （`fund_basic_`/`stock_basic_{ts_code}`），常可零额外请求命中；tushare 未配置/限流/超时
