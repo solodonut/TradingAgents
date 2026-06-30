@@ -48,7 +48,7 @@ export function HistorySidebar({
   }, [items]);
 
   return (
-    <aside className="glass h-full overflow-y-auto rounded-none text-sidebar-foreground">
+    <aside className="dark-scrollbar glass h-full overflow-y-auto rounded-none text-sidebar-foreground">
       <div className="glass-readable sticky top-0 z-10 rounded-none border-x-0 border-t-0 px-3 py-3">
         <div className="flex items-start justify-between gap-2">
           <div>

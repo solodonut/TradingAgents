@@ -272,19 +272,24 @@
     }
   }
 
+  * {
+    scrollbar-color: rgb(225 253 255 / 0.22) transparent;
+    scrollbar-width: thin;
+  }
+
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 10px;
+    height: 10px;
   }
 
   ::-webkit-scrollbar-track {
     background: transparent;
-    border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb {
     background: rgb(225 253 255 / 0.22);
-    border: 0;
+    background-clip: content-box;
+    border: 2px solid transparent;
     border-radius: 9999px;
   }
 
@@ -292,29 +297,36 @@
     background: rgb(225 253 255 / 0.34);
   }
 
-  .ios-scrollbar {
-    scrollbar-color: rgb(225 253 255 / 0.18) transparent;
+  .ios-scrollbar,
+  .dark-scrollbar {
+    scrollbar-color: rgb(225 253 255 / 0.22) transparent;
     scrollbar-width: thin;
   }
 
-  .ios-scrollbar::-webkit-scrollbar {
-    width: 2px;
-    height: 2px;
+  .ios-scrollbar::-webkit-scrollbar,
+  .dark-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
   }
 
   .ios-scrollbar::-webkit-scrollbar-track,
-  .ios-scrollbar::-webkit-scrollbar-corner {
+  .ios-scrollbar::-webkit-scrollbar-corner,
+  .dark-scrollbar::-webkit-scrollbar-track,
+  .dark-scrollbar::-webkit-scrollbar-corner {
     background: transparent;
   }
 
-  .ios-scrollbar::-webkit-scrollbar-thumb {
-    background: rgb(225 253 255 / 0.16);
-    border: 0;
+  .ios-scrollbar::-webkit-scrollbar-thumb,
+  .dark-scrollbar::-webkit-scrollbar-thumb {
+    background: rgb(225 253 255 / 0.22);
+    background-clip: content-box;
+    border: 2px solid transparent;
     border-radius: 9999px;
   }
 
-  .ios-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: rgb(225 253 255 / 0.28);
+  .ios-scrollbar:hover::-webkit-scrollbar-thumb,
+  .dark-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: rgb(225 253 255 / 0.34);
   }
 
   .ta-prose {

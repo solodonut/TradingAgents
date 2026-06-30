@@ -783,7 +783,7 @@ export default function Home() {
           </div>
         </main>
 
-        <aside className="order-1 border-b border-border p-3 lg:order-3 lg:h-screen lg:overflow-y-auto lg:border-b-0">
+        <aside className="dark-scrollbar order-1 border-b border-border p-3 lg:order-3 lg:h-screen lg:overflow-y-auto lg:border-b-0">
           <div className="space-y-3">
             <div className="glass rounded-lg px-3 py-3">
               <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
