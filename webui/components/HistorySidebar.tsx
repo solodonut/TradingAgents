@@ -1,6 +1,7 @@
 "use client";
-import { Download, LoaderCircle, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { ChevronDown, Download, LoaderCircle, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getExpandedHistoryDates } from "@/lib/history-groups";
 import type { HistorySummary } from "@/lib/types";
 
 const DECISION_TONE: Record<string, string> = {
@@ -46,6 +47,35 @@ export function HistorySidebar({
       runIds: runs.map((run) => run.run_id),
     }));
   }, [items]);
+  const selectedTradeDate =
+    selectedId ? (items.find((item) => item.run_id === selectedId)?.trade_date ?? null) : null;
+  const tradeDates = useMemo(() => groups.map((group) => group.tradeDate), [groups]);
+  const [expandedDates, setExpandedDates] = useState<Set<string> | null>(null);
+  const visibleExpandedDates = useMemo(
+    () =>
+      getExpandedHistoryDates({
+        tradeDates,
+        selectedTradeDate,
+        previousExpanded: expandedDates,
+      }),
+    [expandedDates, selectedTradeDate, tradeDates],
+  );
+
+  const toggleDateExpanded = (tradeDate: string) => {
+    setExpandedDates((previousExpanded) => {
+      const next = getExpandedHistoryDates({
+        tradeDates,
+        selectedTradeDate,
+        previousExpanded,
+      });
+      if (next.has(tradeDate)) {
+        next.delete(tradeDate);
+      } else {
+        next.add(tradeDate);
+      }
+      return next;
+    });
+  };
 
   return (
     <aside className="dark-scrollbar glass h-full overflow-y-auto rounded-none text-sidebar-foreground">
@@ -90,20 +120,34 @@ export function HistorySidebar({
           const selectedInGroup = group.runIds.filter((runId) => selectedRunIds.has(runId)).length;
           const allSelected = selectedInGroup === group.runIds.length;
           const partiallySelected = selectedInGroup > 0 && !allSelected;
+          const expanded = visibleExpandedDates.has(group.tradeDate);
           return (
             <div key={group.tradeDate} className="space-y-1">
-              <label className="glass-control flex items-center gap-2 rounded-md px-2 py-1.5">
+              <div className="glass-control flex items-center gap-2 rounded-md px-2 py-1.5">
                 <DateCheckbox
                   checked={allSelected}
                   indeterminate={partiallySelected}
                   onChange={() => onToggleDate(group.runIds, !allSelected)}
                 />
-                <span className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-muted-foreground">
-                  {group.tradeDate}
-                </span>
-              </label>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left focus-visible:outline-none focus-visible:text-foreground"
+                  aria-expanded={expanded}
+                  onClick={() => toggleDateExpanded(group.tradeDate)}
+                >
+                  <span className="truncate font-mono text-[0.68rem] uppercase tracking-[0.12em] text-muted-foreground">
+                    {group.tradeDate}
+                  </span>
+                  <ChevronDown
+                    className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${
+                      expanded ? "rotate-0" : "-rotate-90"
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
 
-              {group.runs.map((it) => {
+              {expanded && group.runs.map((it) => {
                 const active = it.run_id === selectedId;
                 const checked = selectedRunIds.has(it.run_id);
                 const decisionTone = it.decision
