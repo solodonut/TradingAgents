@@ -1,9 +1,11 @@
 "use client";
+import { Fragment } from "react";
 import { Download, LoaderCircle, OctagonX } from "lucide-react";
 import { MessageBubble } from "@/components/MessageBubble";
 import { DecisionCard } from "@/components/DecisionCard";
 import { RuntimeStatusPanel } from "@/components/RuntimeStatusPanel";
 import type { RunResult, RunStatusDetail } from "@/lib/types";
+import { INVEST_LABELS, RISK_LABELS, parseDebateHistory, type DebateTurn } from "@/lib/debate";
 
 // section field name -> Chinese agent label, in REPORT_SECTIONS order (api/runner.py).
 // final_trade_decision is rendered as the DecisionCard, not a MessageBubble.
@@ -85,6 +87,15 @@ export function RunDetail({
   const finalDetail = result["final_trade_decision"];
   const hasFinal = typeof finalDetail === "string" && finalDetail.trim().length > 0;
   const isEmpty = sections.length === 0 && !hasFinal && !run.decision;
+
+  const investState = result["investment_debate_state"] as { history?: string } | undefined;
+  const riskState = result["risk_debate_state"] as { history?: string } | undefined;
+  const investTurns = parseDebateHistory(investState?.history, 2, INVEST_LABELS);
+  const riskTurns = parseDebateHistory(riskState?.history, 3, RISK_LABELS);
+  const investTotal = Math.max(1, Math.ceil(investTurns.length / 2));
+  const riskTotal = Math.max(1, Math.ceil(riskTurns.length / 3));
+  const heading = (team: string, t: DebateTurn, total: number) =>
+    `${team} · 第 ${t.round}/${total} 轮 · ${t.speakerLabel}`;
 
   return (
     <div className="space-y-3">
@@ -170,7 +181,25 @@ export function RunDetail({
       )}
 
       {sections.map((s) => (
-        <MessageBubble key={s.field} agent={s.label} content={result[s.field] as string} />
+        <Fragment key={s.field}>
+          {s.field === "investment_plan" &&
+            investTurns.map((t, i) => (
+              <MessageBubble
+                key={`invest-${i}`}
+                agent={heading("多空辩论", t, investTotal)}
+                content={t.content}
+              />
+            ))}
+          <MessageBubble agent={s.label} content={result[s.field] as string} />
+        </Fragment>
+      ))}
+
+      {riskTurns.map((t, i) => (
+        <MessageBubble
+          key={`risk-${i}`}
+          agent={heading("风险辩论", t, riskTotal)}
+          content={t.content}
+        />
       ))}
 
       {run.decision && (
