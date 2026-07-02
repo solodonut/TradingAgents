@@ -1,7 +1,7 @@
 import queue
 import threading
 
-from api.runner import REPORT_SECTIONS, AnalysisRunner, chunk_to_events
+from api.runner import REPORT_SECTIONS, AnalysisRunner, chunk_to_events, debate_events
 
 
 def test_report_section_chunk_emits_report_event():
@@ -266,6 +266,94 @@ def test_runner_emits_cancelled_when_cancel_event_is_set(tmp_path):
     events = _drain(q)
     assert any(e["event"] == "cancelled" for e in events)
     assert store.get_run("r1").status == "cancelled"
+
+
+def test_invest_first_turn_is_bull_round_1():
+    tracker: dict = {}
+    events = debate_events(
+        {"investment_debate_state": {"count": 1, "current_response": "Bull Analyst: buy it"}},
+        tracker,
+        {"invest_total": 2, "risk_total": 1},
+    )
+    assert len(events) == 1
+    assert events[0]["event"] == "debate_round"
+    assert events[0]["data"] == {
+        "team": "invest",
+        "round": 1,
+        "total": 2,
+        "speaker": "bull",
+        "speaker_label": "多方",
+        "content": "buy it",
+    }
+    assert tracker["invest_count"] == 1
+
+
+def test_invest_second_turn_is_bear_same_round():
+    tracker = {"invest_count": 1}
+    events = debate_events(
+        {"investment_debate_state": {"count": 2, "current_response": "Bear Analyst: no way"}},
+        tracker,
+        {"invest_total": 2, "risk_total": 1},
+    )
+    d = events[0]["data"]
+    assert d["speaker"] == "bear" and d["speaker_label"] == "空方"
+    assert d["round"] == 1 and d["content"] == "no way"
+
+
+def test_invest_third_turn_is_round_2_bull():
+    tracker = {"invest_count": 2}
+    events = debate_events(
+        {"investment_debate_state": {"count": 3, "current_response": "Bull Analyst: still buy"}},
+        tracker,
+        {"invest_total": 2, "risk_total": 1},
+    )
+    assert events[0]["data"]["round"] == 2
+    assert events[0]["data"]["speaker"] == "bull"
+
+
+def test_no_event_when_count_unchanged():
+    tracker = {"invest_count": 2}
+    events = debate_events(
+        {"investment_debate_state": {"count": 2, "current_response": "Bear Analyst: no"}},
+        tracker,
+        {"invest_total": 2, "risk_total": 1},
+    )
+    assert events == []
+
+
+def test_risk_speaker_cycle_and_round_math():
+    tracker: dict = {}
+    cfg = {"invest_total": 1, "risk_total": 2}
+    e1 = debate_events(
+        {"risk_debate_state": {
+            "count": 1, "latest_speaker": "Aggressive",
+            "current_aggressive_response": "Aggressive Analyst: go big"}},
+        tracker, cfg)
+    assert e1[0]["data"] == {
+        "team": "risk", "round": 1, "total": 2,
+        "speaker": "aggressive", "speaker_label": "激进", "content": "go big"}
+    e2 = debate_events(
+        {"risk_debate_state": {
+            "count": 2, "latest_speaker": "Conservative",
+            "current_conservative_response": "Conservative Analyst: careful"}},
+        tracker, cfg)
+    assert e2[0]["data"]["speaker"] == "conservative" and e2[0]["data"]["round"] == 1
+    e3 = debate_events(
+        {"risk_debate_state": {
+            "count": 3, "latest_speaker": "Neutral",
+            "current_neutral_response": "Neutral Analyst: middle"}},
+        tracker, cfg)
+    assert e3[0]["data"]["speaker"] == "neutral" and e3[0]["data"]["round"] == 1
+    e4 = debate_events(
+        {"risk_debate_state": {
+            "count": 4, "latest_speaker": "Aggressive",
+            "current_aggressive_response": "Aggressive Analyst: again"}},
+        tracker, cfg)
+    assert e4[0]["data"]["round"] == 2 and e4[0]["data"]["speaker"] == "aggressive"
+
+
+def test_debate_events_ignores_chunk_without_debate_state():
+    assert debate_events({"market_report": "x"}, {}, {"invest_total": 1, "risk_total": 1}) == []
 
 
 def _drain(q: queue.Queue) -> list:

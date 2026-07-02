@@ -22,6 +22,102 @@ REPORT_SECTIONS: dict[str, tuple[str, str]] = {
 
 REPORT_SECTION_KEYS = frozenset(REPORT_SECTIONS)
 
+# Debate progress ---------------------------------------------------------
+# speaker key -> (prose prefix, Chinese label)
+INVEST_SPEAKERS: dict[str, tuple[str, str]] = {
+    "bull": ("Bull Analyst:", "多方"),
+    "bear": ("Bear Analyst:", "空方"),
+}
+RISK_SPEAKERS: dict[str, tuple[str, str]] = {
+    "aggressive": ("Aggressive Analyst:", "激进"),
+    "conservative": ("Conservative Analyst:", "保守"),
+    "neutral": ("Neutral Analyst:", "中立"),
+}
+RISK_SPEAKER_ORDER: tuple[str, ...] = ("aggressive", "conservative", "neutral")
+_SPEAKER_PREFIXES: tuple[str, ...] = tuple(
+    prefix for prefix, _ in (*INVEST_SPEAKERS.values(), *RISK_SPEAKERS.values())
+)
+
+
+def _strip_speaker_prefix(text: str) -> str:
+    """Drop a leading 'Xxx Analyst:' label from a debate argument."""
+    stripped = text.lstrip()
+    for prefix in _SPEAKER_PREFIXES:
+        if stripped.startswith(prefix):
+            return stripped[len(prefix):].strip()
+    return stripped
+
+
+def _round_event(*, team, round_no, total, speaker, label, content) -> dict:
+    return {
+        "event": "debate_round",
+        "data": {
+            "team": team,
+            "round": round_no,
+            "total": total,
+            "speaker": speaker,
+            "speaker_label": label,
+            "content": _strip_speaker_prefix(content or ""),
+        },
+    }
+
+
+def debate_events(chunk: dict, tracker: dict, rounds_cfg: dict) -> list[dict]:
+    """Emit `debate_round` events when a debate state's `count` advances.
+
+    `chunk` is a full accumulated state (stream_mode='values'), so `count` is
+    monotonic and grows by exactly one per debate turn. `tracker` remembers the
+    last count already emitted per team; `rounds_cfg` carries the totals.
+    """
+    events: list[dict] = []
+
+    invest = chunk.get("investment_debate_state")
+    if isinstance(invest, dict):
+        count = invest.get("count") or 0
+        if count > tracker.get("invest_count", 0):
+            tracker["invest_count"] = count
+            speaker = "bull" if count % 2 == 1 else "bear"
+            _, label = INVEST_SPEAKERS[speaker]
+            events.append(
+                _round_event(
+                    team="invest",
+                    round_no=(count + 1) // 2,
+                    total=rounds_cfg.get("invest_total", 1),
+                    speaker=speaker,
+                    label=label,
+                    content=invest.get("current_response", ""),
+                )
+            )
+
+    risk = chunk.get("risk_debate_state")
+    if isinstance(risk, dict):
+        count = risk.get("count") or 0
+        if count > tracker.get("risk_count", 0):
+            tracker["risk_count"] = count
+            speaker = RISK_SPEAKER_ORDER[(count - 1) % 3]
+            _, label = RISK_SPEAKERS[speaker]
+            events.append(
+                _round_event(
+                    team="risk",
+                    round_no=(count + 2) // 3,
+                    total=rounds_cfg.get("risk_total", 1),
+                    speaker=speaker,
+                    label=label,
+                    content=risk.get(f"current_{speaker}_response", ""),
+                )
+            )
+
+    return events
+
+
+def _rounds_config(graph) -> dict:
+    """Read debate round totals from graph.config, defaulting to 1."""
+    config = getattr(graph, "config", None) or {}
+    return {
+        "invest_total": int(config.get("max_debate_rounds", 1) or 1),
+        "risk_total": int(config.get("max_risk_discuss_rounds", 1) or 1),
+    }
+
 
 def chunk_to_events(chunk: dict, seen: set[str]) -> list[dict]:
     """Translate one LangGraph stream chunk into SSE event dicts.
