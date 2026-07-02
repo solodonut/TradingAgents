@@ -172,6 +172,8 @@ class AnalysisRunner:
 
     def run(self, run_id, graph, init_state, decision, final_state) -> None:
         seen: set[str] = set()
+        debate_tracker: dict = {}
+        rounds_cfg = _rounds_config(graph)
         accumulated: dict = {}
         stream_args = getattr(graph, "_stream_args", {}) or {}
         instrument_name = getattr(graph, "_instrument_name", None)
@@ -196,6 +198,9 @@ class AnalysisRunner:
                                 self._telemetry.mark_report(section)
                 for event in chunk_to_events(chunk, seen):
                     self._q.put(event)
+                if isinstance(chunk, dict):
+                    for event in debate_events(chunk, debate_tracker, rounds_cfg):
+                        self._q.put(event)
                 if self._is_cancelled():
                     self._emit_cancelled(run_id)
                     return

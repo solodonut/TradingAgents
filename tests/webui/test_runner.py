@@ -356,6 +356,60 @@ def test_debate_events_ignores_chunk_without_debate_state():
     assert debate_events({"market_report": "x"}, {}, {"invest_total": 1, "risk_total": 1}) == []
 
 
+def test_runner_emits_debate_round_events(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+
+    fake = _FakeGraph(
+        chunks=[
+            {"investment_debate_state": {"count": 1, "current_response": "Bull Analyst: up"}},
+            {"investment_debate_state": {"count": 2, "current_response": "Bear Analyst: down"}},
+            {"final_trade_decision": "**Rating**: Buy"},
+        ],
+        final_state={"final_trade_decision": "**Rating**: Buy"},
+        decision="Buy",
+    )
+    fake.config = {"max_debate_rounds": 1, "max_risk_discuss_rounds": 1}
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q)
+    runner.run(
+        run_id="r1",
+        graph=fake,
+        init_state={},
+        decision="Buy",
+        final_state={"final_trade_decision": "**Rating**: Buy"},
+    )
+
+    events = _drain(q)
+    rounds = [e for e in events if e["event"] == "debate_round"]
+    assert len(rounds) == 2
+    assert rounds[0]["data"]["speaker"] == "bull" and rounds[0]["data"]["total"] == 1
+    assert rounds[1]["data"]["speaker"] == "bear"
+    # 报告事件不受影响
+    assert any(e["event"] == "done" for e in events)
+
+
+def test_runner_without_config_still_streams_debate_rounds(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r1", "NVDA", "2024-05-10", "stock", {})
+    # _FakeGraph 没有 config 属性 -> total 回退为 1，不报错。
+    fake = _FakeGraph(
+        chunks=[{"investment_debate_state": {"count": 1, "current_response": "Bull Analyst: up"}}],
+        final_state=None,
+        decision=None,
+    )
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(store=store, event_queue=q)
+    runner.run(run_id="r1", graph=fake, init_state={}, decision=None, final_state=None)
+
+    rounds = [e for e in _drain(q) if e["event"] == "debate_round"]
+    assert len(rounds) == 1 and rounds[0]["data"]["total"] == 1
+
+
 def _drain(q: queue.Queue) -> list:
     out = []
     while True:
