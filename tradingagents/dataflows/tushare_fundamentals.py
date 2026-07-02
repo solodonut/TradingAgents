@@ -88,6 +88,12 @@ def _fund_report(symbol: str, curr_date: str | None) -> str:
     header = f"# Fund/ETF Fundamentals for {label} (Tushare Pro)\n"
     header += "# Instrument type: Mainland China listed fund/ETF, not an operating company\n"
     header += "# Realtime net-asset-value, discount/premium, and order-book fields are not included in this Tushare tier\n"
+    header += (
+        "# Note: the 'Recent Fund Daily Data' and 'Adjustment Factors' sections below "
+        "publish on a T+1 basis, so their latest row may lag the current trading day by "
+        "one session (e.g. on the evening of a trading day the newest row is still the "
+        "prior session). This is a data-source property, not stale data.\n"
+    )
     header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
     result = header
     result += _section("Fund Basic", basic)

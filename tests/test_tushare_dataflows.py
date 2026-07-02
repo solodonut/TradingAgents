@@ -267,6 +267,10 @@ def test_tushare_etf_fundamentals_include_basic_adj_and_portfolio(monkeypatch):
     assert "Adjustment Factors" in result
     assert "Portfolio Holdings" in result
     assert "IOPV" not in result
+    # fund_daily/fund_adj publish T+1, so the header must warn that the latest
+    # row can lag the current trading day by one session (else it reads as a
+    # date bug — see the 510330 investigation).
+    assert "T+1" in result
 
 
 @pytest.mark.unit

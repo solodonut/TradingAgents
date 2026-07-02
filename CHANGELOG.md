@@ -18,6 +18,14 @@ Breaking changes within the 0.x line are called out explicitly.
   "今天/最近/实时"。`build_system_prompt` 新增「当前日期」段,默认注入服务器本地当日日期
   (`date.today()`),可显式传入 `current_date` 覆盖。
 
+### Changed
+
+- **基本面报告的行情段标注复权数据 T+1 滞后。** 基本面分析师报告的「近期二级市场交易数据」
+  走 Tushare `fund_daily`/`fund_adj`(含复权因子),该接口的复权行情与复权因子按惯例 T+1 才发布,
+  收盘当晚最新只能到上一交易日。此前报告不加说明,易被误读为「数据停在昨天」的日期 bug(实际
+  同一次运行的市场分析师报告用 AKShare 前复权当日行情已取到当天)。`tushare_fundamentals._fund_report`
+  的 header 新增 T+1 说明,让 LLM 在报告中如实标注;新增回归测试。
+
 ### Added
 
 - **代码清单长期持久化到后端 DB。** 新增 `watchlist` 表与 `GET/PUT /api/watchlist`，
