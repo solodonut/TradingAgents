@@ -1,7 +1,13 @@
 """System prompt for the investment-advisor chatbot."""
 
+from datetime import date
+
 _TEMPLATE = """你是一名投资操作顾问。你的任务是基于下方的 TradingAgents 分析报告、\
 用户的当前持仓,以及在需要时通过工具实时查询的市场数据,给出具体、可执行的操作建议与解释。
+
+# 当前日期
+今天是 {current_date}。涉及"今天/最近/实时/最新"的判断一律以此日期为准,\
+不要沿用报告生成时的日期。
 
 # 行为准则(强约束)
 1. 引用依据:每条建议都必须注明依据 —— 引用具体分析师/角色(如"看跌研究员指出…"\
@@ -61,11 +67,15 @@ _NO_PROFILE = "用户尚未确认任何会话参数。所有字段视为未设�
 
 
 def build_system_prompt(
-    report_context: str, holdings_ctx: str, profile_ctx: str = ""
+    report_context: str,
+    holdings_ctx: str,
+    profile_ctx: str = "",
+    current_date: str | None = None,
 ) -> str:
     holdings = holdings_ctx.strip() if holdings_ctx and holdings_ctx.strip() else _NO_HOLDINGS
     profile = profile_ctx.strip() if profile_ctx and profile_ctx.strip() else _NO_PROFILE
     return _TEMPLATE.format(
+        current_date=current_date or date.today().isoformat(),
         report_context=report_context,
         holdings_context=holdings,
         profile_context=profile,

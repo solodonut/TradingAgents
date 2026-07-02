@@ -1,3 +1,5 @@
+from datetime import date
+
 from tradingagents.advisor.context import build_report_context
 from tradingagents.advisor.prompt import build_system_prompt
 
@@ -49,6 +51,17 @@ def test_system_prompt_embeds_confirmed_profile():
     assert "用户会话档案" in prompt
     assert "300000 CNY" in prompt
     assert "重新推断" in prompt
+
+
+def test_system_prompt_defaults_to_today():
+    prompt = build_system_prompt("report", holdings_ctx="")
+    assert date.today().isoformat() in prompt
+    assert "当前日期" in prompt
+
+
+def test_system_prompt_accepts_explicit_current_date():
+    prompt = build_system_prompt("report", holdings_ctx="", current_date="2026-07-02")
+    assert "2026-07-02" in prompt
 
 
 def test_system_prompt_enforces_sizing_and_confirmation_rules():

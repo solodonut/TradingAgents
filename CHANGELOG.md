@@ -8,6 +8,16 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ## [Unreleased]
 
+### Fixed
+
+- **新分析默认日期在 UTC+8 凌晨会回退到昨天。** WebUI「新分析配置」的默认 `trade_date` 原用
+  `new Date().toISOString().slice(0, 10)`,该值取的是 UTC 日期;北京时间(UTC+8)00:00–08:00 之间
+  UTC 仍停留在前一天,导致默认分析日期落后一天(如今天是 20260702 却默认 20260701)。改为按浏览器
+  本地时区拼接年月日。
+- **投顾 ChatBot 不知道当前日期。** 投顾 system prompt 从未注入"今天几号",LLM 无从判断
+  "今天/最近/实时"。`build_system_prompt` 新增「当前日期」段,默认注入服务器本地当日日期
+  (`date.today()`),可显式传入 `current_date` 覆盖。
+
 ### Added
 
 - **代码清单长期持久化到后端 DB。** 新增 `watchlist` 表与 `GET/PUT /api/watchlist`，

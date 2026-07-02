@@ -24,7 +24,13 @@ export function ConfigCard({
   const [tickersLoaded, setTickersLoaded] = useState(false);
   const [tickerInput, setTickerInput] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => {
+    // 用本地日期,不能用 toISOString()(它按 UTC 取值,UTC+8 凌晨会回退到昨天)
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
+  });
   const [assetType, setAssetType] = useState<"stock" | "crypto">("stock");
   const [analysts, setAnalysts] = useState<string[]>([
     "market",
