@@ -28,6 +28,8 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- WebUI 多空/风险辩论进度可视化：直播时按「第几轮 · 发言人」流式展示每轮发言，Agent Matrix 显示当前轮次；历史 run 可回放完整辩论过程。
+
 - **代码清单长期持久化到后端 DB。** 新增 `watchlist` 表与 `GET/PUT /api/watchlist`，
   WebUI「新分析配置」的标的清单不再只存浏览器 localStorage（换浏览器/设备、清缓存即丢），
   改为变更时防抖写入 `~/.tradingagents/webui.db`，挂载时从 DB 回填；DB 不可达或为空时回退
