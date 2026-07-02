@@ -15,7 +15,16 @@ export function subscribe(
     }
   };
   (
-    ["agent_status", "message", "report_section", "stats", "done", "error", "cancelled"] as const
+    [
+      "agent_status",
+      "message",
+      "report_section",
+      "stats",
+      "done",
+      "error",
+      "cancelled",
+      "debate_round",
+    ] as const
   ).forEach((t) => es.addEventListener(t, handler(t)));
   es.addEventListener("done", () => {
     es.close();

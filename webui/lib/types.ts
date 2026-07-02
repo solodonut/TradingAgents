@@ -56,7 +56,7 @@ export interface RunResult {
   decision: Decision | null;
   status: RunStatus;
   config: Record<string, unknown>;
-  result: Record<string, string> | null;
+  result: Record<string, unknown> | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -110,7 +110,18 @@ export type SSEEvent =
   | { event: "stats"; data: Record<string, number> }
   | { event: "done"; data: { decision: Decision; final_trade_decision: string; run_id: string } }
   | { event: "error"; data: { message: string } }
-  | { event: "cancelled"; data: { run_id: string; message: string } };
+  | { event: "cancelled"; data: { run_id: string; message: string } }
+  | {
+      event: "debate_round";
+      data: {
+        team: "invest" | "risk";
+        round: number;
+        total: number;
+        speaker: string;
+        speaker_label: string;
+        content: string;
+      };
+    };
 
 export interface PortfolioHolding {
   ticker: string;
