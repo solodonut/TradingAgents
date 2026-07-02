@@ -29,6 +29,7 @@ Breaking changes within the 0.x line are called out explicitly.
 ### Added
 
 - `tradingagents batch` 子命令：按顺序批量分析 webUI 自选股（watchlist），结果写入同一历史库，可在 webUI 查看。
+- `batch.sh`：一键脚本——按需启动后端（若 :8000 已在跑则复用）、等就绪后前台运行批量 TUI，TUI 退出时自动关闭本脚本启动的后端。
 
 - WebUI 多空/风险辩论进度可视化：直播时按「第几轮 · 发言人」流式展示每轮发言，Agent Matrix 显示当前轮次；历史 run 可回放完整辩论过程。
 
