@@ -14,7 +14,13 @@ const AGENTS: { id: string; label: string }[] = [
   { id: "report_validator", label: "报告校验" },
 ];
 
-export function AgentProgress({ statuses }: { statuses: Record<string, string> }) {
+export function AgentProgress({
+  statuses,
+  details,
+}: {
+  statuses: Record<string, string>;
+  details?: Record<string, string>;
+}) {
   return (
     <div className="glass rounded-lg">
       <div className="border-b border-border/60 px-3 py-2">
@@ -46,7 +52,7 @@ export function AgentProgress({ statuses }: { statuses: Record<string, string> }
               <div className="min-w-0">
                 <div className="truncate text-foreground">{a.label}</div>
                 <div className="truncate text-[0.65rem] uppercase tracking-[0.14em] text-muted-foreground">
-                  {a.id}
+                  {working && details?.[a.id] ? details[a.id] : a.id}
                 </div>
               </div>
               <span

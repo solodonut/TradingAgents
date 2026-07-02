@@ -190,6 +190,7 @@ export default function Home() {
   const [history, setHistory] = useState<HistorySummary[]>([]);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [messages, setMessages] = useState<{ agent: string; content: string }[]>([]);
+  const [debateDetails, setDebateDetails] = useState<Record<string, string>>({});
   const [decision, setDecision] = useState<{ d: Decision; detail: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -482,6 +483,7 @@ export default function Home() {
   const resetRunView = () => {
     setStatuses({});
     setMessages([]);
+    setDebateDetails({});
     setDecision(null);
     setError(null);
     setLiveRuntimeStatus(null);
@@ -510,6 +512,14 @@ export default function Home() {
           runServiceHealthCheck();
         }
         else if (e.event === "cancelled") setError("分析已停止");
+        else if (e.event === "debate_round") {
+          const id = e.data.team === "invest" ? "debate" : "risk_debate";
+          const teamLabel = e.data.team === "invest" ? "多空辩论" : "风险辩论";
+          const detail = `第 ${e.data.round}/${e.data.total} 轮 · ${e.data.speaker_label}`;
+          setMessages((m) => [...m, { agent: `${teamLabel} · ${detail}`, content: e.data.content }]);
+          setStatuses((s) => (s[id] === "done" ? s : { ...s, [id]: "working" }));
+          setDebateDetails((d) => ({ ...d, [id]: detail }));
+        }
       },
       () => {
         unsubscribeRef.current = null;
@@ -827,7 +837,7 @@ export default function Home() {
               canceling={canceling}
             />
 
-            <AgentProgress statuses={sidebarStatuses} />
+            <AgentProgress statuses={sidebarStatuses} details={debateDetails} />
 
             {decision && (
               <DecisionCard decision={decision.d} detail={decision.detail} compact />
