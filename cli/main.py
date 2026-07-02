@@ -1334,5 +1334,19 @@ def analyze(
     run_analysis(checkpoint=checkpoint)
 
 
+@app.command("batch")
+def batch(
+    api_url: str = typer.Option(
+        None,
+        "--api-url",
+        help="WebUI API base URL (default: $TRADINGAGENTS_API_URL or http://localhost:8000).",
+    ),
+):
+    """按顺序批量分析 webUI 自选股，结果写入同一个历史库。"""
+    from cli.batch import run_batch
+
+    run_batch(api_url=api_url)
+
+
 if __name__ == "__main__":
     app()

@@ -171,3 +171,11 @@ def test_run_batch_exits_when_watchlist_empty(monkeypatch):
     with pytest.raises(typer.Exit) as ei:
         run_batch()
     assert ei.value.exit_code == 0
+
+
+@pytest.mark.unit
+def test_batch_command_registered():
+    from cli.main import app
+
+    names = {cmd.name for cmd in app.registered_commands}
+    assert "batch" in names

@@ -28,6 +28,8 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- `tradingagents batch` 子命令：按顺序批量分析 webUI 自选股（watchlist），结果写入同一历史库，可在 webUI 查看。
+
 - WebUI 多空/风险辩论进度可视化：直播时按「第几轮 · 发言人」流式展示每轮发言，Agent Matrix 显示当前轮次；历史 run 可回放完整辩论过程。
 
 - **代码清单长期持久化到后端 DB。** 新增 `watchlist` 表与 `GET/PUT /api/watchlist`，
