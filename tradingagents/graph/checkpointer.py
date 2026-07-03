@@ -14,6 +14,13 @@ from pathlib import Path
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.obs.run_logger import get_current_run_logger
+
+
+def _emit_checkpoint(op: str, **extra) -> None:
+    lg = get_current_run_logger()
+    if lg is not None:
+        lg.emit("checkpoint_op", op=op, **extra)
 
 
 def _db_path(data_dir: str | Path, ticker: str) -> Path:
@@ -59,7 +66,9 @@ def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
         cp = saver.get_tuple(config)
         if cp is None:
             return None
-        return cp.metadata.get("step")
+        step = cp.metadata.get("step")
+        _emit_checkpoint("resume_check", ticker=ticker, step=step)
+        return step
 
 
 def clear_all_checkpoints(data_dir: str | Path) -> int:
@@ -88,3 +97,4 @@ def clear_checkpoint(data_dir: str | Path, ticker: str, date: str) -> None:
         pass
     finally:
         conn.close()
+    _emit_checkpoint("clear", ticker=ticker)

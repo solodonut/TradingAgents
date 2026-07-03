@@ -4,6 +4,13 @@ import re
 from pathlib import Path
 
 from tradingagents.agents.utils.rating import parse_rating
+from tradingagents.obs.run_logger import get_current_run_logger
+
+
+def _emit_memory(op: str, **extra) -> None:
+    lg = get_current_run_logger()
+    if lg is not None:
+        lg.emit("memory_op", op=op, **extra)
 
 
 class TradingMemoryLog:
@@ -47,6 +54,7 @@ class TradingMemoryLog:
         entry = f"{tag}\n\nDECISION:\n{final_trade_decision}{self._SEPARATOR}"
         with open(self._log_path, "a", encoding="utf-8") as f:
             f.write(entry)
+        _emit_memory("append", ticker=ticker)
 
     # --- Read path (Phase A) ---
 
@@ -71,6 +79,7 @@ class TradingMemoryLog:
         """Return formatted past context string for agent prompt injection."""
         entries = [e for e in self.load_entries() if not e.get("pending")]
         if not entries:
+            _emit_memory("inject", ticker=ticker, chars=0)
             return ""
 
         same, cross = [], []
@@ -83,6 +92,7 @@ class TradingMemoryLog:
                 cross.append(e)
 
         if not same and not cross:
+            _emit_memory("inject", ticker=ticker, chars=0)
             return ""
 
         parts = []
@@ -92,7 +102,9 @@ class TradingMemoryLog:
         if cross:
             parts.append("Recent cross-ticker lessons:")
             parts.extend(self._format_reflection_only(e) for e in cross)
-        return "\n\n".join(parts)
+        result = "\n\n".join(parts)
+        _emit_memory("inject", ticker=ticker, chars=len(result))
+        return result
 
     # --- Update path (Phase B) ---
 
@@ -160,6 +172,7 @@ class TradingMemoryLog:
         tmp_path = self._log_path.with_suffix(".tmp")
         tmp_path.write_text(new_text, encoding="utf-8")
         tmp_path.replace(self._log_path)
+        _emit_memory("reflect", ticker=ticker)
 
     def batch_update_with_outcomes(self, updates: list[dict]) -> None:
         """Apply multiple outcome updates in a single read + atomic write.
@@ -214,6 +227,7 @@ class TradingMemoryLog:
         tmp_path = self._log_path.with_suffix(".tmp")
         tmp_path.write_text(new_text, encoding="utf-8")
         tmp_path.replace(self._log_path)
+        _emit_memory("reflect", count=len(updates))
 
     # --- Helpers ---
 
