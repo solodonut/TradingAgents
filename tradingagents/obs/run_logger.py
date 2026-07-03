@@ -81,7 +81,7 @@ class RunLogger:
             if elapsed_ms is not None:
                 event["elapsed_ms"] = elapsed_ms
             event.update(payload)
-            self._fh.write(json.dumps(event, ensure_ascii=False) + "\n")
+            self._fh.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
             self._fh.flush()
         if self._sink is not None:
             try:

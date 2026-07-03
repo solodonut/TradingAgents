@@ -82,3 +82,23 @@ def test_create_run_logger_builds_logger(tmp_path):
     assert lg.path.parent == tmp_path
     assert lg.truncate("x" * 20)["truncated"] is True
     lg.close()
+
+
+def test_emit_non_serializable_payload_degrades_not_raises(tmp_path):
+    """emit() must not raise when payload contains a non-JSON-serializable value.
+
+    Upholds the 'logging never breaks the analysis' invariant (design spec §4.1).
+    """
+    from unittest.mock import MagicMock
+
+    lg = RunLogger("r", "SPY", tmp_path / "a.jsonl")
+    mock_val = MagicMock()
+    # Must NOT raise TypeError
+    lg.emit("run_end", decision=mock_val)
+    lg.close()
+
+    events = _read(tmp_path / "a.jsonl")
+    assert len(events) == 1
+    assert "decision" in events[0]
+    # The value must be stored as a string (str fallback), not cause missing key
+    assert isinstance(events[0]["decision"], str)
