@@ -24,6 +24,7 @@ export function subscribe(
       "error",
       "cancelled",
       "debate_round",
+      "log",
     ] as const
   ).forEach((t) => es.addEventListener(t, handler(t)));
   es.addEventListener("done", () => {

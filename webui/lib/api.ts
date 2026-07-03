@@ -301,3 +301,12 @@ export async function getPortfolio(
 export function chatStreamUrl(id: string): string {
   return `${BASE}/api/chat/sessions/${id}/stream`;
 }
+
+import type { LogEvent } from "./logs";
+
+export async function getRunLogs(runId: string): Promise<LogEvent[]> {
+  const resp = await fetch(`${BASE}/api/analysis/${runId}/logs`);
+  if (!resp.ok) return [];
+  const body = await resp.json();
+  return (body.events ?? []) as LogEvent[];
+}

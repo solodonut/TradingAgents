@@ -11,6 +11,7 @@ import { RunDetail } from "@/components/RunDetail";
 import { RuntimeStatusPanel } from "@/components/RuntimeStatusPanel";
 import { QueuePanel } from "@/components/QueuePanel";
 import { ServiceHealthPanel } from "@/components/ServiceHealthPanel";
+import { LogPanel } from "@/components/LogPanel";
 import {
   deleteHistory,
   getConfigOptions,
@@ -26,9 +27,11 @@ import {
   checkServiceHealth,
   historyReportsZipUrl,
   subscribeServiceHealth,
+  getRunLogs,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
 import { sortServiceHealthItems } from "@/lib/service-health";
+import type { LogEvent } from "@/lib/logs";
 import type {
   ConfigOptions,
   Decision,
@@ -225,6 +228,7 @@ export default function Home() {
   const [selectedHistoryRunIds, setSelectedHistoryRunIds] = useState<Set<string>>(new Set());
   const [runtimeStatus, setRuntimeStatus] = useState<RunStatusDetail | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<LogEvent[]>([]);
 
   const refreshHistory = () =>
     getHistory()
@@ -384,6 +388,7 @@ export default function Home() {
     try {
       const r = await getHistoryDetail(runId);
       setDetail(r);
+      getRunLogs(runId).then(setLogs);
     } catch (err) {
       setDetailError((err as Error).message);
     } finally {
@@ -489,6 +494,7 @@ export default function Home() {
     setLiveRuntimeStatus(null);
     setLiveRuntimeError(null);
     setCanceling(false);
+    setLogs([]);
   };
 
   const followRun = (runId: string) => {
@@ -519,6 +525,9 @@ export default function Home() {
           setMessages((m) => [...m, { agent: `${teamLabel} · ${detail}`, content: e.data.content }]);
           setStatuses((s) => (s[id] === "done" ? s : { ...s, [id]: "working" }));
           setDebateDetails((d) => ({ ...d, [id]: detail }));
+        }
+        else if (e.event === "log") {
+          setLogs((prev) => [...prev, e.data]);
         }
       },
       () => {
@@ -842,6 +851,8 @@ export default function Home() {
             {decision && (
               <DecisionCard decision={decision.d} detail={decision.detail} compact />
             )}
+
+            {logs.length > 0 && <LogPanel logs={logs} />}
           </div>
         </aside>
       </div>

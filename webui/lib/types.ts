@@ -121,7 +121,8 @@ export type SSEEvent =
         speaker_label: string;
         content: string;
       };
-    };
+    }
+  | { event: "log"; data: import("./logs").LogEvent };
 
 export interface PortfolioHolding {
   ticker: string;
