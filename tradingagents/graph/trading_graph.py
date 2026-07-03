@@ -33,6 +33,13 @@ from tradingagents.dataflows.errors import VendorError
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients import create_llm_client
+from tradingagents.obs import (
+    clear_current_run_logger,
+    create_run_logger,
+    get_current_run_logger,
+    redact,
+    set_current_run_logger,
+)
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
@@ -379,34 +386,60 @@ class TradingAgentsGraph:
         """
         self.ticker = company_name
 
-        # Resolve any pending memory-log entries for this ticker before the pipeline runs.
-        self._resolve_pending_entries(company_name)
+        import uuid as _uuid
 
-        # Recompile with a checkpointer if the user opted in.
-        if self.config.get("checkpoint_enabled"):
-            self._checkpointer_ctx = get_checkpointer(
-                self.config["data_cache_dir"], company_name
-            )
-            saver = self._checkpointer_ctx.__enter__()
-            self.graph = self.workflow.compile(checkpointer=saver)
-
-            step = checkpoint_step(
-                self.config["data_cache_dir"], company_name, str(trade_date)
-            )
-            if step is not None:
-                logger.info(
-                    "Resuming from step %d for %s on %s", step, company_name, trade_date
+        own_logger = None
+        if get_current_run_logger() is None:
+            own_logger = create_run_logger(self.config, _uuid.uuid4().hex, str(company_name))
+            if own_logger is not None:
+                set_current_run_logger(own_logger)
+                own_logger.emit(
+                    "run_start",
+                    ticker=str(company_name),
+                    trade_date=str(trade_date),
+                    config=redact(dict(self.config)),
                 )
-            else:
-                logger.info("Starting fresh for %s on %s", company_name, trade_date)
 
         try:
-            return self._run_graph(company_name, trade_date, asset_type=asset_type)
+            # Resolve any pending memory-log entries for this ticker before the pipeline runs.
+            self._resolve_pending_entries(company_name)
+
+            if self.config.get("checkpoint_enabled"):
+                self._checkpointer_ctx = get_checkpointer(
+                    self.config["data_cache_dir"], company_name
+                )
+                saver = self._checkpointer_ctx.__enter__()
+                self.graph = self.workflow.compile(checkpointer=saver)
+
+                step = checkpoint_step(
+                    self.config["data_cache_dir"], company_name, str(trade_date)
+                )
+                if step is not None:
+                    logger.info(
+                        "Resuming from step %d for %s on %s", step, company_name, trade_date
+                    )
+                else:
+                    logger.info("Starting fresh for %s on %s", company_name, trade_date)
+
+            try:
+                result = self._run_graph(company_name, trade_date, asset_type=asset_type)
+            finally:
+                if self._checkpointer_ctx is not None:
+                    self._checkpointer_ctx.__exit__(None, None, None)
+                    self._checkpointer_ctx = None
+                    self.graph = self.workflow.compile()
+
+            if own_logger is not None:
+                own_logger.emit("run_end", decision=result[1])
+            return result
+        except Exception as exc:  # noqa: BLE001 - record then re-raise
+            if own_logger is not None:
+                own_logger.emit("error", phase="run", error_type=type(exc).__name__, message=str(exc))
+            raise
         finally:
-            if self._checkpointer_ctx is not None:
-                self._checkpointer_ctx.__exit__(None, None, None)
-                self._checkpointer_ctx = None
-                self.graph = self.workflow.compile()
+            if own_logger is not None:
+                clear_current_run_logger()
+                own_logger.close()
 
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock"):
         """Execute the graph and write the resulting state to disk and memory log."""
