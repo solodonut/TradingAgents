@@ -7,6 +7,12 @@ import traceback
 
 from api.store import Store
 from api.telemetry import RunTelemetry
+from tradingagents.obs import (
+    clear_current_run_logger,
+    create_run_logger,
+    redact,
+    set_current_run_logger,
+)
 
 # section field name -> (agent name, team)
 REPORT_SECTIONS: dict[str, tuple[str, str]] = {
@@ -164,13 +170,28 @@ class AnalysisRunner:
         event_queue: "queue.Queue",
         cancel_event: threading.Event | None = None,
         telemetry: RunTelemetry | None = None,
+        config: dict | None = None,
     ):
         self._store = store
         self._q = event_queue
         self._cancel_event = cancel_event
         self._telemetry = telemetry
+        self._config = config or {}
 
     def run(self, run_id, graph, init_state, decision, final_state) -> None:
+        run_logger = create_run_logger(
+            self._config, run_id,
+            str(getattr(graph, "ticker", "") or init_state.get("company_of_interest", "RUN")),
+            sink=lambda ev: self._q.put({"event": "log", "data": ev}),
+        )
+        if run_logger is not None:
+            set_current_run_logger(run_logger)
+            self._store.set_log_path(run_id, str(run_logger.path))
+            run_logger.emit(
+                "run_start",
+                ticker=run_logger.ticker,
+                config=redact(dict(getattr(graph, "config", {}) or {})),
+            )
         seen: set[str] = set()
         debate_tracker: dict = {}
         rounds_cfg = _rounds_config(graph)
@@ -230,6 +251,10 @@ class AnalysisRunner:
             self._store.mark_error(run_id, str(exc))
             self._q.put({"event": "error", "data": {"message": str(exc)}})
         finally:
+            if run_logger is not None:
+                run_logger.emit("run_end", decision=(locals().get("decision") or "Hold"))
+                clear_current_run_logger()
+                run_logger.close()
             self._q.put(None)
 
     def _is_cancelled(self) -> bool:

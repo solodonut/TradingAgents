@@ -65,6 +65,7 @@ class QueueScheduler:
             event_queue=q,
             cancel_event=cancel_event,
             telemetry=telemetry,
+            config=getattr(graph, "config", None) or {},
         )
 
         def _target():
