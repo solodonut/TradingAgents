@@ -2,7 +2,9 @@
 
 from tradingagents.obs.run_logger import (
     RunLogger,
+    build_log_path,
     clear_current_run_logger,
+    create_run_logger,
     get_current_run_logger,
     redact,
     set_current_run_logger,
@@ -11,7 +13,9 @@ from tradingagents.obs.run_logger import (
 
 __all__ = [
     "RunLogger",
+    "build_log_path",
     "clear_current_run_logger",
+    "create_run_logger",
     "get_current_run_logger",
     "redact",
     "set_current_run_logger",

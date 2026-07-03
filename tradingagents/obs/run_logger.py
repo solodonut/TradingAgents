@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import threading
 import traceback
 from collections.abc import Callable
@@ -107,3 +108,25 @@ def get_current_run_logger() -> RunLogger | None:
 
 def clear_current_run_logger() -> None:
     _current.set(None)
+
+
+def _default_log_dir() -> str:
+    return os.path.join(os.path.expanduser("~"), ".tradingagents", "run_logs")
+
+
+def build_log_path(log_dir: str, ticker: str, run_id: str, now: datetime | None = None) -> Path:
+    now = now or datetime.now()
+    stamp = now.strftime("%Y%m%d-%H%M%S")
+    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in ticker) or "UNKNOWN"
+    return Path(log_dir).expanduser() / f"{safe}_{stamp}_{run_id[:8]}.jsonl"
+
+
+def create_run_logger(config: dict, run_id: str, ticker: str, sink=None) -> RunLogger | None:
+    if not config.get("log_enabled", True):
+        return None
+    log_dir = config.get("log_dir") or _default_log_dir()
+    path = build_log_path(log_dir, ticker, run_id)
+    return RunLogger(
+        run_id, ticker, path, sink=sink,
+        truncate_chars=int(config.get("log_truncate_chars", 8000)),
+    )

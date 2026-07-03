@@ -22,6 +22,9 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_LLM_REQUEST_TIMEOUT":  "llm_request_timeout",
     "TRADINGAGENTS_REPORT_VALIDATION_ENABLED": "report_validation_enabled",
+    "TRADINGAGENTS_LOG_ENABLED":          "log_enabled",
+    "TRADINGAGENTS_LOG_DIR":              "log_dir",
+    "TRADINGAGENTS_LOG_TRUNCATE_CHARS":   "log_truncate_chars",
 }
 
 
@@ -55,6 +58,11 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # the oldest resolved entries are pruned once this limit is exceeded.
     # Pending entries are never pruned. None disables rotation entirely.
     "memory_log_max_entries": None,
+    # Detailed per-run structured logging (JSONL). One file per analysis.
+    # log_dir defaults to ~/.tradingagents/run_logs/ (NOT results_dir's logs/).
+    "log_enabled": True,
+    "log_dir": os.getenv("TRADINGAGENTS_LOG_DIR", os.path.join(_TRADINGAGENTS_HOME, "run_logs")),
+    "log_truncate_chars": 8000,
     # LLM settings
     "llm_provider": "ibm_ica",
     "deep_think_llm": "claude-opus-4-8",

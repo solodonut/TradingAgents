@@ -1,8 +1,11 @@
 import json
+from datetime import datetime
 
 from tradingagents.obs.run_logger import (
     RunLogger,
+    build_log_path,
     clear_current_run_logger,
+    create_run_logger,
     get_current_run_logger,
     redact,
     set_current_run_logger,
@@ -58,4 +61,24 @@ def test_contextvar_set_get_clear(tmp_path):
     assert get_current_run_logger() is lg
     clear_current_run_logger()
     assert get_current_run_logger() is None
+    lg.close()
+
+
+def test_build_log_path_format():
+    p = build_log_path("/tmp/x", "SPY", "a1b2c3d4e5f6", now=datetime(2026, 7, 3, 14, 25, 30))
+    assert p.name == "SPY_20260703-142530_a1b2c3d4.jsonl"
+    assert str(p.parent) == "/tmp/x"
+
+
+def test_create_run_logger_disabled_returns_none(tmp_path):
+    cfg = {"log_enabled": False, "log_dir": str(tmp_path)}
+    assert create_run_logger(cfg, "r", "SPY") is None
+
+
+def test_create_run_logger_builds_logger(tmp_path):
+    cfg = {"log_enabled": True, "log_dir": str(tmp_path), "log_truncate_chars": 10}
+    lg = create_run_logger(cfg, "abcdef12", "QQQ")
+    assert lg is not None
+    assert lg.path.parent == tmp_path
+    assert lg.truncate("x" * 20)["truncated"] is True
     lg.close()
