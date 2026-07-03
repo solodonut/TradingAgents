@@ -81,6 +81,11 @@ class TradingAgentsGraph:
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+        # Always attach the observability handler; it is a no-op unless a
+        # RunLogger is set in the current contextvar (CLI propagate / WebUI runner).
+        from tradingagents.obs import ObsCallbackHandler
+
+        self.callbacks = [*self.callbacks, ObsCallbackHandler()]
 
         # Update the interface's config
         set_config(self.config)

@@ -1,5 +1,6 @@
 """Observability: per-run structured logging for analysis pipelines."""
 
+from tradingagents.obs.callback import ObsCallbackHandler
 from tradingagents.obs.run_logger import (
     RunLogger,
     build_log_path,
@@ -12,6 +13,7 @@ from tradingagents.obs.run_logger import (
 )
 
 __all__ = [
+    "ObsCallbackHandler",
     "RunLogger",
     "build_log_path",
     "clear_current_run_logger",
