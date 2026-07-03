@@ -113,6 +113,8 @@ class Store:
                 conn.execute("ALTER TABLE analysis_runs ADD COLUMN queue_position INTEGER")
             if "instrument_name" not in cols:
                 conn.execute("ALTER TABLE analysis_runs ADD COLUMN instrument_name TEXT")
+            if "log_path" not in cols:
+                conn.execute("ALTER TABLE analysis_runs ADD COLUMN log_path TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, check_same_thread=False)
@@ -151,6 +153,20 @@ class Store:
                 "UPDATE analysis_runs SET instrument_name=? WHERE run_id=?",
                 (name, run_id),
             )
+
+    def set_log_path(self, run_id: str, path: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE analysis_runs SET log_path=? WHERE run_id=?",
+                (path, run_id),
+            )
+
+    def get_log_path(self, run_id: str) -> str | None:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT log_path FROM analysis_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+            return row["log_path"] if row and row["log_path"] else None
 
     def complete_run(self, run_id: str, decision: str, result: dict) -> None:
         with self._lock, self._connect() as conn:
