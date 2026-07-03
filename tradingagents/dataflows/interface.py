@@ -1,6 +1,9 @@
 import logging
+import time
 
 import requests
+
+from tradingagents.obs.run_logger import get_current_run_logger
 
 from .akshare_fundamentals import (
     get_akshare_etf_profile,
@@ -292,6 +295,22 @@ def route_to_vendor(method: str, *args, **kwargs):
         if isinstance(symbol, str) and _is_a_share_symbol(symbol):
             vendor_chain = ["akshare"] + [v for v in vendor_chain if v != "akshare"]
 
+    _run_logger = get_current_run_logger()
+    _t0 = time.time()
+
+    def _emit_vendor(vendor, ok, **extra):
+        if _run_logger is None:
+            return
+        _run_logger.emit(
+            "vendor_call",
+            method=method,
+            vendor=vendor,
+            ok=ok,
+            args=_run_logger.truncate(str(args)),
+            elapsed_ms=(time.time() - _t0) * 1000,
+            **extra,
+        )
+
     last_no_data: NoMarketDataError | None = None
     first_error: Exception | None = None
     network_error: Exception | None = None
@@ -316,18 +335,23 @@ def route_to_vendor(method: str, *args, **kwargs):
                         str(args[0]) if args else str(kwargs.get("ticker", "")),
                         detail=result,
                     )
+                _emit_vendor(vendor, False, error="news_error_sentinel")
                 continue
+            _emit_vendor(vendor, True, fallback=(vendor != vendor_chain[0]))
             return result
         except VendorRateLimitError:
             logger.warning("Vendor %r rate-limited for %s; trying next vendor.", vendor, method)
+            _emit_vendor(vendor, False, error="rate_limited")
             continue
         except VendorNotConfiguredError as e:
             logger.warning("Vendor %r not configured for %s; trying next vendor.", vendor, method)
             if first_error is None:
                 first_error = e  # Surface it if no other vendor can serve the call.
+            _emit_vendor(vendor, False, error="not_configured")
             continue
         except NoMarketDataError as e:
             last_no_data = e  # No data here; another configured vendor may have it
+            _emit_vendor(vendor, False, error="no_data")
             continue
         except Exception as e:
             # Don't let one vendor's failure crash the call when another can
@@ -338,6 +362,7 @@ def route_to_vendor(method: str, *args, **kwargs):
                 network_error = e
             if first_error is None:
                 first_error = e
+            _emit_vendor(vendor, False, error=str(e))
             continue
 
     # If any vendor reported "no data", the symbol is genuinely unavailable.
@@ -359,6 +384,7 @@ def route_to_vendor(method: str, *args, **kwargs):
         # stale") so the agent sees the specific reason — invalid symbol, no
         # coverage, or stale data — not just a generic "unavailable".
         reason = f" ({last_no_data.detail})" if last_no_data.detail else ""
+        _emit_vendor(None, False, no_data=True)
         return (
             f"NO_DATA_AVAILABLE: No usable market data for '{sym}'{resolved} from "
             f"any configured vendor{reason}. The symbol may be invalid, delisted, "
