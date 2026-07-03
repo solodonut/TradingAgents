@@ -130,3 +130,28 @@ def download_report(run_id: str) -> str:
         raise HTTPException(status_code=404, detail="report not available")
 
     return build_markdown_report(run)
+
+
+@router.get("/{run_id}/logs")
+def analysis_logs(run_id: str) -> dict:
+    import json
+    from pathlib import Path
+
+    from api.main import get_store
+
+    store = get_store()
+    path = store.get_log_path(run_id)
+    if not path or not Path(path).exists():
+        raise HTTPException(status_code=404, detail="logs not found")
+
+    events: list[dict] = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return {"run_id": run_id, "events": events}
