@@ -4,18 +4,18 @@ import { useMemo, useRef, useState } from "react";
 import { filterLogs, type LogEvent } from "@/lib/logs";
 
 const TYPE_COLORS: Record<string, string> = {
-  run_start: "text-emerald-600",
-  run_end: "text-emerald-700",
-  node_enter: "text-slate-500",
+  run_start: "text-emerald-300",
+  run_end: "text-emerald-200",
+  node_enter: "text-slate-300",
   node_exit: "text-slate-400",
-  llm_call: "text-violet-600",
-  tool_call: "text-indigo-600",
-  vendor_call: "text-blue-600",
-  debate_round: "text-amber-600",
-  report_section: "text-teal-600",
-  memory_op: "text-fuchsia-600",
-  checkpoint_op: "text-cyan-600",
-  error: "text-red-600",
+  llm_call: "text-violet-300",
+  tool_call: "text-indigo-300",
+  vendor_call: "text-cyan-300",
+  debate_round: "text-amber-300",
+  report_section: "text-teal-300",
+  memory_op: "text-fuchsia-300",
+  checkpoint_op: "text-sky-300",
+  error: "text-red-300",
 };
 
 export function LogPanel({ logs }: { logs: LogEvent[] }) {
@@ -35,23 +35,30 @@ export function LogPanel({ logs }: { logs: LogEvent[] }) {
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white">
+    <section className="glass-readable rounded-lg">
       <button
-        className="flex w-full items-center justify-between px-4 py-2 text-sm font-medium"
+        type="button"
+        className="flex w-full items-center justify-between gap-3 border-b border-border/60 px-3 py-2 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:border-primary"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
       >
-        <span>详细日志 ({logs.length})</span>
-        <span>{open ? "▾" : "▸"}</span>
+        <span className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
+          详细日志 ({logs.length})
+        </span>
+        <span className="font-mono text-xs text-muted-foreground">{open ? "收起" : "展开"}</span>
       </button>
       {open && (
-        <div className="border-t border-slate-100 p-3">
+        <div className="flex h-72 min-h-44 resize-y flex-col overflow-hidden p-3 lg:h-80 lg:max-h-[min(34rem,60vh)]">
           <div className="mb-2 flex flex-wrap gap-1">
             {allTypes.map((t) => (
               <button
                 key={t}
+                type="button"
                 onClick={() => toggleType(t)}
-                className={`rounded px-2 py-0.5 text-xs ${
-                  types.includes(t) ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600"
+                className={`rounded-md border px-2 py-1 font-mono text-[0.68rem] transition-colors ${
+                  types.includes(t)
+                    ? "border-primary/60 bg-primary/15 text-primary"
+                    : "border-border/70 bg-white/[0.04] text-muted-foreground hover:border-primary/40 hover:text-foreground"
                 }`}
               >
                 {t}
@@ -62,20 +69,24 @@ export function LogPanel({ logs }: { logs: LogEvent[] }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索日志…"
-            className="mb-2 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+            className="glass-control mb-2 h-9 w-full rounded-md px-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:border-primary"
           />
-          <div ref={scrollRef} className="max-h-96 overflow-auto font-mono text-xs">
+          <div
+            ref={scrollRef}
+            className="dark-scrollbar min-h-0 flex-1 overflow-auto font-mono text-xs"
+          >
             {shown.map((log) => (
-              <div key={log.seq} className="border-b border-slate-50 py-1">
+              <div key={log.seq} className="border-b border-border/45 py-1.5">
                 <button
-                  className="flex w-full gap-2 text-left"
+                  type="button"
+                  className="grid w-full grid-cols-[2.25rem_minmax(7rem,11rem)_minmax(0,1fr)] gap-2 text-left"
                   onClick={() => setExpanded(expanded === log.seq ? null : log.seq)}
                 >
-                  <span className="text-slate-400">{log.seq}</span>
-                  <span className={TYPE_COLORS[log.event_type] ?? "text-slate-700"}>
+                  <span className="text-muted-foreground tabular-nums">{log.seq}</span>
+                  <span className={TYPE_COLORS[log.event_type] ?? "text-slate-300"}>
                     {log.event_type}
                   </span>
-                  <span className="truncate text-slate-500">
+                  <span className="truncate text-muted-foreground">
                     {(log.node as string | undefined) ??
                       (log.model as string | undefined) ??
                       (log.method as string | undefined) ??
@@ -84,7 +95,7 @@ export function LogPanel({ logs }: { logs: LogEvent[] }) {
                   </span>
                 </button>
                 {expanded === log.seq && (
-                  <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-slate-50 p-2 text-slate-700">
+                  <pre className="mt-2 whitespace-pre-wrap break-all rounded-md border border-border/60 bg-black/30 p-2 text-[0.68rem] leading-5 text-slate-200">
                     {JSON.stringify(log, null, 2)}
                   </pre>
                 )}

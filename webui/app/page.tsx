@@ -800,6 +800,12 @@ export default function Home() {
                 {decision && <DecisionCard decision={decision.d} detail={decision.detail} />}
               </section>
             )}
+
+            {logs.length > 0 && (
+              <div className="mt-3">
+                <LogPanel logs={logs} />
+              </div>
+            )}
           </div>
         </main>
 
@@ -852,8 +858,6 @@ export default function Home() {
             {decision && (
               <DecisionCard decision={decision.d} detail={decision.detail} compact />
             )}
-
-            {logs.length > 0 && <LogPanel logs={logs} />}
           </div>
         </aside>
       </div>
