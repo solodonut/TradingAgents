@@ -21,6 +21,7 @@ from tradingagents.agents import (
     create_trader,
 )
 from tradingagents.agents.utils.agent_states import AgentState
+from tradingagents.obs import wrap_node
 
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
@@ -91,20 +92,20 @@ class GraphSetup:
 
         # Add analyst nodes to the graph
         for spec in plan.specs:
-            workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
-            workflow.add_node(spec.clear_node, create_msg_delete())
-            workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
+            workflow.add_node(spec.agent_node, wrap_node(spec.agent_node, analyst_factories[spec.key]()))
+            workflow.add_node(spec.clear_node, wrap_node(spec.clear_node, create_msg_delete()))
+            workflow.add_node(spec.tool_node, wrap_node(spec.tool_node, self.tool_nodes[spec.key]))
 
         # Add other nodes
-        workflow.add_node("Bull Researcher", bull_researcher_node)
-        workflow.add_node("Bear Researcher", bear_researcher_node)
-        workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
-        workflow.add_node("Portfolio Manager", portfolio_manager_node)
-        workflow.add_node("Report Validator", report_validator_node)
+        workflow.add_node("Bull Researcher", wrap_node("Bull Researcher", bull_researcher_node))
+        workflow.add_node("Bear Researcher", wrap_node("Bear Researcher", bear_researcher_node))
+        workflow.add_node("Research Manager", wrap_node("Research Manager", research_manager_node))
+        workflow.add_node("Trader", wrap_node("Trader", trader_node))
+        workflow.add_node("Aggressive Analyst", wrap_node("Aggressive Analyst", aggressive_analyst))
+        workflow.add_node("Neutral Analyst", wrap_node("Neutral Analyst", neutral_analyst))
+        workflow.add_node("Conservative Analyst", wrap_node("Conservative Analyst", conservative_analyst))
+        workflow.add_node("Portfolio Manager", wrap_node("Portfolio Manager", portfolio_manager_node))
+        workflow.add_node("Report Validator", wrap_node("Report Validator", report_validator_node))
 
         # Define edges
         # Start with the first analyst

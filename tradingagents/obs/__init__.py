@@ -1,6 +1,7 @@
 """Observability: per-run structured logging for analysis pipelines."""
 
 from tradingagents.obs.callback import ObsCallbackHandler
+from tradingagents.obs.node import wrap_node
 from tradingagents.obs.run_logger import (
     RunLogger,
     build_log_path,
@@ -22,4 +23,5 @@ __all__ = [
     "redact",
     "set_current_run_logger",
     "truncate",
+    "wrap_node",
 ]
