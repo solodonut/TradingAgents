@@ -1,5 +1,6 @@
 "use client";
-import { ChevronDown, Download, LoaderCircle, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Download, ExternalLink, LoaderCircle, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getExpandedHistoryDates } from "@/lib/history-groups";
 import type { HistorySummary } from "@/lib/types";
@@ -214,6 +215,17 @@ export function HistorySidebar({
                       <span className="truncate font-mono text-[0.62rem] uppercase tracking-[0.12em] text-muted-foreground">
                         {it.status}
                       </span>
+                      <Link
+                        href={`/logs/${it.run_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`打开 ${it.ticker} ${it.trade_date} 日志视图`}
+                        title="打开日志视图"
+                        className="ml-auto inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-colors hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:text-primary group-hover:opacity-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="size-3.5" />
+                      </Link>
                     </div>
                   </div>
                 );

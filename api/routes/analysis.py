@@ -134,9 +134,9 @@ def download_report(run_id: str) -> str:
 
 @router.get("/{run_id}/logs")
 def analysis_logs(run_id: str) -> dict:
-    import json
     from pathlib import Path
 
+    from api.log_view import read_log_events
     from api.main import get_store
 
     store = get_store()
@@ -144,14 +144,25 @@ def analysis_logs(run_id: str) -> dict:
     if not path or not Path(path).exists():
         raise HTTPException(status_code=404, detail="logs not found")
 
-    events: list[dict] = []
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                events.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return {"run_id": run_id, "events": events}
+    return {"run_id": run_id, "events": read_log_events(Path(path))}
+
+
+@router.get("/{run_id}/logs/view")
+def analysis_log_view(run_id: str) -> dict:
+    from pathlib import Path
+
+    from api.log_view import build_log_view, read_log_events
+    from api.main import get_store
+
+    store = get_store()
+    path = store.get_log_path(run_id)
+    if not path or not Path(path).exists():
+        raise HTTPException(status_code=404, detail="logs not found")
+
+    run = store.get_run(run_id)
+    events = read_log_events(Path(path))
+    return build_log_view(
+        run_id=run_id,
+        events=events,
+        run_result=run.result if run else None,
+    )

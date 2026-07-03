@@ -12,6 +12,7 @@ import type {
   ServiceHealthEvent,
 } from "./types";
 import type { LogEvent } from "./logs";
+import type { LogViewPayload } from "./log-view";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -136,6 +137,12 @@ export async function getHistoryDetail(runId: string): Promise<RunResult> {
 export async function getAnalysisStatus(runId: string): Promise<RunStatusDetail> {
   const r = await fetch(`${BASE}/api/analysis/${runId}/status`);
   if (!r.ok) throw new Error("无法加载后台状态");
+  return r.json();
+}
+
+export async function getLogView(runId: string): Promise<LogViewPayload> {
+  const r = await fetch(`${BASE}/api/analysis/${runId}/logs/view`);
+  if (!r.ok) throw new Error(r.status === 404 ? "未找到该运行日志" : "无法加载运行日志");
   return r.json();
 }
 
