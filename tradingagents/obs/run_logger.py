@@ -81,8 +81,11 @@ class RunLogger:
             if elapsed_ms is not None:
                 event["elapsed_ms"] = elapsed_ms
             event.update(payload)
-            self._fh.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
-            self._fh.flush()
+            try:
+                self._fh.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+                self._fh.flush()
+            except Exception:  # noqa: BLE001 - a write failure must not break the run (spec §4.1)
+                traceback.print_exc()
         if self._sink is not None:
             try:
                 self._sink(event)

@@ -84,6 +84,29 @@ def test_create_run_logger_builds_logger(tmp_path):
     lg.close()
 
 
+def test_emit_write_error_does_not_raise(tmp_path):
+    """A disk write error in emit must NOT propagate (spec §4.1).
+
+    Replaces the file handle with a stub whose write raises OSError,
+    then asserts that emit returns normally with the correct event dict.
+    """
+
+    class _FailingFH:
+        def write(self, data):
+            raise OSError("disk full")
+
+        def flush(self):
+            pass
+
+    lg = RunLogger("r", "SPY", tmp_path / "a.jsonl")
+    lg._fh = _FailingFH()
+    # Must NOT raise — the run must continue even if writing fails
+    ev = lg.emit("run_end", decision="Buy")
+    assert ev["event_type"] == "run_end"
+    assert ev["decision"] == "Buy"
+    lg.close()
+
+
 def test_emit_non_serializable_payload_degrades_not_raises(tmp_path):
     """emit() must not raise when payload contains a non-JSON-serializable value.
 
