@@ -170,6 +170,73 @@ class VendorRoutingTests(unittest.TestCase):
         self.assertEqual(result, "ETF_PROFILE")
         akshare.assert_called_once()
 
+    def test_default_tool_vendors_use_resilient_etf_and_news_chains(self):
+        config = interface.get_config()
+        self.assertEqual(
+            config["tool_vendors"]["get_etf_profile"],
+            "akshare,tushare,tdx,longbridge",
+        )
+        self.assertEqual(config["tool_vendors"]["get_news"], "longbridge,akshare")
+
+    def test_production_get_etf_profile_falls_back_from_akshare_to_tushare(self):
+        calls = []
+
+        def akshare(symbol, *a, **k):
+            calls.append("akshare")
+            raise NoMarketDataError(symbol, symbol, "akshare down")
+
+        def tushare(symbol, *a, **k):
+            calls.append("tushare")
+            return "TUSHARE_ETF_PROFILE"
+
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {"get_etf_profile": {"akshare": akshare, "tushare": tushare}},
+            clear=False,
+        ):
+            result = interface.route_to_vendor("get_etf_profile", "159241", "2026-07-03")
+
+        self.assertEqual(result, "TUSHARE_ETF_PROFILE")
+        self.assertEqual(calls, ["akshare", "tushare"])
+
+    def test_production_get_news_uses_longbridge_before_akshare(self):
+        calls = []
+
+        def longbridge(symbol, *a, **k):
+            calls.append("longbridge")
+            return "LONG_BRIDGE_NEWS"
+
+        def akshare(symbol, *a, **k):
+            calls.append("akshare")
+            return "AK_NEWS"
+
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {"get_news": {"longbridge": longbridge, "akshare": akshare}},
+            clear=False,
+        ):
+            result = interface.route_to_vendor("get_news", "159241", "2026-06-26", "2026-07-03")
+
+        self.assertEqual(result, "LONG_BRIDGE_NEWS")
+        self.assertEqual(calls, ["longbridge"])
+
+    def test_akshare_news_error_string_allows_fallback(self):
+        set_config({"tool_vendors": {"get_news": "akshare,longbridge"}})
+
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {
+                "get_news": {
+                    "akshare": _returns("Error fetching news for 159241.SZ: down"),
+                    "longbridge": _returns("LONG_BRIDGE_NEWS"),
+                }
+            },
+            clear=False,
+        ):
+            result = interface.route_to_vendor("get_news", "159241", "2026-06-26", "2026-07-03")
+
+        self.assertEqual(result, "LONG_BRIDGE_NEWS")
+
     def test_production_vendor_methods_include_tushare_defaults(self):
         methods = [
             "get_stock_data",
@@ -184,6 +251,10 @@ class VendorRoutingTests(unittest.TestCase):
             with self.subTest(method=method):
                 self.assertIn("tushare", interface.VENDOR_METHODS[method])
         self.assertIs(interface.VENDOR_METHODS["get_stock_data"]["tushare"], get_tushare_stock)
+        self.assertIn("tushare", interface.VENDOR_METHODS["get_etf_profile"])
+        self.assertIn("tdx", interface.VENDOR_METHODS["get_etf_profile"])
+        self.assertIn("longbridge", interface.VENDOR_METHODS["get_etf_profile"])
+        self.assertIn("longbridge", interface.VENDOR_METHODS["get_news"])
 
 
 if __name__ == "__main__":

@@ -20,6 +20,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Changed
 
+- **ETF 画像与新闻源改为理想降级链。** `get_etf_profile` 默认按
+  `akshare,tushare,tdx,longbridge` 尝试:AKShare 先取最完整的 IOPV/折溢价/份额/持仓名称,
+  失败后由 Tushare Pro 提供基金基础信息、T+1 日线/NAV/复权因子和季度持仓,TDX/Longbridge
+  作为可选运行时兜底。`get_news` 默认改为 `longbridge,akshare`,优先稳定的 Longbridge 新闻,
+  AKShare 中文本土新闻兜底;AKShare 新闻返回错误字符串时不再短路整条 vendor 链。
 - **基本面报告的行情段标注复权数据 T+1 滞后。** 基本面分析师报告的「近期二级市场交易数据」
   走 Tushare `fund_daily`/`fund_adj`(含复权因子),该接口的复权行情与复权因子按惯例 T+1 才发布,
   收盘当晚最新只能到上一交易日。此前报告不加说明,易被误读为「数据停在昨天」的日期 bug(实际

@@ -31,7 +31,13 @@ from .errors import (
     VendorRateLimitError,
 )
 from .fred import get_macro_data as get_fred_macro_data
+from .longbridge import (
+    get_etf_profile as get_longbridge_etf_profile,
+    get_news as get_longbridge_news,
+)
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from .tdx import get_etf_profile as get_tdx_etf_profile
+from .tushare_etf_profile import get_etf_profile as get_tushare_etf_profile
 from .tushare_fundamentals import (
     get_balance_sheet as get_tushare_balance_sheet,
     get_cashflow as get_tushare_cashflow,
@@ -127,6 +133,8 @@ VENDOR_LIST = [
     "alpha_vantage",
     "tushare",
     "akshare",
+    "longbridge",
+    "tdx",
 ]
 
 
@@ -179,6 +187,7 @@ VENDOR_METHODS = {
     "get_news": {
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
+        "longbridge": get_longbridge_news,
         "akshare": get_akshare_news,
     },
     "get_global_news": {
@@ -200,6 +209,9 @@ VENDOR_METHODS = {
     # etf_data
     "get_etf_profile": {
         "akshare": get_akshare_etf_profile,
+        "tushare": get_tushare_etf_profile,
+        "tdx": get_tdx_etf_profile,
+        "longbridge": get_longbridge_etf_profile,
     },
 }
 
@@ -273,6 +285,8 @@ def route_to_vendor(method: str, *args, **kwargs):
         config.get("akshare_auto_route", True)
         and "akshare" in VENDOR_METHODS[method]
         and "tushare" not in explicit_vendor_names
+        and "longbridge" not in explicit_vendor_names
+        and "tdx" not in explicit_vendor_names
     ):
         symbol = args[0] if args else kwargs.get("symbol") or kwargs.get("ticker")
         if isinstance(symbol, str) and _is_a_share_symbol(symbol):
@@ -286,7 +300,24 @@ def route_to_vendor(method: str, *args, **kwargs):
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
+            result = impl_func(*args, **kwargs)
+            if (
+                method == "get_news"
+                and isinstance(result, str)
+                and result.startswith("Error fetching news")
+            ):
+                logger.warning(
+                    "Vendor %r returned a news error sentinel for %s; trying next vendor.",
+                    vendor,
+                    method,
+                )
+                if first_error is None:
+                    first_error = NoMarketDataError(
+                        str(args[0]) if args else str(kwargs.get("ticker", "")),
+                        detail=result,
+                    )
+                continue
+            return result
         except VendorRateLimitError:
             logger.warning("Vendor %r rate-limited for %s; trying next vendor.", vendor, method)
             continue

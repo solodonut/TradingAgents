@@ -137,7 +137,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "core_stock_apis": "tushare,akshare",        # Options: alpha_vantage, yfinance, tushare, akshare
         "technical_indicators": "tushare,akshare",   # Options: alpha_vantage, yfinance, tushare, akshare
         "fundamental_data": "tushare,akshare",       # Options: alpha_vantage, yfinance, tushare, akshare
-        "news_data": "akshare",                      # Options: alpha_vantage, yfinance, tushare, akshare
+        "news_data": "longbridge,akshare",           # Options: alpha_vantage, yfinance, longbridge, akshare
         "macro_data": "disabled",            # Options: fred, disabled
         "prediction_markets": "disabled",    # Options: polymarket, disabled
     },
@@ -151,7 +151,8 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "akshare_auto_route": True,
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
-        # Example: "get_stock_data": "alpha_vantage",  # Override category default
+        "get_news": "longbridge,akshare",
+        "get_etf_profile": "akshare,tushare,tdx,longbridge",
     },
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all
