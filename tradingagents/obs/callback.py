@@ -69,10 +69,10 @@ class ObsCallbackHandler(BaseCallbackHandler):
         }
 
     def on_llm_end(self, response, *, run_id=None, **kwargs) -> None:
+        start = self._llm.pop(run_id, None) or {}  # clean up regardless of logger state
         lg = get_current_run_logger()
         if lg is None:
             return
-        start = self._llm.pop(run_id, None) or {}
         elapsed = (time.time() - start["t"]) * 1000 if start.get("t") else None
         text = ""
         try:
@@ -100,10 +100,10 @@ class ObsCallbackHandler(BaseCallbackHandler):
         )
 
     def on_llm_error(self, error, *, run_id=None, **kwargs) -> None:
+        self._llm.pop(run_id, None)  # clean up regardless of logger state
         lg = get_current_run_logger()
         if lg is None:
             return
-        self._llm.pop(run_id, None)
         lg.emit("error", phase="llm", error_type=type(error).__name__, message=str(error))
 
     def on_tool_start(self, serialized, input_str, *, run_id=None, **kwargs) -> None:
@@ -116,10 +116,10 @@ class ObsCallbackHandler(BaseCallbackHandler):
         }
 
     def on_tool_end(self, output, *, run_id=None, **kwargs) -> None:
+        start = self._tool.pop(run_id, None) or {}  # clean up regardless of logger state
         lg = get_current_run_logger()
         if lg is None:
             return
-        start = self._tool.pop(run_id, None) or {}
         elapsed = (time.time() - start["t"]) * 1000 if start.get("t") else None
         lg.emit(
             "tool_call",
@@ -128,3 +128,10 @@ class ObsCallbackHandler(BaseCallbackHandler):
             result=lg.truncate(_content_text(output)),
             elapsed_ms=elapsed,
         )
+
+    def on_tool_error(self, error, *, run_id=None, **kwargs) -> None:
+        self._tool.pop(run_id, None)  # clean up regardless of logger state
+        lg = get_current_run_logger()
+        if lg is None:
+            return
+        lg.emit("error", phase="tool", error_type=type(error).__name__, message=str(error))

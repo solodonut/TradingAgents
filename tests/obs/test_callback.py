@@ -1,4 +1,5 @@
 import json
+import types
 from types import SimpleNamespace
 
 from tradingagents.obs.callback import ObsCallbackHandler
@@ -54,3 +55,42 @@ def test_tool_call_emitted(tmp_path):
     assert events[0]["name"] == "get_news"
     assert events[0]["args"] == "AAPL"
     assert events[0]["result"] == "some news"
+
+
+def test_on_llm_error_emits_error_event(tmp_path):
+    lg = RunLogger("r", "SPY", tmp_path / "a.jsonl")
+    set_current_run_logger(lg)
+    cb = ObsCallbackHandler()
+    cb.on_llm_start({"name": "m"}, ["hi"], run_id="u1")
+    cb.on_llm_error(ValueError("boom"), run_id="u1")
+    lg.close()
+    clear_current_run_logger()
+    events = [e for e in _read(tmp_path / "a.jsonl") if e["event_type"] == "error"]
+    assert len(events) == 1
+    assert events[0]["phase"] == "llm"
+    assert "u1" not in cb._llm
+
+
+def test_on_tool_error_emits_error_and_cleans_up(tmp_path):
+    lg = RunLogger("r", "SPY", tmp_path / "a.jsonl")
+    set_current_run_logger(lg)
+    cb = ObsCallbackHandler()
+    cb.on_tool_start({"name": "get_news"}, "AAPL", run_id="t1")
+    cb.on_tool_error(RuntimeError("x"), run_id="t1")
+    lg.close()
+    clear_current_run_logger()
+    events = [e for e in _read(tmp_path / "a.jsonl") if e["event_type"] == "error"]
+    assert len(events) == 1
+    assert events[0]["phase"] == "tool"
+    assert "t1" not in cb._tool
+
+
+def test_end_handlers_clean_up_state_even_without_logger(tmp_path):
+    lg = RunLogger("r", "SPY", tmp_path / "a.jsonl")
+    set_current_run_logger(lg)
+    cb = ObsCallbackHandler()
+    cb.on_llm_start({"name": "m"}, ["p"], run_id="z")
+    assert "z" in cb._llm
+    clear_current_run_logger()
+    cb.on_llm_end(types.SimpleNamespace(generations=[], llm_output={}), run_id="z")
+    assert "z" not in cb._llm
