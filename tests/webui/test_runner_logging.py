@@ -1,3 +1,4 @@
+import contextlib
 import json
 import queue
 
@@ -50,3 +51,52 @@ def test_runner_emits_log_events_and_writes_file(tmp_path):
     with open(path, encoding="utf-8") as fh:
         types = [json.loads(line)["event_type"] for line in fh if line.strip()]
     assert "run_start" in types and "run_end" in types
+
+
+def test_put_none_sentinel_even_when_emit_raises(tmp_path, monkeypatch):
+    """put(None) must reach the queue even if run_logger.emit raises on run_end."""
+    import api.runner as runner_module
+
+    class _RaisingLogger:
+        path = tmp_path / "fake.jsonl"
+        ticker = "TST"
+
+        def emit(self, event_type, **kwargs):
+            if event_type == "run_end":
+                raise OSError("disk full – simulated")
+            # run_start and other events pass through silently
+
+        def close(self):
+            pass
+
+    fake_logger = _RaisingLogger()
+
+    def _fake_create(config, run_id, ticker, sink):
+        return fake_logger
+
+    monkeypatch.setattr(runner_module, "create_run_logger", _fake_create)
+
+    store = Store(tmp_path / "webui2.db")
+    store.enqueue_run(run_id="r_raise", ticker="TST", trade_date="2026-07-03",
+                      asset_type="stock", config={})
+    q: queue.Queue = queue.Queue()
+    runner = AnalysisRunner(
+        store=store, event_queue=q, cancel_event=None, telemetry=None,
+        config={"log_enabled": True, "log_dir": str(tmp_path)},
+    )
+
+    with contextlib.suppress(Exception):
+        runner.run(run_id="r_raise", graph=FakeGraph(), init_state={}, decision=None,
+                   final_state=None)
+
+    # Drain queue non-blocking and assert the None sentinel is present.
+    items = []
+    try:
+        while True:
+            items.append(q.get_nowait())
+    except queue.Empty:
+        pass
+
+    assert None in items, (
+        "put(None) sentinel missing — SSE generator would hang forever"
+    )

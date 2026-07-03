@@ -1,5 +1,6 @@
 """Bridges TradingAgentsGraph.stream() to SSE events via a background thread."""
 
+import contextlib
 import queue
 import threading
 import time
@@ -251,11 +252,16 @@ class AnalysisRunner:
             self._store.mark_error(run_id, str(exc))
             self._q.put({"event": "error", "data": {"message": str(exc)}})
         finally:
-            if run_logger is not None:
-                run_logger.emit("run_end", decision=(locals().get("decision") or "Hold"))
-                clear_current_run_logger()
-                run_logger.close()
-            self._q.put(None)
+            try:
+                if run_logger is not None:
+                    try:
+                        run_logger.emit("run_end", decision=(locals().get("decision") or "Hold"))
+                    finally:
+                        clear_current_run_logger()
+                        with contextlib.suppress(Exception):
+                            run_logger.close()
+            finally:
+                self._q.put(None)
 
     def _is_cancelled(self) -> bool:
         return bool(self._cancel_event and self._cancel_event.is_set())
