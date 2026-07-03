@@ -33,6 +33,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- 详细分析日志：每次分析写一份 JSONL（`~/.tradingagents/run_logs/<TICKER>_<时间戳>_<run8>.jsonl`），
+  记录 run/node/llm/tool/vendor/debate/report/memory/checkpoint/error 事件；Web UI 实时查看
+  （SSE `log` 事件）+ `GET /api/analysis/{run_id}/logs` 回读。可用 `TRADINGAGENTS_LOG_ENABLED`
+  / `TRADINGAGENTS_LOG_DIR` / `TRADINGAGENTS_LOG_TRUNCATE_CHARS` 配置。
 - `tradingagents batch` 子命令：按顺序批量分析 webUI 自选股（watchlist），结果写入同一历史库，可在 webUI 查看。
 - `batch.sh`：一键脚本——按需启动后端（若 :8000 已在跑则复用）、等就绪后前台运行批量 TUI，TUI 退出时自动关闭本脚本启动的后端。
 
