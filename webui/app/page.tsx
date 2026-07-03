@@ -388,6 +388,7 @@ export default function Home() {
     try {
       const r = await getHistoryDetail(runId);
       setDetail(r);
+      setLogs([]);
       getRunLogs(runId).then(setLogs);
     } catch (err) {
       setDetailError((err as Error).message);

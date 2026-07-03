@@ -11,6 +11,7 @@ import type {
   ServiceHealthItem,
   ServiceHealthEvent,
 } from "./types";
+import type { LogEvent } from "./logs";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -301,8 +302,6 @@ export async function getPortfolio(
 export function chatStreamUrl(id: string): string {
   return `${BASE}/api/chat/sessions/${id}/stream`;
 }
-
-import type { LogEvent } from "./logs";
 
 export async function getRunLogs(runId: string): Promise<LogEvent[]> {
   const resp = await fetch(`${BASE}/api/analysis/${runId}/logs`);
