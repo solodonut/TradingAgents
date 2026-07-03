@@ -24,6 +24,7 @@ from dateutil.relativedelta import relativedelta
 
 from .akshare_utils import ak_retry, cached_call, display_symbol, is_a_share, to_bare_code
 from .config import get_config
+from .errors import NoMarketDataError
 
 # The East Money news feed is intraday-volatile; a 1-hour cache de-dupes the
 # repeated calls a single analysis run makes without freezing the feed.
@@ -43,7 +44,10 @@ def get_news(
     never sees news published after its current date.
     """
     if not is_a_share(ticker):
-        return f"No A-share news available for non-A-share symbol '{ticker}'"
+        # Not an East Money company-news symbol: raise so route_to_vendor falls
+        # back to the next configured vendor (e.g. longbridge) instead of
+        # returning a placeholder that would short-circuit the chain.
+        raise NoMarketDataError(ticker, "not an A-share; no East Money company news")
 
     code = to_bare_code(ticker)
     label = display_symbol(ticker)
