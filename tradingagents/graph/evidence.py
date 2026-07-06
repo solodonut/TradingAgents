@@ -79,27 +79,51 @@ def _normalize_item(item: Mapping[str, Any], citation_id: str) -> dict[str, Any]
     }
 
 
+def _is_valid_citation_id(value: str) -> bool:
+    return value.startswith("S") and value[1:].isdigit()
+
+
+def _next_available_id(start: int, reserved: set[str], assigned: set[str]) -> str:
+    candidate = start
+    while True:
+        citation_id = f"S{candidate}"
+        if citation_id not in reserved and citation_id not in assigned:
+            return citation_id
+        candidate += 1
+
+
 class EvidenceRegistry:
     def __init__(self, items: Iterable[Mapping[str, Any]] | None = None):
         self.items: list[dict[str, Any]] = []
         self._keys: dict[tuple[Any, ...], str] = {}
-        max_seen = 0
-        for raw in items or []:
+        seed_items = list(items or [])
+        reserved_ids = {
+            raw_id
+            for raw in seed_items
+            if _is_valid_citation_id(raw_id := _display(raw.get("id")))
+        }
+        next_generated = (
+            max((int(citation_id[1:]) for citation_id in reserved_ids), default=0) + 1
+        )
+        assigned_ids: set[str] = set()
+
+        for raw in seed_items:
             raw_id = _display(raw.get("id"))
-            if raw_id.startswith("S") and raw_id[1:].isdigit():
-                citation_id = raw_id
-                max_seen = max(max_seen, int(raw_id[1:]))
-            else:
-                citation_id = f"S{max_seen + 1}"
+            citation_id = raw_id if _is_valid_citation_id(raw_id) and raw_id not in assigned_ids else None
+            if citation_id is None:
+                citation_id = _next_available_id(next_generated, reserved_ids, assigned_ids)
+                next_generated = int(citation_id[1:]) + 1
+
             normalized = _normalize_item(raw, citation_id)
             key = _dedupe_key(normalized)
             if key in self._keys:
                 continue
+
             self.items.append(normalized)
             self._keys[key] = citation_id
-            if not (raw_id.startswith("S") and raw_id[1:].isdigit()):
-                max_seen += 1
-        self._next = max_seen + 1
+            assigned_ids.add(citation_id)
+
+        self._next = next_generated
 
     def register(self, **item: Any) -> str:
         provisional = _normalize_item(item, "S0")

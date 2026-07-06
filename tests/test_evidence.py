@@ -142,6 +142,37 @@ def test_constructor_skips_duplicate_seed_rows():
 
 
 @pytest.mark.unit
+def test_constructor_keeps_ids_unique_when_missing_and_explicit_mix():
+    registry = EvidenceRegistry(
+        [
+            {
+                "kind": "news",
+                "source_name": "财联社",
+                "title": "半导体板块获政策支持",
+                "url": "https://example.com/news/1",
+                "published_at": "2026-07-01",
+                "vendor": "akshare",
+                "tool_name": "get_news",
+                "query": {"ticker": "600519"},
+                "excerpt": "政策支持增强。",
+            },
+            {
+                "id": "S1",
+                "kind": "market_data",
+                "source_name": "AKShare",
+                "title": "get_stock_data: 600519",
+                "vendor": "akshare",
+                "tool_name": "get_stock_data",
+                "query": {"ticker": "600519"},
+            },
+        ]
+    )
+
+    assert [item["id"] for item in registry.items] == ["S2", "S1"]
+    assert list(registry.by_id()) == ["S2", "S1"]
+
+
+@pytest.mark.unit
 def test_by_id_returns_copies():
     registry = EvidenceRegistry(
         [
