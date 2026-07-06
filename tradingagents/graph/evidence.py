@@ -35,10 +35,22 @@ def _safe_cell(value: Any) -> str:
     return html.escape(text).replace("|", "\\|")
 
 
+def _canonicalize(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        items = [(_canonicalize(key), _canonicalize(item_value)) for key, item_value in value.items()]
+        items.sort(key=lambda pair: repr(pair[0]))
+        return ("mapping", tuple(items))
+    if isinstance(value, list):
+        return ("list", tuple(_canonicalize(item) for item in value))
+    if isinstance(value, tuple):
+        return ("tuple", tuple(_canonicalize(item) for item in value))
+    if isinstance(value, set):
+        return ("set", tuple(sorted((_canonicalize(item) for item in value), key=repr)))
+    return (type(value).__name__, value)
+
+
 def _query_key(query: Any) -> Any:
-    if isinstance(query, Mapping):
-        return tuple(sorted((str(key), str(value)) for key, value in query.items()))
-    return str(query)
+    return _canonicalize(query)
 
 
 def _dedupe_key(item: Mapping[str, Any]) -> tuple[Any, ...]:
@@ -76,13 +88,18 @@ class EvidenceRegistry:
             raw_id = _display(raw.get("id"))
             if raw_id.startswith("S") and raw_id[1:].isdigit():
                 citation_id = raw_id
-                max_seen = max(max_seen, int(raw_id[1:]))
             else:
                 citation_id = f"S{max_seen + 1}"
-                max_seen += 1
             normalized = _normalize_item(raw, citation_id)
+            key = _dedupe_key(normalized)
+            if key in self._keys:
+                continue
             self.items.append(normalized)
-            self._keys[_dedupe_key(normalized)] = citation_id
+            self._keys[key] = citation_id
+            if citation_id.startswith("S") and citation_id[1:].isdigit():
+                max_seen = max(max_seen, int(citation_id[1:]))
+            else:
+                max_seen += 1
         self._next = max_seen + 1
 
     def register(self, **item: Any) -> str:
