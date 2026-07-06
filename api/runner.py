@@ -10,7 +10,6 @@ from api.store import Store
 from api.telemetry import RunTelemetry
 from tradingagents.graph.evidence import EvidenceRegistry
 from tradingagents.graph.provenance import (
-    clear_current_evidence_registry,
     use_evidence_registry,
 )
 from tradingagents.obs import (
@@ -204,7 +203,12 @@ class AnalysisRunner:
         accumulated: dict = {}
         stream_args = getattr(graph, "_stream_args", {}) or {}
         instrument_name = getattr(graph, "_instrument_name", None)
-        evidence_registry = EvidenceRegistry(init_state.get("evidence_items") or [])
+        seeded_evidence = (
+            final_state.get("evidence_items")
+            if isinstance(final_state, dict) and final_state.get("evidence_items") is not None
+            else init_state.get("evidence_items") or []
+        )
+        evidence_registry = EvidenceRegistry(seeded_evidence)
         if instrument_name:
             self._store.set_instrument_name(run_id, instrument_name)
         try:
@@ -267,11 +271,8 @@ class AnalysisRunner:
                         run_logger.emit("run_end", decision=(locals().get("decision") or "Hold"))
                     finally:
                         clear_current_run_logger()
-                        clear_current_evidence_registry()
                         with contextlib.suppress(Exception):
                             run_logger.close()
-                else:
-                    clear_current_evidence_registry()
             finally:
                 self._q.put(None)
 

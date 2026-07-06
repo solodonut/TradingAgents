@@ -1,3 +1,6 @@
+import json
+from types import SimpleNamespace
+
 import pytest
 
 from tradingagents.graph.evidence import EvidenceRegistry
@@ -11,6 +14,7 @@ from tradingagents.graph.provenance import (
     set_current_evidence_registry,
     use_evidence_registry,
 )
+from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
 @pytest.mark.unit
@@ -135,3 +139,64 @@ def test_initial_state_includes_evidence_items():
     state = Propagator().create_initial_state("600519", "2026-07-06")
 
     assert state["evidence_items"] == []
+
+
+@pytest.mark.unit
+def test_log_state_persists_evidence_items(tmp_path):
+    graph = SimpleNamespace(
+        log_states_dict={},
+        ticker="600519",
+        config={"results_dir": str(tmp_path)},
+    )
+    final_state = {
+        "company_of_interest": "600519",
+        "trade_date": "2026-07-06",
+        "market_report": "market",
+        "sentiment_report": "sentiment",
+        "news_report": "news",
+        "fundamentals_report": "fundamentals",
+        "investment_debate_state": {
+            "bull_history": "",
+            "bear_history": "",
+            "history": "",
+            "current_response": "",
+            "judge_decision": "",
+        },
+        "trader_investment_plan": "plan",
+        "risk_debate_state": {
+            "aggressive_history": "",
+            "conservative_history": "",
+            "neutral_history": "",
+            "history": "",
+            "judge_decision": "",
+        },
+        "investment_plan": "plan",
+        "final_trade_decision": "Hold",
+        "evidence_items": [
+            {
+                "id": "S1",
+                "kind": "market_data",
+                "source_name": "AKShare",
+                "title": "get_stock_data: 600519",
+                "vendor": "akshare",
+                "tool_name": "get_stock_data",
+                "query": {"ticker": "600519"},
+                "url": "",
+                "published_at": "",
+                "excerpt": "",
+            }
+        ],
+    }
+
+    TradingAgentsGraph._log_state(graph, "2026-07-06", final_state)
+
+    log_path = (
+        tmp_path
+        / "600519"
+        / "TradingAgentsStrategy_logs"
+        / "full_states_log_2026-07-06.json"
+    )
+    with open(log_path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    assert payload["evidence_items"][0]["id"] == "S1"

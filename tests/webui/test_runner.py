@@ -455,6 +455,82 @@ def test_runner_persists_evidence_items_from_provenance_context(tmp_path):
     assert get_current_evidence_registry() is None
 
 
+def test_runner_preserves_final_state_evidence_items_when_init_state_has_none(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r-seeded", "600519", "2026-07-06", "stock", {})
+    q = queue.Queue()
+    runner = AnalysisRunner(store, q, threading.Event(), config={})
+
+    runner.run(
+        "r-seeded",
+        _FakeGraph(chunks=[{"market_report": "m"}], final_state=None, decision="Hold"),
+        {"company_of_interest": "600519", "trade_date": "2026-07-06"},
+        "Hold",
+        {
+            "market_report": "m",
+            "evidence_items": [
+                {
+                    "id": "S9",
+                    "kind": "market_data",
+                    "source_name": "AKShare",
+                    "title": "seeded",
+                    "vendor": "akshare",
+                    "tool_name": "get_stock_data",
+                    "query": {"ticker": "600519"},
+                    "url": "",
+                    "published_at": "",
+                    "excerpt": "",
+                }
+            ],
+        },
+    )
+
+    assert store.get_run("r-seeded").result["evidence_items"][0]["id"] == "S9"
+
+
+def test_runner_restores_outer_evidence_registry_context(tmp_path):
+    from api.store import Store
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        current_evidence_items,
+        get_current_evidence_registry,
+        set_current_evidence_registry,
+    )
+
+    outer = EvidenceRegistry()
+    outer.register(
+        kind="market_data",
+        source_name="AKShare",
+        title="outer",
+        vendor="akshare",
+        tool_name="get_stock_data",
+        query={"ticker": "600519"},
+    )
+    set_current_evidence_registry(outer)
+    try:
+        outer_snapshot = current_evidence_items()
+        store = Store(tmp_path / "t.db")
+        store.insert_run("r-outer", "600519", "2026-07-06", "stock", {})
+        q = queue.Queue()
+        runner = AnalysisRunner(store, q, threading.Event(), config={})
+
+        runner.run(
+            "r-outer",
+            _FakeGraph(chunks=[{"market_report": "m"}], final_state=None, decision="Hold"),
+            {"company_of_interest": "600519", "trade_date": "2026-07-06", "evidence_items": []},
+            "Hold",
+            {"market_report": "m"},
+        )
+
+        assert get_current_evidence_registry() is outer
+        assert current_evidence_items() == outer_snapshot
+    finally:
+        clear_current_evidence_registry()
+
+
 def _drain(q: queue.Queue) -> list:
     out = []
     while True:
