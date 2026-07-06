@@ -129,6 +129,41 @@ def test_constructor_skips_duplicate_seed_rows():
 
     assert [item["id"] for item in registry.items] == ["S7"]
     assert registry.items[0]["excerpt"] == "政策支持增强。"
+    assert registry.register(
+        kind="news",
+        source_name="另一来源",
+        title="新增证据",
+        url="https://example.com/news/2",
+        published_at="2026-07-02",
+        vendor="akshare",
+        tool_name="get_news",
+        query={"ticker": "600519", "page": 2},
+    ) == "S9"
+
+
+@pytest.mark.unit
+def test_by_id_returns_copies():
+    registry = EvidenceRegistry(
+        [
+            {
+                "id": "S1",
+                "kind": "news",
+                "source_name": "财联社",
+                "title": "半导体板块获政策支持",
+                "url": "https://example.com/news/1",
+                "published_at": "2026-07-01",
+                "vendor": "akshare",
+                "tool_name": "get_news",
+                "query": {"ticker": "600519"},
+                "excerpt": "政策支持增强。",
+            }
+        ]
+    )
+
+    snapshot = registry.by_id()
+    snapshot["S1"]["excerpt"] = "changed"
+
+    assert registry.items[0]["excerpt"] == "政策支持增强。"
 
 
 @pytest.mark.unit

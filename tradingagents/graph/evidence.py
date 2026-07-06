@@ -88,6 +88,7 @@ class EvidenceRegistry:
             raw_id = _display(raw.get("id"))
             if raw_id.startswith("S") and raw_id[1:].isdigit():
                 citation_id = raw_id
+                max_seen = max(max_seen, int(raw_id[1:]))
             else:
                 citation_id = f"S{max_seen + 1}"
             normalized = _normalize_item(raw, citation_id)
@@ -96,9 +97,7 @@ class EvidenceRegistry:
                 continue
             self.items.append(normalized)
             self._keys[key] = citation_id
-            if citation_id.startswith("S") and citation_id[1:].isdigit():
-                max_seen = max(max_seen, int(citation_id[1:]))
-            else:
+            if not (raw_id.startswith("S") and raw_id[1:].isdigit()):
                 max_seen += 1
         self._next = max_seen + 1
 
@@ -120,7 +119,7 @@ class EvidenceRegistry:
         return deepcopy(self.items)
 
     def by_id(self) -> dict[str, dict[str, Any]]:
-        return {item["id"]: item for item in self.items}
+        return {item["id"]: deepcopy(item) for item in self.items}
 
 
 def render_source_table(
