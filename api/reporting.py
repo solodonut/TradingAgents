@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from tradingagents.graph.evidence import extract_citation_ids, render_source_table
+
 _REPORT_ORDER = [
     ("market_report", "市场分析"),
     ("sentiment_report", "情绪分析"),
@@ -21,10 +23,25 @@ def build_markdown_report(run) -> str:
     parts = [f"# TradingAgents 分析报告 — {title} ({run.trade_date})\n"]
     if run.decision:
         parts.append(f"**决策: {run.decision}**\n")
+    result = run.result or {}
+    evidence_items = result.get("evidence_items") or []
+    all_cited: list[str] = []
+    seen_global: set[str] = set()
     for key, section_title in _REPORT_ORDER:
-        content = (run.result or {}).get(key)
+        content = result.get(key)
         if content:
             parts.append(f"\n## {section_title}\n\n{content}\n")
+            citation_ids = extract_citation_ids(content)
+            for citation_id in citation_ids:
+                if citation_id not in seen_global:
+                    seen_global.add(citation_id)
+                    all_cited.append(citation_id)
+            table = render_source_table(evidence_items, citation_ids, heading="引用来源")
+            if table:
+                parts.append(f"\n{table}\n")
+    global_table = render_source_table(evidence_items, all_cited, heading="全部数据来源")
+    if global_table:
+        parts.append("\n" + global_table.replace("### 全部数据来源", "## 全部数据来源") + "\n")
     return "\n".join(parts)
 
 

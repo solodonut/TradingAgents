@@ -136,3 +136,56 @@ def test_report_download_returns_markdown(client):
     assert resp.status_code == 200
     assert "## Market" in resp.text
     assert "Rating" in resp.text
+
+
+def test_report_download_renders_section_and_global_source_tables(client):
+    import api.main as main
+
+    store = main.get_store()
+    store.insert_run("r-cited", "600519", "2026-07-06", "stock", {})
+    store.complete_run(
+        "r-cited",
+        decision="Hold",
+        result={
+            "market_report": "量能放大 [S1]。",
+            "final_trade_decision": "**Rating**: Hold\n\n等待确认 [S1]。",
+            "evidence_items": [
+                {
+                    "id": "S1",
+                    "kind": "market_data",
+                    "source_name": "AKShare",
+                    "title": "get_stock_data: 600519",
+                    "url": "",
+                    "published_at": "2026-06-29..2026-07-06",
+                    "vendor": "akshare",
+                    "tool_name": "get_stock_data",
+                    "query": {"ticker": "600519"},
+                    "excerpt": "",
+                }
+            ],
+        },
+    )
+
+    resp = client.get("/api/analysis/r-cited/report")
+
+    assert resp.status_code == 200
+    assert "### 引用来源" in resp.text
+    assert "## 全部数据来源" in resp.text
+    assert (
+        "| [S1] | AKShare | get_stock_data: 600519 | "
+        "2026-06-29..2026-07-06 | - |"
+    ) in resp.text
+
+
+def test_report_download_without_evidence_keeps_old_behavior(client):
+    import api.main as main
+
+    store = main.get_store()
+    store.insert_run("r-old", "NVDA", "2024-05-10", "stock", {})
+    store.complete_run("r-old", decision="Buy", result={"market_report": "Up"})
+
+    resp = client.get("/api/analysis/r-old/report")
+
+    assert resp.status_code == 200
+    assert "Up" in resp.text
+    assert "引用来源" not in resp.text
