@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar
+from collections.abc import Iterator
 from typing import Any
 
 from tradingagents.graph.evidence import EvidenceRegistry
@@ -12,6 +14,15 @@ _current: ContextVar[EvidenceRegistry | None] = ContextVar("evidence_registry", 
 
 def set_current_evidence_registry(registry: EvidenceRegistry | None) -> None:
     _current.set(registry)
+
+
+@contextmanager
+def use_evidence_registry(registry: EvidenceRegistry | None) -> Iterator[EvidenceRegistry | None]:
+    token = _current.set(registry)
+    try:
+        yield registry
+    finally:
+        _current.reset(token)
 
 
 def get_current_evidence_registry() -> EvidenceRegistry | None:
@@ -58,7 +69,7 @@ def register_dataset_evidence(
 def register_unavailable_evidence(
     *,
     tool_name: str,
-    vendor: str,
+    vendor: str = "",
     query: dict[str, Any],
     reason: str,
 ) -> str | None:
