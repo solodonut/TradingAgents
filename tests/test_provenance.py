@@ -1,6 +1,7 @@
 import pytest
 
 from tradingagents.graph.evidence import EvidenceRegistry
+from tradingagents.graph.propagation import Propagator
 from tradingagents.graph.provenance import (
     clear_current_evidence_registry,
     current_evidence_items,
@@ -127,3 +128,10 @@ def test_nested_evidence_registry_context_restores_outer_registry():
         assert current_evidence_items() == outer_snapshot
     finally:
         clear_current_evidence_registry()
+
+
+@pytest.mark.unit
+def test_initial_state_includes_evidence_items():
+    state = Propagator().create_initial_state("600519", "2026-07-06")
+
+    assert state["evidence_items"] == []

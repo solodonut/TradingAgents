@@ -32,6 +32,11 @@ from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.errors import VendorError
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.graph.evidence import EvidenceRegistry
+from tradingagents.graph.provenance import (
+    clear_current_evidence_registry,
+    use_evidence_registry,
+)
 from tradingagents.llm_clients import create_llm_client
 from tradingagents.obs import (
     clear_current_run_logger,
@@ -461,21 +466,28 @@ class TradingAgentsGraph:
             tid = thread_id(company_name, str(trade_date))
             args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
 
-        if self.debug:
-            trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
+        evidence_registry = EvidenceRegistry(init_agent_state.get("evidence_items") or [])
+        try:
+            with use_evidence_registry(evidence_registry):
+                if self.debug:
+                    trace = []
+                    for chunk in self.graph.stream(init_agent_state, **args):
+                        if len(chunk["messages"]) == 0:
+                            pass
+                        else:
+                            chunk["messages"][-1].pretty_print()
+                            trace.append(chunk)
+                    # Streamed chunks are per-node deltas. Merge them so the returned
+                    # state matches what graph.invoke() yields in the non-debug path.
+                    final_state = {}
+                    for chunk in trace:
+                        final_state.update(chunk)
                 else:
-                    chunk["messages"][-1].pretty_print()
-                    trace.append(chunk)
-            # Streamed chunks are per-node deltas. Merge them so the returned
-            # state matches what graph.invoke() yields in the non-debug path.
-            final_state = {}
-            for chunk in trace:
-                final_state.update(chunk)
-        else:
-            final_state = self.graph.invoke(init_agent_state, **args)
+                    final_state = self.graph.invoke(init_agent_state, **args)
+            final_state = dict(final_state or {})
+            final_state["evidence_items"] = evidence_registry.to_list()
+        finally:
+            clear_current_evidence_registry()
 
         # Store current state for reflection.
         self.curr_state = final_state

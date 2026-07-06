@@ -410,6 +410,51 @@ def test_runner_without_config_still_streams_debate_rounds(tmp_path):
     assert len(rounds) == 1 and rounds[0]["data"]["total"] == 1
 
 
+def test_runner_persists_evidence_items_from_provenance_context(tmp_path):
+    from api.runner import AnalysisRunner
+    from api.store import Store
+    from tradingagents.graph.provenance import (
+        get_current_evidence_registry,
+        register_dataset_evidence,
+    )
+
+    class _Graph:
+        ticker = "600519"
+        config = {}
+        _stream_args = {}
+
+        class _Inner:
+            def stream(self, init_state, **kwargs):
+                register_dataset_evidence(
+                    kind="market_data",
+                    source_name="AKShare",
+                    title="get_stock_data: 600519",
+                    vendor="akshare",
+                    tool_name="get_stock_data",
+                    query={"ticker": "600519"},
+                )
+                yield {"market_report": "Market improved [S1]."}
+
+        graph = _Inner()
+
+    store = Store(tmp_path / "t.db")
+    store.insert_run("r-cite", "600519", "2026-07-06", "stock", {})
+    q = queue.Queue()
+    runner = AnalysisRunner(store, q, threading.Event(), config={})
+
+    runner.run(
+        "r-cite",
+        _Graph(),
+        {"company_of_interest": "600519", "trade_date": "2026-07-06", "evidence_items": []},
+        "Hold",
+        None,
+    )
+
+    run = store.get_run("r-cite")
+    assert run.result["evidence_items"][0]["id"] == "S1"
+    assert get_current_evidence_registry() is None
+
+
 def _drain(q: queue.Queue) -> list:
     out = []
     while True:

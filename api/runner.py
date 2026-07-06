@@ -8,6 +8,11 @@ import traceback
 
 from api.store import Store
 from api.telemetry import RunTelemetry
+from tradingagents.graph.evidence import EvidenceRegistry
+from tradingagents.graph.provenance import (
+    clear_current_evidence_registry,
+    use_evidence_registry,
+)
 from tradingagents.obs import (
     clear_current_run_logger,
     create_run_logger,
@@ -199,41 +204,45 @@ class AnalysisRunner:
         accumulated: dict = {}
         stream_args = getattr(graph, "_stream_args", {}) or {}
         instrument_name = getattr(graph, "_instrument_name", None)
+        evidence_registry = EvidenceRegistry(init_state.get("evidence_items") or [])
         if instrument_name:
             self._store.set_instrument_name(run_id, instrument_name)
         try:
-            for chunk in graph.graph.stream(init_state, **stream_args):
-                if self._is_cancelled():
-                    self._emit_cancelled(run_id)
-                    return
-                if isinstance(chunk, dict):
-                    accumulated.update(chunk)
-                    partial = {
-                        key: value
-                        for key, value in chunk.items()
-                        if key in REPORT_SECTION_KEYS and value
-                    }
-                    if partial:
-                        self._store.update_partial_result(run_id, partial)
-                        if self._telemetry is not None:
-                            for section in partial:
-                                self._telemetry.mark_report(section)
-                for event in chunk_to_events(chunk, seen):
-                    self._q.put(event)
-                if isinstance(chunk, dict):
-                    for event in debate_events(chunk, debate_tracker, rounds_cfg):
+            with use_evidence_registry(evidence_registry):
+                for chunk in graph.graph.stream(init_state, **stream_args):
+                    if self._is_cancelled():
+                        self._emit_cancelled(run_id)
+                        return
+                    if isinstance(chunk, dict):
+                        accumulated.update(chunk)
+                        partial = {
+                            key: value
+                            for key, value in chunk.items()
+                            if key in REPORT_SECTION_KEYS and value
+                        }
+                        if partial:
+                            self._store.update_partial_result(run_id, partial)
+                            if self._telemetry is not None:
+                                for section in partial:
+                                    self._telemetry.mark_report(section)
+                    for event in chunk_to_events(chunk, seen):
                         self._q.put(event)
-                if self._is_cancelled():
-                    self._emit_cancelled(run_id)
-                    return
+                    if isinstance(chunk, dict):
+                        for event in debate_events(chunk, debate_tracker, rounds_cfg):
+                            self._q.put(event)
+                    if self._is_cancelled():
+                        self._emit_cancelled(run_id)
+                        return
 
             if final_state is None:
                 final_state = accumulated
+            final_state = dict(final_state or {})
+            final_state["evidence_items"] = evidence_registry.to_list()
             if decision is None:
                 decision = _extract_decision(graph, final_state)
 
             self._store.complete_run(
-                run_id, decision=decision or "Hold", result=final_state or {}
+                run_id, decision=decision or "Hold", result=final_state
             )
             self._q.put(
                 {
@@ -258,8 +267,11 @@ class AnalysisRunner:
                         run_logger.emit("run_end", decision=(locals().get("decision") or "Hold"))
                     finally:
                         clear_current_run_logger()
+                        clear_current_evidence_registry()
                         with contextlib.suppress(Exception):
                             run_logger.close()
+                else:
+                    clear_current_evidence_registry()
             finally:
                 self._q.put(None)
 
