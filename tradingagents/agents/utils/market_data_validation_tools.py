@@ -10,6 +10,16 @@ from tradingagents.dataflows.market_data_validator import build_verified_market_
 logger = logging.getLogger(__name__)
 
 
+def _provenance_helpers():
+    from tradingagents.graph.provenance import (
+        prefix_with_evidence,
+        register_dataset_evidence,
+        register_unavailable_evidence,
+    )
+
+    return prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence
+
+
 @tool
 def get_verified_market_snapshot(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -34,8 +44,11 @@ def get_verified_market_snapshot(
     # ToolNode and abort the whole run via api/runner.py. Translate them into a
     # sentinel string so the analyst reports unavailability and keeps going
     # instead of crashing or fabricating numbers.
+    prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence = (
+        _provenance_helpers()
+    )
     try:
-        return build_verified_market_snapshot(symbol, curr_date, look_back_days)
+        result = build_verified_market_snapshot(symbol, curr_date, look_back_days)
     except _NETWORK_ERRORS as exc:
         logger.warning(
             "Verified market snapshot for %s unreachable (network error): %s",
@@ -48,11 +61,48 @@ def get_verified_market_snapshot(
     except Exception as exc:  # noqa: BLE001 — never let this tool crash the run
         logger.warning("Verified market snapshot for %s failed: %s", symbol, exc)
         reason = f"{type(exc).__name__}: {exc}"
+    else:
+        reason = ""
 
-    return (
-        f"MARKET_SNAPSHOT_UNAVAILABLE: Could not build a verified market-data "
-        f"snapshot for '{symbol}' on {curr_date} ({reason}). The data source may "
-        f"be unreachable or have no usable rows for this symbol. Do not fabricate "
-        f"OHLCV, price-level, or indicator values — rely on other tool outputs and "
-        f"state that verified-snapshot data is unavailable."
+    if reason:
+        result = (
+            f"MARKET_SNAPSHOT_UNAVAILABLE: Could not build a verified market-data "
+            f"snapshot for '{symbol}' on {curr_date} ({reason}). The data source may "
+            f"be unreachable or have no usable rows for this symbol. Do not fabricate "
+            f"OHLCV, price-level, or indicator values — rely on other tool outputs and "
+            f"state that verified-snapshot data is unavailable."
+        )
+    query = {"ticker": symbol, "curr_date": curr_date}
+    if result.startswith(
+        (
+            "NO_DATA_AVAILABLE:",
+            "DATA_SOURCE_UNAVAILABLE:",
+            "DATA_SOURCE_DISABLED:",
+            "MARKET_SNAPSHOT_UNAVAILABLE:",
+        )
+    ):
+        citation_id = register_unavailable_evidence(
+            tool_name="get_verified_market_snapshot",
+            vendor="configured vendors",
+            query=query,
+            reason=result,
+        )
+        return prefix_with_evidence(
+            result,
+            citation_id,
+            "get_verified_market_snapshot unavailable",
+        )
+    citation_id = register_dataset_evidence(
+        kind="market_data",
+        source_name="verified market snapshot",
+        title=f"get_verified_market_snapshot: {symbol}",
+        vendor="configured vendors",
+        tool_name="get_verified_market_snapshot",
+        query=query,
+        published_at=curr_date,
+    )
+    return prefix_with_evidence(
+        result,
+        citation_id,
+        f"get_verified_market_snapshot: {symbol}",
     )

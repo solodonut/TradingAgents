@@ -200,3 +200,54 @@ def test_log_state_persists_evidence_items(tmp_path):
         payload = json.load(handle)
 
     assert payload["evidence_items"][0]["id"] == "S1"
+
+
+@pytest.mark.unit
+def test_stock_tool_registers_dataset_evidence(monkeypatch):
+    from tradingagents.agents.utils.core_stock_tools import get_stock_data
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        current_evidence_items,
+        set_current_evidence_registry,
+    )
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.core_stock_tools.route_to_vendor",
+        lambda method, symbol, start_date, end_date: "date,close\n2026-07-06,10\n",
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_stock_data.func("600519", "2026-06-29", "2026-07-06")
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_stock_data: 600519")
+    assert items[0]["tool_name"] == "get_stock_data"
+    assert items[0]["published_at"] == "2026-06-29..2026-07-06"
+
+
+@pytest.mark.unit
+def test_news_tool_registers_unavailable_evidence(monkeypatch):
+    from tradingagents.agents.utils.news_data_tools import get_news
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        current_evidence_items,
+        set_current_evidence_registry,
+    )
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.news_data_tools.route_to_vendor",
+        lambda method, ticker, start_date, end_date: "DATA_SOURCE_UNAVAILABLE: blocked",
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_news.func("600519", "2026-06-29", "2026-07-06")
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_news unavailable")
+    assert items[0]["kind"] == "data_unavailable"

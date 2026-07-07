@@ -5,6 +5,27 @@ from langchain_core.tools import tool
 from tradingagents.dataflows.interface import route_to_vendor
 
 
+def _is_unavailable_result(result: str) -> bool:
+    return result.startswith(
+        (
+            "NO_DATA_AVAILABLE:",
+            "DATA_SOURCE_",
+            "DATA_SOURCE_DISABLED:",
+            "Error fetching news",
+        )
+    )
+
+
+def _provenance_helpers():
+    from tradingagents.graph.provenance import (
+        prefix_with_evidence,
+        register_dataset_evidence,
+        register_unavailable_evidence,
+    )
+
+    return prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence
+
+
 @tool
 def get_news(
     ticker: Annotated[str, "Ticker symbol"],
@@ -21,7 +42,29 @@ def get_news(
     Returns:
         str: A formatted string containing news data
     """
-    return route_to_vendor("get_news", ticker, start_date, end_date)
+    prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence = (
+        _provenance_helpers()
+    )
+    result = route_to_vendor("get_news", ticker, start_date, end_date)
+    query = {"ticker": ticker, "start_date": start_date, "end_date": end_date}
+    if isinstance(result, str) and _is_unavailable_result(result):
+        citation_id = register_unavailable_evidence(
+            tool_name="get_news",
+            vendor="configured vendors",
+            query=query,
+            reason=result,
+        )
+        return prefix_with_evidence(result, citation_id, "get_news unavailable")
+    citation_id = register_dataset_evidence(
+        kind="news",
+        source_name="configured news vendor",
+        title=f"get_news: {ticker}",
+        vendor="configured vendors",
+        tool_name="get_news",
+        query=query,
+        published_at=f"{start_date}..{end_date}",
+    )
+    return prefix_with_evidence(result, citation_id, f"get_news: {ticker}")
 
 @tool
 def get_global_news(
@@ -43,7 +86,29 @@ def get_global_news(
     Returns:
         str: A formatted string containing global news data
     """
-    return route_to_vendor("get_global_news", curr_date, look_back_days, limit)
+    prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence = (
+        _provenance_helpers()
+    )
+    result = route_to_vendor("get_global_news", curr_date, look_back_days, limit)
+    query = {"curr_date": curr_date, "look_back_days": look_back_days, "limit": limit}
+    if isinstance(result, str) and _is_unavailable_result(result):
+        citation_id = register_unavailable_evidence(
+            tool_name="get_global_news",
+            vendor="configured vendors",
+            query=query,
+            reason=result,
+        )
+        return prefix_with_evidence(result, citation_id, "get_global_news unavailable")
+    citation_id = register_dataset_evidence(
+        kind="news",
+        source_name="configured news vendor",
+        title="get_global_news",
+        vendor="configured vendors",
+        tool_name="get_global_news",
+        query=query,
+        published_at=curr_date,
+    )
+    return prefix_with_evidence(result, citation_id, "get_global_news")
 
 @tool
 def get_insider_transactions(
@@ -57,4 +122,30 @@ def get_insider_transactions(
     Returns:
         str: A report of insider transaction data
     """
-    return route_to_vendor("get_insider_transactions", ticker)
+    prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence = (
+        _provenance_helpers()
+    )
+    result = route_to_vendor("get_insider_transactions", ticker)
+    query = {"ticker": ticker}
+    if isinstance(result, str) and _is_unavailable_result(result):
+        citation_id = register_unavailable_evidence(
+            tool_name="get_insider_transactions",
+            vendor="configured vendors",
+            query=query,
+            reason=result,
+        )
+        return prefix_with_evidence(
+            result, citation_id, "get_insider_transactions unavailable"
+        )
+    citation_id = register_dataset_evidence(
+        kind="news",
+        source_name="configured news vendor",
+        title=f"get_insider_transactions: {ticker}",
+        vendor="configured vendors",
+        tool_name="get_insider_transactions",
+        query=query,
+        published_at="",
+    )
+    return prefix_with_evidence(
+        result, citation_id, f"get_insider_transactions: {ticker}"
+    )
