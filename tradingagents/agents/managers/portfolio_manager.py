@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision
 from tradingagents.agents.utils.agent_utils import (
+    get_citation_instruction,
     get_instrument_context_from_state,
     get_language_instruction,
+    with_evidence_items,
 )
 from tradingagents.agents.utils.structured import (
     bind_structured,
@@ -61,7 +63,7 @@ def create_portfolio_manager(llm):
 
 ---
 
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}{get_citation_instruction()}"""
 
         final_trade_decision = invoke_structured_or_freetext(
             structured_llm,
@@ -84,9 +86,9 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             "count": risk_debate_state["count"],
         }
 
-        return {
+        return with_evidence_items({
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
-        }
+        })
 
     return portfolio_manager_node

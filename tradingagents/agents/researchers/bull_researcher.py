@@ -1,6 +1,8 @@
 from tradingagents.agents.utils.agent_utils import (
+    get_citation_instruction,
     get_instrument_context_from_state,
     get_language_instruction,
+    with_evidence_items,
 )
 
 
@@ -42,7 +44,7 @@ Latest world affairs news: {news_report}
 Conversation history of the debate: {history}
 Last bear argument: {current_response}
 Use this information to deliver a compelling bull argument, refute the bear's concerns, and engage in a dynamic debate that demonstrates the strengths of the bull position.
-""" + get_language_instruction()
+""" + get_language_instruction() + get_citation_instruction()
 
         response = llm.invoke(prompt)
 
@@ -56,6 +58,6 @@ Use this information to deliver a compelling bull argument, refute the bear's co
             "count": investment_debate_state["count"] + 1,
         }
 
-        return {"investment_debate_state": new_investment_debate_state}
+        return with_evidence_items({"investment_debate_state": new_investment_debate_state})
 
     return bull_node

@@ -1,6 +1,8 @@
 from tradingagents.agents.utils.agent_utils import (
+    get_citation_instruction,
     get_instrument_context_from_state,
     get_language_instruction,
+    with_evidence_items,
 )
 
 
@@ -34,7 +36,7 @@ Latest World Affairs Report: {news_report}
 Company Fundamentals Report: {fundamentals_report}
 Here is the current conversation history: {history} Here is the last response from the aggressive analyst: {current_aggressive_response} Here is the last response from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
 
-Engage by questioning their optimism and emphasizing the potential downsides they may have overlooked. Address each of their counterpoints to showcase why a conservative stance is ultimately the safest path for the firm's assets. Focus on debating and critiquing their arguments to demonstrate the strength of a low-risk strategy over their approaches. Output conversationally as if you are speaking without any special formatting.""" + get_language_instruction()
+Engage by questioning their optimism and emphasizing the potential downsides they may have overlooked. Address each of their counterpoints to showcase why a conservative stance is ultimately the safest path for the firm's assets. Focus on debating and critiquing their arguments to demonstrate the strength of a low-risk strategy over their approaches. Output conversationally as if you are speaking without any special formatting.""" + get_language_instruction() + get_citation_instruction()
 
         response = llm.invoke(prompt)
 
@@ -56,6 +58,6 @@ Engage by questioning their optimism and emphasizing the potential downsides the
             "count": risk_debate_state["count"] + 1,
         }
 
-        return {"risk_debate_state": new_risk_debate_state}
+        return with_evidence_items({"risk_debate_state": new_risk_debate_state})
 
     return conservative_node

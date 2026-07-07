@@ -31,9 +31,11 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from tradingagents.agents.schemas import SentimentReport, render_sentiment_report
 from tradingagents.agents.utils.agent_utils import (
+    get_citation_instruction,
     get_instrument_context_from_state,
     get_language_instruction,
     get_news,
+    with_evidence_items,
 )
 from tradingagents.agents.utils.structured import (
     bind_structured,
@@ -119,10 +121,10 @@ def create_sentiment_analyst(llm):
             "Sentiment Analyst",
         )
 
-        return {
+        return with_evidence_items({
             "messages": [AIMessage(content=report_text)],
             "sentiment_report": report_text,
-        }
+        })
 
     return sentiment_analyst_node
 
@@ -173,7 +175,7 @@ Fill the following fields:
 - **confidence**: low / medium / high, based on data quality and sample size.
 - **narrative**: Full evidence breakdown, divergences, dominant narrative themes, catalysts and risks, and a markdown summary table of key sentiment signals (direction, source, supporting evidence).
 
-{get_language_instruction()}"""
+{get_language_instruction()}{get_citation_instruction()}"""
 
     return f"""You are a financial market sentiment analyst. Your task is to produce a comprehensive sentiment report for {ticker} covering the period from {start_date} to {end_date}, drawing on three complementary data sources that have already been collected for you.
 
@@ -227,7 +229,7 @@ Fill the following fields:
 - **confidence**: low / medium / high, based on data quality and sample size.
 - **narrative**: Full source-by-source breakdown, divergences, dominant narrative themes, catalysts and risks, and a markdown summary table of key sentiment signals (direction, source, supporting evidence).
 
-{get_language_instruction()}"""
+{get_language_instruction()}{get_citation_instruction()}"""
 
 
 # ---------------------------------------------------------------------------

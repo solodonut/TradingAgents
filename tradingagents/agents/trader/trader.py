@@ -8,8 +8,10 @@ from langchain_core.messages import AIMessage
 
 from tradingagents.agents.schemas import TraderProposal, render_trader_proposal
 from tradingagents.agents.utils.agent_utils import (
+    get_citation_instruction,
     get_instrument_context_from_state,
     get_language_instruction,
+    with_evidence_items,
 )
 from tradingagents.agents.utils.structured import (
     bind_structured,
@@ -33,6 +35,7 @@ def create_trader(llm):
                     "Based on your analysis, provide a specific recommendation to buy, sell, or hold. "
                     "Anchor your reasoning in the analysts' reports and the research plan."
                     + get_language_instruction()
+                    + get_citation_instruction()
                 ),
             },
             {
@@ -56,10 +59,10 @@ def create_trader(llm):
             "Trader",
         )
 
-        return {
+        return with_evidence_items({
             "messages": [AIMessage(content=trader_plan)],
             "trader_investment_plan": trader_plan,
             "sender": name,
-        }
+        })
 
     return functools.partial(trader_node, name="Trader")

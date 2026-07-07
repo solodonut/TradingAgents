@@ -203,6 +203,44 @@ def test_log_state_persists_evidence_items(tmp_path):
 
 
 @pytest.mark.unit
+def test_citation_instruction_mentions_no_fake_ids():
+    from tradingagents.agents.utils.agent_utils import get_citation_instruction
+
+    instruction = get_citation_instruction()
+
+    assert "[S#]" in instruction
+    assert "Do not invent citation ids" in instruction
+
+
+@pytest.mark.unit
+def test_with_evidence_items_adds_current_snapshot():
+    from tradingagents.agents.utils.agent_utils import with_evidence_items
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        register_dataset_evidence,
+        set_current_evidence_registry,
+    )
+
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        register_dataset_evidence(
+            kind="market_data",
+            source_name="AKShare",
+            title="snapshot",
+            vendor="akshare",
+            tool_name="get_verified_market_snapshot",
+            query={"ticker": "600519"},
+        )
+        out = with_evidence_items({"market_report": "ok [S1]"})
+    finally:
+        clear_current_evidence_registry()
+
+    assert out["market_report"] == "ok [S1]"
+    assert out["evidence_items"][0]["id"] == "S1"
+
+
+@pytest.mark.unit
 def test_stock_tool_registers_dataset_evidence(monkeypatch):
     from tradingagents.agents.utils.core_stock_tools import get_stock_data
     from tradingagents.graph.evidence import EvidenceRegistry

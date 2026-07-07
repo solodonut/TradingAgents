@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from tradingagents.agents.schemas import ResearchPlan, render_research_plan
 from tradingagents.agents.utils.agent_utils import (
+    get_citation_instruction,
     get_instrument_context_from_state,
     get_language_instruction,
+    with_evidence_items,
 )
 from tradingagents.agents.utils.structured import (
     bind_structured,
@@ -40,7 +42,7 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
 ---
 
 **Debate History:**
-{history}""" + get_language_instruction()
+{history}""" + get_language_instruction() + get_citation_instruction()
 
         investment_plan = invoke_structured_or_freetext(
             structured_llm,
@@ -59,9 +61,9 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
             "count": investment_debate_state["count"],
         }
 
-        return {
+        return with_evidence_items({
             "investment_debate_state": new_investment_debate_state,
             "investment_plan": investment_plan,
-        }
+        })
 
     return research_manager_node

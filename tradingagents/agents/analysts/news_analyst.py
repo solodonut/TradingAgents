@@ -1,12 +1,14 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from tradingagents.agents.utils.agent_utils import (
+    get_citation_instruction,
     get_global_news,
     get_instrument_context_from_state,
     get_language_instruction,
     get_macro_indicators,
     get_news,
     get_prediction_markets,
+    with_evidence_items,
 )
 from tradingagents.dataflows.config import get_config
 
@@ -38,12 +40,14 @@ def create_news_analyst(llm):
                 f"You are a China mainland market news researcher. Analyze recent domestic news over the past week that is relevant for this {asset_label}, using only the available get_news(query, start_date, end_date) tool backed by China-market data. Focus on A-share/ETF headlines, policy, liquidity, sector rotation, fund flows, issuer/product context, and exchange or regulator news when available. Do not request or cite overseas-only sources such as Yahoo Finance, FRED, Polymarket, StockTwits, or Reddit. If a data source is unavailable, state that clearly instead of estimating."
                 + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
                 + get_language_instruction()
+                + get_citation_instruction()
             )
         else:
             system_message = (
                 f"You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(query, start_date, end_date) for {asset_label}-specific or targeted news searches, get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news, get_macro_indicators(indicator, curr_date, look_back_days) to ground macro commentary in actual data from FRED (e.g. 'cpi', 'core_pce', 'unemployment', 'fed_funds_rate', '10y_treasury', 'yield_curve'), and get_prediction_markets(topic, limit) for live market-implied probabilities of forward-looking events (e.g. 'Fed rate cut', 'recession 2026', geopolitical or sector events). Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
                 + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
                 + get_language_instruction()
+                + get_citation_instruction()
             )
 
         prompt = ChatPromptTemplate.from_messages(
@@ -76,9 +80,9 @@ def create_news_analyst(llm):
         if len(result.tool_calls) == 0:
             report = result.content
 
-        return {
+        return with_evidence_items({
             "messages": [result],
             "news_report": report,
-        }
+        })
 
     return news_analyst_node
