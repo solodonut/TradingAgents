@@ -4,6 +4,7 @@ import { Download, LoaderCircle, OctagonX } from "lucide-react";
 import { MessageBubble } from "@/components/MessageBubble";
 import { DecisionCard } from "@/components/DecisionCard";
 import { RuntimeStatusPanel } from "@/components/RuntimeStatusPanel";
+import { reportUrl } from "@/lib/api";
 import type { RunResult, RunStatusDetail } from "@/lib/types";
 import { INVEST_LABELS, RISK_LABELS, parseDebateHistory, type DebateTurn } from "@/lib/debate";
 
@@ -26,41 +27,11 @@ function fmtTime(iso: string | null): string {
   return d.toLocaleString();
 }
 
-// Assemble the full run into a single Markdown document. Each report field is
-// already a Markdown string, so we just wrap them under `##` headings.
-function buildMarkdown(run: RunResult): string {
-  const result = run.result ?? {};
-  const title = run.instrument_name ? `${run.ticker} ${run.instrument_name}` : run.ticker;
-  const lines: string[] = [
-    `# ${title} · ${run.trade_date} 分析报告`,
-    "",
-    `- 决策：${run.decision ?? "—"}`,
-    `- 状态：${run.status}`,
-    `- 开始：${fmtTime(run.created_at)}`,
-    `- 结束：${fmtTime(run.completed_at)}`,
-    "",
-  ];
-  for (const s of SECTIONS) {
-    const v = result[s.field];
-    if (typeof v === "string" && v.trim().length > 0) {
-      lines.push(`## ${s.label}`, "", v.trim(), "");
-    }
-  }
-  const final = result["final_trade_decision"];
-  if (typeof final === "string" && final.trim().length > 0) {
-    lines.push("## 最终决策", "", final.trim(), "");
-  }
-  return lines.join("\n");
-}
-
 function exportMarkdown(run: RunResult): void {
-  const blob = new Blob([buildMarkdown(run)], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
+  a.href = reportUrl(run.run_id);
   a.download = `${run.ticker}_${run.trade_date}_analysis.md`;
   a.click();
-  URL.revokeObjectURL(url);
 }
 
 export function RunDetail({

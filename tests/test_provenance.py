@@ -292,6 +292,108 @@ def test_news_tool_registers_unavailable_evidence(monkeypatch):
 
 
 @pytest.mark.unit
+def test_macro_tool_registers_dataset_evidence(monkeypatch):
+    from tradingagents.agents.utils.macro_data_tools import get_macro_indicators
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        current_evidence_items,
+        set_current_evidence_registry,
+    )
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.macro_data_tools.route_to_vendor",
+        lambda method, indicator, curr_date, look_back_days: "macro payload",
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_macro_indicators.func("cpi", "2026-07-06", 365)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_macro_indicators: cpi")
+    assert items[0]["kind"] == "macro_data"
+    assert items[0]["query"]["look_back_days"] == 365
+
+
+@pytest.mark.unit
+def test_macro_tool_registers_unavailable_evidence(monkeypatch):
+    from tradingagents.agents.utils.macro_data_tools import get_macro_indicators
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        current_evidence_items,
+        set_current_evidence_registry,
+    )
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.macro_data_tools.route_to_vendor",
+        lambda method, indicator, curr_date, look_back_days: "DATA_SOURCE_DISABLED: fred",
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_macro_indicators.func("cpi", "2026-07-06", None)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_macro_indicators unavailable")
+    assert items[0]["kind"] == "data_unavailable"
+
+
+@pytest.mark.unit
+def test_prediction_markets_tool_registers_dataset_evidence(monkeypatch):
+    from tradingagents.agents.utils.prediction_markets_tools import get_prediction_markets
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        current_evidence_items,
+        set_current_evidence_registry,
+    )
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.prediction_markets_tools.route_to_vendor",
+        lambda method, topic, limit: "prediction payload",
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_prediction_markets.func("Fed rate cut", 3)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_prediction_markets: Fed rate cut")
+    assert items[0]["kind"] == "prediction_markets"
+    assert items[0]["query"]["limit"] == 3
+
+
+@pytest.mark.unit
+def test_prediction_markets_tool_registers_unavailable_evidence(monkeypatch):
+    from tradingagents.agents.utils.prediction_markets_tools import get_prediction_markets
+    from tradingagents.graph.evidence import EvidenceRegistry
+    from tradingagents.graph.provenance import (
+        clear_current_evidence_registry,
+        current_evidence_items,
+        set_current_evidence_registry,
+    )
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.prediction_markets_tools.route_to_vendor",
+        lambda method, topic, limit: "NO_DATA_AVAILABLE: polymarket disabled",
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_prediction_markets.func("Fed rate cut", None)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_prediction_markets unavailable")
+    assert items[0]["kind"] == "data_unavailable"
+
+
+@pytest.mark.unit
 def test_indicators_tool_registers_multiple_dataset_evidence(monkeypatch):
     from tradingagents.agents.utils.technical_indicators_tools import get_indicators
 

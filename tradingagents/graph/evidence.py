@@ -7,6 +7,7 @@ import re
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from typing import Any
+from urllib.parse import quote, urlsplit
 
 _CITATION_RE = re.compile(r"\[S(\d+)\]")
 
@@ -33,6 +34,17 @@ def _display(value: Any) -> str:
 def _safe_cell(value: Any) -> str:
     text = _display(value) or "-"
     return html.escape(text).replace("|", "\\|")
+
+
+def _safe_link(value: Any) -> str:
+    url = _display(value)
+    if not url:
+        return "-"
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return "-"
+    escaped_url = quote(url, safe=":/?#[]@!$&'*,;=%")
+    return f"[打开]({escaped_url})"
 
 
 def _canonicalize(value: Any) -> Any:
@@ -158,8 +170,7 @@ def render_source_table(
         item = by_id.get(citation_id)
         if not item:
             continue
-        url = _display(item.get("url"))
-        link = f"[打开]({url})" if url else "-"
+        link = _safe_link(item.get("url"))
         rows.append(
             "| "
             + " | ".join(

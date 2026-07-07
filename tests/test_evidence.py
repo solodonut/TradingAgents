@@ -241,3 +241,31 @@ def test_render_source_table_uses_only_known_ids_and_links_urls():
     assert "| [S2] | AKShare | get_stock_data: 600519 | 2026-06-29..2026-07-06 | - |" in table
     assert "| [S1] | 财联社 | 半导体板块获政策支持 | 2026-07-01 | [打开](https://example.com/news/1) |" in table
     assert "S404" not in table
+
+
+@pytest.mark.unit
+def test_render_source_table_sanitizes_link_urls():
+    registry = EvidenceRegistry(
+        [
+            {
+                "id": "S1",
+                "kind": "news",
+                "source_name": "财联社",
+                "title": "unsafe scheme",
+                "url": "javascript:alert(1)",
+            },
+            {
+                "id": "S2",
+                "kind": "news",
+                "source_name": "财联社",
+                "title": "markdown delimiters",
+                "url": "https://example.com/a)b|c?q=x y",
+            },
+        ]
+    )
+
+    table = render_source_table(registry.to_list(), ["S1", "S2"], heading="引用来源")
+
+    assert "javascript:" not in table
+    assert "| [S1] | 财联社 | unsafe scheme | - | - |" in table
+    assert "[打开](https://example.com/a%29b%7Cc?q=x%20y)" in table
