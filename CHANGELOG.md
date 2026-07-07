@@ -33,6 +33,9 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- TradingAgents 报告新增 run-level evidence 追踪与 `[S#]` 来源引用：数据工具注册来源元数据，
+  agent 报告按来源编号引用，WebUI 导出的 Markdown 自动追加分节与全局来源表，报告校验会提示
+  无效或缺失的引用编号。
 - 详细分析日志：每次分析写一份 JSONL（`~/.tradingagents/run_logs/<TICKER>_<时间戳>_<run8>.jsonl`），
   记录 run/node/llm/tool/vendor/debate/report/memory/checkpoint/error 事件；Web UI 实时查看
   （SSE `log` 事件）+ `GET /api/analysis/{run_id}/logs` 回读。可用 `TRADINGAGENTS_LOG_ENABLED`

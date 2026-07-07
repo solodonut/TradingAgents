@@ -24,7 +24,6 @@ from tradingagents.agents.utils.news_data_tools import (
 )
 from tradingagents.agents.utils.prediction_markets_tools import get_prediction_markets
 from tradingagents.agents.utils.technical_indicators_tools import get_indicators
-from tradingagents.graph.provenance import current_evidence_items
 
 # Public surface: the data tools are imported here so agents and the graph
 # import them from one place, plus the instrument/language helpers defined below.
@@ -82,6 +81,8 @@ def get_citation_instruction() -> str:
 
 
 def with_evidence_items(update: dict) -> dict:
+    from tradingagents.graph.provenance import current_evidence_items
+
     out = dict(update)
     items = current_evidence_items()
     if items:
@@ -268,4 +269,3 @@ def create_msg_delete():
         return {"messages": removal_operations + [placeholder]}
 
     return delete_messages
-

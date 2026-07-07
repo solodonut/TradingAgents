@@ -35,7 +35,10 @@ def test_news_toolnode_degrades_vendor_error_instead_of_crashing():
 
     nodes = TradingAgentsGraph._create_tool_nodes(None)
     for name in ("market", "social", "news", "fundamentals"):
-        assert nodes[name]._handle_tool_errors is _handle_vendor_tool_error, (
+        handler = getattr(nodes[name], "handle_tool_errors", None)
+        if handler is None:
+            handler = getattr(nodes[name], "_handle_tool_errors", None)
+        assert handler is _handle_vendor_tool_error, (
             f"{name} ToolNode must handle VendorError, else a missing data "
             f"source crashes the whole graph."
         )

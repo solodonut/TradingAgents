@@ -176,7 +176,7 @@ class VendorRoutingTests(unittest.TestCase):
             config["tool_vendors"]["get_etf_profile"],
             "akshare,tushare,tdx,longbridge",
         )
-        self.assertEqual(config["tool_vendors"]["get_news"], "longbridge,akshare")
+        self.assertEqual(config["tool_vendors"]["get_news"], "akshare,longbridge")
 
     def test_production_get_etf_profile_falls_back_from_akshare_to_tushare(self):
         calls = []
@@ -199,7 +199,7 @@ class VendorRoutingTests(unittest.TestCase):
         self.assertEqual(result, "TUSHARE_ETF_PROFILE")
         self.assertEqual(calls, ["akshare", "tushare"])
 
-    def test_production_get_news_uses_longbridge_before_akshare(self):
+    def test_production_get_news_uses_akshare_before_longbridge(self):
         calls = []
 
         def longbridge(symbol, *a, **k):
@@ -217,8 +217,8 @@ class VendorRoutingTests(unittest.TestCase):
         ):
             result = interface.route_to_vendor("get_news", "159241", "2026-06-26", "2026-07-03")
 
-        self.assertEqual(result, "LONG_BRIDGE_NEWS")
-        self.assertEqual(calls, ["longbridge"])
+        self.assertEqual(result, "AK_NEWS")
+        self.assertEqual(calls, ["akshare"])
 
     def test_akshare_news_error_string_allows_fallback(self):
         set_config({"tool_vendors": {"get_news": "akshare,longbridge"}})

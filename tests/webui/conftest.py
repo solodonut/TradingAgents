@@ -2,6 +2,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from sse_starlette.sse import AppStatus
 
 
 @pytest.fixture()
@@ -17,8 +18,12 @@ def client(tmp_path, monkeypatch):
     main.app.state.starting_telemetry = None
     main.app.state.scheduler = None  # re-created by startup against fresh state
     main.app.state.chat_llm_factory = None
+    AppStatus.should_exit = False
+    AppStatus.should_exit_event = None
     with TestClient(main.app) as c:
         yield c
+        AppStatus.should_exit = False
+        AppStatus.should_exit_event = None
         # Drain in-flight scheduler threads before the next test resets app.state.
         # Queue tests launch real daemon runner threads via a gated fake graph; once
         # the test releases its gate the run completes and its finally-block calls

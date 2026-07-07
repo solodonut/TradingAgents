@@ -108,7 +108,14 @@ def test_download_history_reports_zip(client):
 
 def test_download_history_reports_zip_filters_selected_run_ids(client):
     store = client.app.state.store or _force_store(client)
-    store.insert_run("r1", "159915", "2026-06-26", "stock", {"x": 1})
+    store.insert_run(
+        "r1",
+        "159915",
+        "2026-06-26",
+        "stock",
+        {"x": 1},
+        instrument_name="创业板ETF易方达",
+    )
     store.complete_run("r1", decision="Hold", result={"final_trade_decision": "one"})
     store.insert_run("r2", "510330", "2026-06-26", "stock", {"x": 1}, instrument_name="华夏沪深300ETF")
     store.complete_run("r2", decision="Buy", result={"final_trade_decision": "two"})
