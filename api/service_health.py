@@ -50,10 +50,12 @@ def _enabled_data_vendors(config: dict) -> set[str]:
     return enabled
 
 
-def _http_probe(url: str, *, params: dict | None = None) -> tuple[bool, str, int]:
+def _http_probe(
+    url: str, *, params: dict | None = None, headers: dict | None = None
+) -> tuple[bool, str, int]:
     start = time.monotonic()
     try:
-        response = requests.get(url, params=params, timeout=_REQUEST_TIMEOUT)
+        response = requests.get(url, params=params, headers=headers, timeout=_REQUEST_TIMEOUT)
         elapsed = int((time.monotonic() - start) * 1000)
         if 200 <= response.status_code < 400:
             return True, "Reachable", elapsed
@@ -108,9 +110,24 @@ def _probe_llm_services(config: dict) -> Iterator[dict]:
 
 _DATA_SERVICES = {
     "akshare": {
-        "name": "AKShare / Eastmoney",
+        "name": "AKShare",
         "url": "https://push2.eastmoney.com/api/qt/stock/get",
         "params": {"secid": "1.000001", "fields": "f43"},
+        "env": None,
+    },
+    "eastmoney": {
+        # East Money direct-search news fallback (search-api-web), probed
+        # separately from AKShare: this endpoint needs a browser UA + Referer,
+        # and it can be up while the AKShare library layer is broken (or vice
+        # versa). See eastmoney_news.get_news.
+        "name": "Eastmoney 直连",
+        "url": "https://search-api-web.eastmoney.com/search/jsonp",
+        "params": {
+            "cb": "x",
+            "param": '{"uid":"","keyword":"510300","type":["cmsArticleWebOld"],'
+            '"pageIndex":1,"pageSize":1}',
+        },
+        "headers": {"User-Agent": "Mozilla/5.0", "Referer": "https://so.eastmoney.com/"},
         "env": None,
     },
     "yfinance": {
@@ -184,7 +201,9 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
             else:
                 params["apikey"] = api_key
 
-        ok, message, latency_ms = _http_probe(str(spec["url"]), params=params)
+        ok, message, latency_ms = _http_probe(
+            str(spec["url"]), params=params, headers=spec.get("headers")
+        )
         yield _event(
             service_id=f"data:{service_id}",
             name=name,

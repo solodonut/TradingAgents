@@ -20,6 +20,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Changed
 
+- **服务器可达检查把 AKShare 与东财直连拆成两项。** 原「AKShare / Eastmoney」合并成一行、
+  只探测东财行情后端 `push2.eastmoney.com`,无法区分 AKShare 库层故障与东财源宕机。现拆为
+  独立两项:`data:akshare`(名「AKShare」,仍探 `push2`)与 `data:eastmoney`(名「Eastmoney 直连」,
+  探新闻直连接口 `search-api-web.eastmoney.com`,需带浏览器 UA + Referer 才返回 200,故
+  `_http_probe` 新增可选 `headers` 参数)。
 - **ETF 画像与新闻源改为理想降级链。** `get_etf_profile` 默认按
   `akshare,tushare,tdx,longbridge` 尝试:AKShare 先取最完整的 IOPV/折溢价/份额/持仓名称,
   失败后由 Tushare Pro 提供基金基础信息、T+1 日线/NAV/复权因子和季度持仓,TDX/Longbridge

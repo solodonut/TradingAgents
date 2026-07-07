@@ -175,7 +175,9 @@ def test_single_service_health_returns_404_for_unknown_service(client, monkeypat
 def test_data_probe_marks_unconfigured_services_disabled(monkeypatch):
     import api.service_health as service_health
 
-    monkeypatch.setattr(service_health, "_http_probe", lambda url, params=None: (True, "ok", 1))
+    monkeypatch.setattr(
+        service_health, "_http_probe", lambda url, params=None, headers=None: (True, "ok", 1)
+    )
 
     statuses = list(
         service_health._probe_data_services({"data_vendors": {"core_stock_apis": "akshare"}})
@@ -185,6 +187,27 @@ def test_data_probe_marks_unconfigured_services_disabled(monkeypatch):
     assert by_id["data:yfinance"]["status"] == "disabled"
     assert by_id["data:fred"]["status"] == "disabled"
     assert by_id["data:polymarket"]["status"] == "disabled"
+
+
+def test_data_probe_splits_akshare_and_eastmoney(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (True, "Reachable", 9),
+    )
+
+    statuses = list(
+        _probe_data_services({"tool_vendors": {"get_news": "akshare,eastmoney,longbridge"}})
+    )
+
+    by_id = {item["id"]: item for item in statuses}
+    # AKShare (library backend) and Eastmoney (direct search) are probed as two
+    # separate rows so a library-level break is distinguishable from a source outage.
+    assert by_id["data:akshare"]["name"] == "AKShare"
+    assert by_id["data:akshare"]["status"] == "ok"
+    assert by_id["data:eastmoney"]["name"] == "Eastmoney 直连"
+    assert by_id["data:eastmoney"]["status"] == "ok"
 
 
 def test_data_probe_reports_missing_required_api_key(monkeypatch):
@@ -221,7 +244,7 @@ def test_data_probe_reports_tushare_reachable(monkeypatch):
     monkeypatch.setenv("TUSHARE_TOKEN", "token")
     monkeypatch.setattr(
         "api.service_health._http_probe",
-        lambda url, params=None: (True, "Reachable", 12),
+        lambda url, params=None, headers=None: (True, "Reachable", 12),
     )
 
     statuses = list(
