@@ -182,10 +182,10 @@ def test_report_download_without_evidence_keeps_old_behavior(client):
 
     store = main.get_store()
     store.insert_run("r-old", "NVDA", "2024-05-10", "stock", {})
-    store.complete_run("r-old", decision="Buy", result={"market_report": "Up"})
+    store.complete_run("r-old", decision="Buy", result={"market_report": "Up [S1]"})
 
     resp = client.get("/api/analysis/r-old/report")
 
     assert resp.status_code == 200
-    assert "Up" in resp.text
+    assert "Up [S1]" in resp.text
     assert "引用来源" not in resp.text

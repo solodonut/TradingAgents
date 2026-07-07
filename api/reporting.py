@@ -41,7 +41,7 @@ def build_markdown_report(run) -> str:
                 parts.append(f"\n{table}\n")
     global_table = render_source_table(evidence_items, all_cited, heading="全部数据来源")
     if global_table:
-        parts.append("\n" + global_table.replace("### 全部数据来源", "## 全部数据来源") + "\n")
+        parts.append("\n" + _promote_first_heading(global_table) + "\n")
     return "\n".join(parts)
 
 
@@ -53,3 +53,7 @@ def report_filename(run) -> str:
 def _safe_filename_part(value: str) -> str:
     cleaned = re.sub(r"[\\/:*?\"<>|\s]+", "_", value.strip())
     return cleaned.strip("._") or "report"
+
+
+def _promote_first_heading(markdown: str) -> str:
+    return markdown.replace("### ", "## ", 1)
