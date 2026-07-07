@@ -70,13 +70,15 @@ def _fetch_flash(src: str, start_date: str, end_date: str) -> pd.DataFrame:
     return cached_call(key, _NEWS_TTL_SECONDS, _fetch)
 
 
-def _render_anns(df: pd.DataFrame) -> list[tuple[datetime, str]]:
+def _render_anns(df: pd.DataFrame, end_dt: datetime | None = None) -> list[tuple[datetime, str]]:
     rows = []
     if df is None or df.empty:
         return rows
     for _, row in df.iterrows():
         pub = pd.to_datetime(row.get("ann_date"), errors="coerce")
         if pd.isna(pub):
+            continue
+        if end_dt is not None and pub.to_pydatetime() >= end_dt:
             continue
         title = row.get("title", "无标题")
         url = row.get("url", "")
@@ -85,6 +87,7 @@ def _render_anns(df: pd.DataFrame) -> list[tuple[datetime, str]]:
             block += f"Link: {url.strip()}\n"
         block += "\n"
         rows.append((pub.to_pydatetime(), block))
+    rows.sort(key=lambda r: r[0], reverse=True)
     return rows
 
 
@@ -127,10 +130,11 @@ def get_news(
     end_dt = datetime.strptime(end_date, "%Y-%m-%d") + relativedelta(days=1)
 
     anns_err = flash_err = None
-    anns_rows = flash_rows = []
+    anns_rows: list = []
+    flash_rows: list = []
 
     try:
-        anns_rows = _render_anns(_fetch_anns(ts_code, start_date, end_date))
+        anns_rows = _render_anns(_fetch_anns(ts_code, start_date, end_date), end_dt=end_dt)
     except Exception as e:  # 单路失败降级,不整体报错
         anns_err = e
 
@@ -247,16 +251,17 @@ def get_global_news(
     if not rows and errors and not had_success:
         return f"Error fetching global news for {curr_date}: all Tushare news sources failed"
 
-    # 按时间倒序,标题去重(块内首行 '### <title> (source: ...)')。
+    # 按时间倒序,标题去重(块内首行 '### <title> (source: ...)',剥 source 后缀做 key)。
     rows.sort(key=lambda r: r[0], reverse=True)
     seen: set[str] = set()
     body = ""
     kept = 0
     for _, block in rows:
-        title_line = block.split("\n", 1)[0]
-        if title_line in seen:
+        raw = block.split("\n", 1)[0]
+        title_key = raw.split(" (source:")[0]
+        if title_key in seen:
             continue
-        seen.add(title_line)
+        seen.add(title_key)
         body += block
         kept += 1
         if kept >= limit:

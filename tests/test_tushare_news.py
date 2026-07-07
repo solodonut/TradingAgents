@@ -272,6 +272,46 @@ def test_route_get_news_hits_tushare(monkeypatch):
 
 
 @pytest.mark.unit
+def test_render_anns_lookahead_filter(monkeypatch):
+    """公告 ann_date >= end_dt 的条目必须被客户端二次校验过滤掉(前视安全对称)。"""
+    anns = pd.DataFrame(
+        [
+            {"ann_date": "20260625", "title": "窗口内公告", "url": ""},
+            {"ann_date": "20260702", "title": "超出窗口公告", "url": ""},
+        ]
+    )
+    # 快讯路返回空,隔离公告过滤逻辑
+    monkeypatch.setattr(tushare_news, "get_tushare_client", lambda: _fake_client(anns, pd.DataFrame()))
+    monkeypatch.setattr(tushare_news, "resolve_ticker_name", lambda code: None)  # 无关键词→跳过快讯
+
+    out = tushare_news.get_news("600519.SH", "2026-06-01", "2026-06-30")
+
+    assert "窗口内公告" in out           # 窗口内公告保留
+    assert "超出窗口公告" not in out     # end_date 之后的公告被丢弃
+
+
+@pytest.mark.unit
+def test_global_news_dedupes_cross_source(monkeypatch):
+    """同一标题分别来自 sina 和 wallstreetcn 两个源,输出里只出现一次。"""
+    flash = {
+        "sina": pd.DataFrame(
+            [{"datetime": "2026-07-05 09:00:00", "title": "跨源重复标题", "content": "内容A"}]
+        ),
+        "wallstreetcn": pd.DataFrame(
+            [{"datetime": "2026-07-05 10:00:00", "title": "跨源重复标题", "content": "内容B"}]
+        ),
+    }
+    monkeypatch.setattr(
+        tushare_news, "get_tushare_client",
+        lambda: _fake_global_client(flash, pd.DataFrame(), pd.DataFrame()),
+    )
+
+    out = tushare_news.get_global_news("2026-07-07", look_back_days=7, limit=10)
+
+    assert out.count("跨源重复标题") == 1   # 同标题跨源去重后只出现一次
+
+
+@pytest.mark.unit
 def test_route_get_global_news_hits_tushare(monkeypatch):
     set_config({"tool_vendors": {"get_global_news": "tushare,yfinance"}})
 
