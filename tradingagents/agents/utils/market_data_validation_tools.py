@@ -72,7 +72,7 @@ def get_verified_market_snapshot(
             f"OHLCV, price-level, or indicator values — rely on other tool outputs and "
             f"state that verified-snapshot data is unavailable."
         )
-    query = {"ticker": symbol, "curr_date": curr_date}
+    query = {"ticker": symbol, "curr_date": curr_date, "look_back_days": look_back_days}
     if result.startswith(
         (
             "NO_DATA_AVAILABLE:",

@@ -251,3 +251,109 @@ def test_news_tool_registers_unavailable_evidence(monkeypatch):
 
     assert result.startswith("## [S1] get_news unavailable")
     assert items[0]["kind"] == "data_unavailable"
+
+
+@pytest.mark.unit
+def test_indicators_tool_registers_multiple_dataset_evidence(monkeypatch):
+    from tradingagents.agents.utils.technical_indicators_tools import get_indicators
+
+    responses = {
+        "rsi": "RSI payload",
+        "macd": "MACD payload",
+    }
+
+    def _fake_route(method, symbol, indicator, curr_date, look_back_days):
+        return responses[indicator]
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.technical_indicators_tools.route_to_vendor",
+        _fake_route,
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_indicators.func("600519", "rsi,macd", "2026-07-06", 30)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert len(items) == 2
+    assert items[0]["id"] == "S1"
+    assert items[1]["id"] == "S2"
+    assert items[0]["tool_name"] == "get_indicators"
+    assert items[1]["tool_name"] == "get_indicators"
+    assert "## [S1] get_indicators: 600519 rsi" in result
+    assert "## [S2] get_indicators: 600519 macd" in result
+
+
+@pytest.mark.unit
+def test_indicators_tool_preserves_invalid_indicator_behavior(monkeypatch):
+    from tradingagents.agents.utils.technical_indicators_tools import get_indicators
+
+    def _fake_route(method, symbol, indicator, curr_date, look_back_days):
+        if indicator == "macd":
+            raise ValueError("bad indicator")
+        return "RSI payload"
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.technical_indicators_tools.route_to_vendor",
+        _fake_route,
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_indicators.func("600519", "rsi,macd", "2026-07-06", 30)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert len(items) == 1
+    assert items[0]["tool_name"] == "get_indicators"
+    assert items[0]["query"]["indicator"] == "rsi"
+    assert "## [S1] get_indicators: 600519 rsi" in result
+    assert "bad indicator" in result
+
+
+@pytest.mark.unit
+def test_verified_snapshot_registers_dataset_evidence(monkeypatch):
+    from tradingagents.agents.utils.market_data_validation_tools import (
+        get_verified_market_snapshot,
+    )
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.market_data_validation_tools.build_verified_market_snapshot",
+        lambda symbol, curr_date, look_back_days: "SNAPSHOT",
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_verified_market_snapshot.func("600519", "2026-07-06", 15)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_verified_market_snapshot: 600519")
+    assert items[0]["tool_name"] == "get_verified_market_snapshot"
+    assert items[0]["query"]["look_back_days"] == 15
+
+
+@pytest.mark.unit
+def test_verified_snapshot_registers_unavailable_evidence(monkeypatch):
+    from tradingagents.agents.utils.market_data_validation_tools import (
+        get_verified_market_snapshot,
+    )
+
+    def _boom(symbol, curr_date, look_back_days):
+        raise RuntimeError("snapshot failed")
+
+    monkeypatch.setattr(
+        "tradingagents.agents.utils.market_data_validation_tools.build_verified_market_snapshot",
+        _boom,
+    )
+    set_current_evidence_registry(EvidenceRegistry())
+    try:
+        result = get_verified_market_snapshot.func("600519", "2026-07-06", 15)
+        items = current_evidence_items()
+    finally:
+        clear_current_evidence_registry()
+
+    assert result.startswith("## [S1] get_verified_market_snapshot unavailable")
+    assert items[0]["kind"] == "data_unavailable"
+    assert items[0]["query"]["look_back_days"] == 15
