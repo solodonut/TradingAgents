@@ -210,6 +210,7 @@ def get_global_news(
 
     rows: list[tuple[datetime, str]] = []
     errors = 0
+    had_success = False
 
     for src in _flash_sources():
         try:
@@ -217,6 +218,7 @@ def get_global_news(
                 _fetch_flash(src, start_date, curr_date), [], start_dt, window_end,
                 src_label=f"快讯/{src}",
             )
+            had_success = True
         except Exception:
             errors += 1
 
@@ -225,6 +227,7 @@ def get_global_news(
         if major is not None and not major.empty:
             major = major.rename(columns={"pub_time": "datetime"})
             rows += _render_flash(major, [], start_dt, window_end, src_label="长篇")
+        had_success = True
     except Exception:
         errors += 1
 
@@ -236,11 +239,12 @@ def get_global_news(
                 cctv = cctv.copy()
                 cctv["datetime"] = pd.to_datetime(cctv.get("date"), format="%Y%m%d", errors="coerce")
                 rows += _render_flash(cctv, [], start_dt, window_end, src_label="新闻联播")
+            had_success = True
         except Exception:
             errors += 1
         day += timedelta(days=1)
 
-    if not rows and errors:
+    if not rows and errors and not had_success:
         return f"Error fetching global news for {curr_date}: all Tushare news sources failed"
 
     # 按时间倒序,标题去重(块内首行 '### <title> (source: ...)')。

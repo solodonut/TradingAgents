@@ -233,3 +233,21 @@ def test_global_news_all_fail_returns_message(monkeypatch):
     out = tushare_news.get_global_news("2026-07-07", look_back_days=7, limit=10)
 
     assert out.startswith("Error fetching global news")
+
+
+@pytest.mark.unit
+def test_global_news_partial_failure_returns_no_news_not_error(monkeypatch):
+    """部分源失败(major 抛异常),成功的源窗口内无内容 → 'No global news found',不是 Error。"""
+    client = mock.Mock()
+    # flash 源成功但返回空 DataFrame(窗口内无新闻)
+    client.news = mock.Mock(return_value=pd.DataFrame())
+    # major_news 抛异常
+    client.major_news = mock.Mock(side_effect=Exception("major down"))
+    # cctv 成功但返回空
+    client.cctv_news = mock.Mock(return_value=pd.DataFrame())
+    monkeypatch.setattr(tushare_news, "get_tushare_client", lambda: client)
+
+    out = tushare_news.get_global_news("2026-07-07", look_back_days=2, limit=10)
+
+    assert out.startswith("No global news found between")
+    assert not out.startswith("Error fetching global news")
