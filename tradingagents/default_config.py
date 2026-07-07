@@ -136,6 +136,9 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "地缘政治 中美 贸易 关税 制裁",
         "原油 大宗商品 新能源 供应链",
     ],
+    # Tushare 快讯 news() 的数据源列表(单次调用只能传一个 src,逐源合并)。
+    # 可选:sina / wallstreetcn / 10jqka / eastmoney / yuncaijing 等。
+    "tushare_news_flash_sources": ["sina", "wallstreetcn"],
     # Data vendor configuration
     # Category-level configuration (default for all tools in category).
     # The configured value is the exact vendor chain — requests are NOT silently
@@ -159,7 +162,8 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "akshare_auto_route": True,
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
-        "get_news": "akshare,eastmoney,longbridge",
+        "get_news": "tushare,akshare,eastmoney",
+        "get_global_news": "tushare,yfinance",
         "get_etf_profile": "akshare,tushare,tdx,longbridge",
     },
     # Benchmark for alpha calculation in the reflection layer.

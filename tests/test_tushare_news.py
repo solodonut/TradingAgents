@@ -5,7 +5,8 @@ from unittest import mock
 import pandas as pd
 import pytest
 
-from tradingagents.dataflows import tushare_news
+from tradingagents.dataflows import interface, tushare_news
+from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.errors import NoMarketDataError
 
 
@@ -251,3 +252,34 @@ def test_global_news_partial_failure_returns_no_news_not_error(monkeypatch):
 
     assert out.startswith("No global news found between")
     assert not out.startswith("Error fetching global news")
+
+
+@pytest.mark.unit
+def test_route_get_news_hits_tushare(monkeypatch):
+    set_config({"tool_vendors": {"get_news": "tushare,akshare,eastmoney"}})
+    called = {}
+
+    def _fake(ticker, start, end):
+        called["hit"] = ticker
+        return "## 600519.SS News, from 2026-06-01 to 2026-06-30:\n\nok"
+
+    monkeypatch.setitem(interface.VENDOR_METHODS["get_news"], "tushare", _fake)
+
+    out = interface.route_to_vendor("get_news", "600519.SH", "2026-06-01", "2026-06-30")
+
+    assert called["hit"] == "600519.SH"
+    assert out.startswith("## 600519.SS News")
+
+
+@pytest.mark.unit
+def test_route_get_global_news_hits_tushare(monkeypatch):
+    set_config({"tool_vendors": {"get_global_news": "tushare,yfinance"}})
+
+    monkeypatch.setitem(
+        interface.VENDOR_METHODS["get_global_news"], "tushare",
+        lambda curr_date, **kw: "## Global Market News, from 2026-06-30 to 2026-07-07:\n\nok",
+    )
+
+    out = interface.route_to_vendor("get_global_news", "2026-07-07")
+
+    assert out.startswith("## Global Market News")

@@ -38,6 +38,8 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- Tushare 全面接管新闻资讯:新增 `tushare_news`,个股走公司公告(`anns_d`)+ 关键词过滤快讯(`news`),
+  全局走快讯 + 长篇(`major_news`)+ 新闻联播(`cctv_news`);默认 `get_news`/`get_global_news` 以 Tushare 为主源。
 - **东财直连新闻源作为 AKShare 的同源兜底。** 新增 `dataflows/eastmoney_news.py`,直接请求
   `search-api-web.eastmoney.com`(即 `akshare.stock_news_em` 底层的东财搜索接口),契约与
   `akshare_news.get_news` 完全一致(参数/输出格式/前视窗口过滤/`NoMarketDataError`/`Error fetching news`

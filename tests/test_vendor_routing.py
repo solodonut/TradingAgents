@@ -176,7 +176,7 @@ class VendorRoutingTests(unittest.TestCase):
             config["tool_vendors"]["get_etf_profile"],
             "akshare,tushare,tdx,longbridge",
         )
-        self.assertEqual(config["tool_vendors"]["get_news"], "akshare,eastmoney,longbridge")
+        self.assertEqual(config["tool_vendors"]["get_news"], "tushare,akshare,eastmoney")
 
     def test_production_get_etf_profile_falls_back_from_akshare_to_tushare(self):
         calls = []

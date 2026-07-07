@@ -49,6 +49,7 @@ from .tushare_fundamentals import (
     get_income_statement as get_tushare_income_statement,
 )
 from .tushare_indicator import get_indicators as get_tushare_indicators
+from .tushare_news import get_global_news as get_tushare_global_news, get_news as get_tushare_news
 from .tushare_stock import get_stock_data as get_tushare_stock
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
@@ -195,10 +196,12 @@ VENDOR_METHODS = {
         "longbridge": get_longbridge_news,
         "akshare": get_akshare_news,
         "eastmoney": get_eastmoney_news,
+        "tushare": get_tushare_news,
     },
     "get_global_news": {
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
+        "tushare": get_tushare_global_news,
     },
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
