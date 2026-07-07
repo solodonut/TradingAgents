@@ -7,7 +7,7 @@ Tushare 的快讯流(``news`` / ``major_news``)是通用 feed,不支持按个股
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 
 import pandas as pd
@@ -157,3 +157,108 @@ def get_news(
 
     body = "".join(block for _, block in ordered)
     return f"## {label} News, from {start_date} to {end_date}:\n\n{body}"
+
+
+def _fetch_major(start_date: str, end_date: str) -> pd.DataFrame:
+    key = f"major_news/{_compact(start_date)}/{_compact(end_date)}"
+
+    def _fetch():
+        client = get_tushare_client()
+        return call_tushare(
+            lambda: client.major_news(
+                start_date=_flash_dt(start_date),
+                end_date=_flash_dt(end_date, end=True),
+            )
+        )
+
+    return cached_call(key, _NEWS_TTL_SECONDS, _fetch)
+
+
+def _fetch_cctv(date_compact: str) -> pd.DataFrame:
+    key = f"cctv_news/{date_compact}"
+
+    def _fetch():
+        client = get_tushare_client()
+        return call_tushare(lambda: client.cctv_news(date=date_compact))
+
+    return cached_call(key, _NEWS_TTL_SECONDS, _fetch)
+
+
+def _flash_sources() -> list[str]:
+    raw = get_config().get("tushare_news_flash_sources") or ["sina", "wallstreetcn"]
+    if isinstance(raw, str):
+        raw = [s.strip() for s in raw.split(",") if s.strip()]
+    return list(raw)
+
+
+def get_global_news(
+    curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+    look_back_days: int | None = None,
+    limit: int | None = None,
+) -> str:
+    """全局新闻:news(多 src)+ major_news + cctv_news,合并去重按时间倒序。"""
+    config = get_config()
+    if look_back_days is None:
+        look_back_days = config["global_news_lookback_days"]
+    if limit is None:
+        limit = config["global_news_article_limit"]
+
+    curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+    start_dt = curr_dt - relativedelta(days=look_back_days)
+    start_date = start_dt.strftime("%Y-%m-%d")
+    window_end = curr_dt + relativedelta(days=1)
+
+    rows: list[tuple[datetime, str]] = []
+    errors = 0
+
+    for src in _flash_sources():
+        try:
+            rows += _render_flash(
+                _fetch_flash(src, start_date, curr_date), [], start_dt, window_end,
+                src_label=f"快讯/{src}",
+            )
+        except Exception:
+            errors += 1
+
+    try:
+        major = _fetch_major(start_date, curr_date)
+        if major is not None and not major.empty:
+            major = major.rename(columns={"pub_time": "datetime"})
+            rows += _render_flash(major, [], start_dt, window_end, src_label="长篇")
+    except Exception:
+        errors += 1
+
+    day = start_dt
+    while day <= curr_dt:
+        try:
+            cctv = _fetch_cctv(day.strftime("%Y%m%d"))
+            if cctv is not None and not cctv.empty:
+                cctv = cctv.copy()
+                cctv["datetime"] = pd.to_datetime(cctv.get("date"), format="%Y%m%d", errors="coerce")
+                rows += _render_flash(cctv, [], start_dt, window_end, src_label="新闻联播")
+        except Exception:
+            errors += 1
+        day += timedelta(days=1)
+
+    if not rows and errors:
+        return f"Error fetching global news for {curr_date}: all Tushare news sources failed"
+
+    # 按时间倒序,标题去重(块内首行 '### <title> (source: ...)')。
+    rows.sort(key=lambda r: r[0], reverse=True)
+    seen: set[str] = set()
+    body = ""
+    kept = 0
+    for _, block in rows:
+        title_line = block.split("\n", 1)[0]
+        if title_line in seen:
+            continue
+        seen.add(title_line)
+        body += block
+        kept += 1
+        if kept >= limit:
+            break
+
+    if kept == 0:
+        return f"No global news found between {start_date} and {curr_date}"
+
+    return f"## Global Market News, from {start_date} to {curr_date}:\n\n{body}"

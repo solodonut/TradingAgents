@@ -144,3 +144,92 @@ def test_get_news_midnight_boundary_excluded(monkeypatch):
 
     assert "窗口最后一秒" in out       # end_date 当天最后一秒应保留
     assert "次日午夜跨日" not in out   # end_date+1 00:00:00 应被排除
+
+
+def _fake_global_client(flash_by_src=None, major=None, cctv=None):
+    client = mock.Mock()
+    flash_by_src = flash_by_src or {}
+    client.news = mock.Mock(side_effect=lambda src, **kw: flash_by_src.get(src, pd.DataFrame()))
+    client.major_news = mock.Mock(return_value=major if major is not None else pd.DataFrame())
+    client.cctv_news = mock.Mock(return_value=cctv if cctv is not None else pd.DataFrame())
+    return client
+
+
+@pytest.mark.unit
+def test_global_news_merges_three_sources(monkeypatch):
+    flash = {
+        "sina": pd.DataFrame([{"datetime": "2026-07-05 09:00:00", "title": "快讯A", "content": "c1"}]),
+        "wallstreetcn": pd.DataFrame([{"datetime": "2026-07-05 10:00:00", "title": "快讯B", "content": "c2"}]),
+    }
+    major = pd.DataFrame([{"pub_time": "2026-07-04 08:00:00", "title": "长篇C", "content": "c3"}])
+    cctv = pd.DataFrame([{"date": "20260706", "title": "联播D", "content": "c4"}])
+
+    monkeypatch.setattr(
+        tushare_news, "get_tushare_client",
+        lambda: _fake_global_client(flash, major, cctv),
+    )
+
+    out = tushare_news.get_global_news("2026-07-07", look_back_days=7, limit=10)
+
+    assert out.startswith("## Global Market News, from 2026-06-30 to 2026-07-07:")
+    for token in ("快讯A", "快讯B", "长篇C", "联播D"):
+        assert token in out
+    assert "(source: 长篇)" in out
+    assert "(source: 新闻联播)" in out
+
+
+@pytest.mark.unit
+def test_global_news_dedupes_and_limits(monkeypatch):
+    flash = {
+        "sina": pd.DataFrame(
+            [
+                {"datetime": "2026-07-05 09:00:00", "title": "重复标题", "content": "x"},
+                {"datetime": "2026-07-05 08:00:00", "title": "重复标题", "content": "y"},
+                {"datetime": "2026-07-05 07:00:00", "title": "唯一", "content": "z"},
+            ]
+        ),
+    }
+    monkeypatch.setattr(
+        tushare_news, "get_tushare_client",
+        lambda: _fake_global_client(flash, pd.DataFrame(), pd.DataFrame()),
+    )
+
+    out = tushare_news.get_global_news("2026-07-07", look_back_days=7, limit=10)
+
+    assert out.count("重复标题") == 1     # 同标题去重
+    assert "唯一" in out
+
+
+@pytest.mark.unit
+def test_global_news_cctv_iterates_days(monkeypatch):
+    calls = []
+
+    def _news(src, **kw):
+        return pd.DataFrame()
+
+    def _cctv(date):
+        calls.append(date)
+        return pd.DataFrame([{"date": date, "title": f"联播{date}", "content": "c"}])
+
+    client = mock.Mock()
+    client.news = mock.Mock(side_effect=_news)
+    client.major_news = mock.Mock(return_value=pd.DataFrame())
+    client.cctv_news = mock.Mock(side_effect=_cctv)
+    monkeypatch.setattr(tushare_news, "get_tushare_client", lambda: client)
+
+    tushare_news.get_global_news("2026-07-07", look_back_days=2, limit=10)
+
+    assert set(calls) == {"20260705", "20260706", "20260707"}   # 窗口内每天一次
+
+
+@pytest.mark.unit
+def test_global_news_all_fail_returns_message(monkeypatch):
+    client = mock.Mock()
+    client.news = mock.Mock(side_effect=Exception("down"))
+    client.major_news = mock.Mock(side_effect=Exception("down"))
+    client.cctv_news = mock.Mock(side_effect=Exception("down"))
+    monkeypatch.setattr(tushare_news, "get_tushare_client", lambda: client)
+
+    out = tushare_news.get_global_news("2026-07-07", look_back_days=7, limit=10)
+
+    assert out.startswith("Error fetching global news")
