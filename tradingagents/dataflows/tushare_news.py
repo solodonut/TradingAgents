@@ -94,7 +94,7 @@ def _render_flash(df: pd.DataFrame, keywords: list[str], start_dt, end_dt, src_l
         return rows
     for _, row in df.iterrows():
         pub = pd.to_datetime(row.get("datetime"), errors="coerce")
-        if pd.isna(pub) or not (start_dt <= pub.to_pydatetime() <= end_dt):
+        if pd.isna(pub) or not (start_dt <= pub.to_pydatetime() < end_dt):
             continue
         title = row.get("title") or ""
         content = row.get("content") or ""

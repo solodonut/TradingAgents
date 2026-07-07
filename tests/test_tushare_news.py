@@ -125,3 +125,22 @@ def test_get_news_empty_returns_no_news(monkeypatch):
     out = tushare_news.get_news("600519.SH", "2026-06-01", "2026-06-30")
 
     assert out == "No news found for 600519.SS between 2026-06-01 and 2026-06-30"
+
+
+@pytest.mark.unit
+def test_get_news_midnight_boundary_excluded(monkeypatch):
+    """end_date 次日 00:00:00 的快讯必须被过滤掉(前视泄漏防护)。"""
+    anns = pd.DataFrame()
+    news = pd.DataFrame(
+        [
+            {"datetime": "2026-06-30 23:59:59", "title": "窗口最后一秒", "content": "贵州茅台"},
+            {"datetime": "2026-07-01 00:00:00", "title": "次日午夜跨日", "content": "贵州茅台"},
+        ]
+    )
+    monkeypatch.setattr(tushare_news, "get_tushare_client", lambda: _fake_client(anns, news))
+    monkeypatch.setattr(tushare_news, "resolve_ticker_name", lambda code: "贵州茅台")
+
+    out = tushare_news.get_news("600519.SH", "2026-06-01", "2026-06-30")
+
+    assert "窗口最后一秒" in out       # end_date 当天最后一秒应保留
+    assert "次日午夜跨日" not in out   # end_date+1 00:00:00 应被排除
