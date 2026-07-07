@@ -28,6 +28,7 @@ from .alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
 )
 from .config import get_config
+from .eastmoney_news import get_news as get_eastmoney_news
 from .errors import (
     NoMarketDataError,
     VendorNotConfiguredError,
@@ -136,6 +137,7 @@ VENDOR_LIST = [
     "alpha_vantage",
     "tushare",
     "akshare",
+    "eastmoney",
     "longbridge",
     "tdx",
 ]
@@ -192,6 +194,7 @@ VENDOR_METHODS = {
         "yfinance": get_news_yfinance,
         "longbridge": get_longbridge_news,
         "akshare": get_akshare_news,
+        "eastmoney": get_eastmoney_news,
     },
     "get_global_news": {
         "yfinance": get_global_news_yfinance,

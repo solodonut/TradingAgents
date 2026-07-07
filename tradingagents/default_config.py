@@ -159,7 +159,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "akshare_auto_route": True,
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
-        "get_news": "akshare,longbridge",
+        "get_news": "akshare,eastmoney,longbridge",
         "get_etf_profile": "akshare,tushare,tdx,longbridge",
     },
     # Benchmark for alpha calculation in the reflection layer.

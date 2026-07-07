@@ -36,7 +36,7 @@ def test_default_config_uses_domestic_china_data_sources_only():
     assert DEFAULT_CONFIG["data_vendors"]["technical_indicators"] == "tushare,akshare"
     assert DEFAULT_CONFIG["data_vendors"]["fundamental_data"] == "tushare,akshare"
     assert DEFAULT_CONFIG["data_vendors"]["news_data"] == "akshare,longbridge"
-    assert DEFAULT_CONFIG["tool_vendors"]["get_news"] == "akshare,longbridge"
+    assert DEFAULT_CONFIG["tool_vendors"]["get_news"] == "akshare,eastmoney,longbridge"
     assert DEFAULT_CONFIG["tool_vendors"]["get_etf_profile"] == "akshare,tushare,tdx,longbridge"
     assert DEFAULT_CONFIG["data_vendors"]["macro_data"] == "disabled"
     assert DEFAULT_CONFIG["data_vendors"]["prediction_markets"] == "disabled"

@@ -33,6 +33,13 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **东财直连新闻源作为 AKShare 的同源兜底。** 新增 `dataflows/eastmoney_news.py`,直接请求
+  `search-api-web.eastmoney.com`(即 `akshare.stock_news_em` 底层的东财搜索接口),契约与
+  `akshare_news.get_news` 完全一致(参数/输出格式/前视窗口过滤/`NoMarketDataError`/`Error fetching news`
+  哨兵)。`get_news` 默认链改为 `akshare,eastmoney,longbridge`:AKShare 因库层原因(接口改名、
+  解析报错、版本漂移)返回错误哨兵时,自动落到东财直连,绕开 AKShare 库仍能取到中文个股/ETF 新闻。
+  经 `ak_retry` 复用代理绕过与瞬时网络重试。注:与 AKShare 打同一后端,只兜底库层故障(A 类),
+  东财整体宕机(B 类)需另接异源。
 - TradingAgents 报告新增 run-level evidence 追踪与 `[S#]` 来源引用：数据工具注册来源元数据，
   agent 报告按来源编号引用，WebUI 导出的 Markdown 自动追加分节与全局来源表，报告校验会提示
   无效或缺失的引用编号。
