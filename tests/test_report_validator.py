@@ -152,3 +152,34 @@ def test_silent_correction_recorded_in_report(monkeypatch):
     # (b) validation_report 必须包含该字段的兜底记录
     assert "市场分析" in out["validation_report"]
     assert "文本已被校验器修正" in out["validation_report"]
+
+
+@pytest.mark.unit
+def test_report_validator_reports_invalid_citations(monkeypatch):
+    monkeypatch.setattr(rv, "build_verified_market_snapshot", lambda s, d: "SNAPSHOT")
+    llm, _ = _structured_llm(
+        invoke_return=CorrectedReport(corrected_text="证据存在 [S2]，非法引用 [S9]。", corrections=[])
+    )
+    node = rv.create_report_validator(llm, enabled=True)
+    out = node(
+        _state(
+            market_report="证据存在 [S2]，非法引用 [S9]。",
+            evidence_items=[
+                {
+                    "id": "S2",
+                    "kind": "news",
+                    "source_name": "财联社",
+                    "title": "新闻",
+                    "url": "",
+                    "published_at": "2026-07-06",
+                    "vendor": "akshare",
+                    "tool_name": "get_news",
+                    "query": {},
+                    "excerpt": "",
+                }
+            ],
+        )
+    )
+
+    assert "无效引用" in out["validation_report"]
+    assert "[S9]" in out["validation_report"]

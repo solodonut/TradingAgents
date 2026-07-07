@@ -24,6 +24,7 @@ from tradingagents.agents.schemas import CorrectedReport, CorrectionItem
 from tradingagents.agents.utils.agent_utils import get_instrument_context_from_state
 from tradingagents.agents.utils.structured import bind_structured
 from tradingagents.dataflows.market_data_validator import build_verified_market_snapshot
+from tradingagents.graph.evidence import extract_citation_ids
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,24 @@ def _render_validation_report(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _citation_warnings(state: dict) -> list[str]:
+    evidence_ids = {
+        item.get("id")
+        for item in state.get("evidence_items", []) or []
+        if isinstance(item, dict)
+    }
+    warnings: list[str] = []
+    for key, label in REPORT_FIELDS:
+        text = state.get(key) or ""
+        cited = extract_citation_ids(text)
+        invalid = [cid for cid in cited if cid not in evidence_ids]
+        if invalid:
+            warnings.append(f"- {label}: 无效引用 " + ", ".join(f"[{cid}]" for cid in invalid))
+        if text and evidence_ids and not cited:
+            warnings.append(f"- {label}: 未发现来源引用。")
+    return warnings
+
+
 def create_report_validator(llm, enabled: bool = True) -> Callable[[dict], dict]:
     """Build the report-validation node. When disabled, the node is a pass-through."""
     structured_llm = bind_structured(llm, CorrectedReport, "Report Validator") if enabled else None
@@ -151,7 +170,11 @@ def create_report_validator(llm, enabled: bool = True) -> Callable[[dict], dict]
                     ]
             entries.append((label, items, note))
 
-        updates["validation_report"] = _render_validation_report(entries, snapshot)
+        validation_report = _render_validation_report(entries, snapshot)
+        citation_warnings = _citation_warnings({**state, **updates})
+        if citation_warnings:
+            validation_report += "\n### 引用校验\n" + "\n".join(citation_warnings)
+        updates["validation_report"] = validation_report
         return updates
 
     return report_validator_node
