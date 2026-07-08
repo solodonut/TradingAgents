@@ -10,6 +10,8 @@ export function ConfigCard({
   options,
   onStart,
   running = false,
+  disabled = false,
+  disabledReason = "",
 }: {
   options: ConfigOptions;
   onStart: (
@@ -19,6 +21,8 @@ export function ConfigCard({
     >,
   ) => void;
   running?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const [tickers, setTickers] = useState<TickerItem[]>([{ ticker: "NVDA", name: "" }]);
   const [tickersLoaded, setTickersLoaded] = useState(false);
@@ -473,7 +477,8 @@ export function ConfigCard({
 
         <button
           type="submit"
-          disabled={running || activeAnalysts.length === 0 || tickers.length === 0}
+          disabled={disabled || running || activeAnalysts.length === 0 || tickers.length === 0}
+          title={disabled ? disabledReason : undefined}
           className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-md px-3 font-mono text-xs font-bold uppercase tracking-[0.18em] transition-colors focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed ${
             running
               ? "thinking-border"
@@ -485,11 +490,13 @@ export function ConfigCard({
           ) : (
             <Play className="size-4" />
           )}
-          {running
-            ? "分析进行中"
-            : tickers.length > 1
-              ? `分析 ${tickers.length} 个标的`
-              : "开始分析"}
+          {disabled
+            ? "启动维护中"
+            : running
+              ? "分析进行中"
+              : tickers.length > 1
+                ? `分析 ${tickers.length} 个标的`
+                : "开始分析"}
         </button>
       </div>
     </form>

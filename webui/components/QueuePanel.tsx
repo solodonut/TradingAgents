@@ -9,6 +9,8 @@ export function QueuePanel({
   onReorder,
   onCancelRunning,
   canceling = false,
+  disabled = false,
+  disabledReason = "",
 }: {
   queue: QueueState;
   onRemove: (runId: string) => void;
@@ -16,6 +18,8 @@ export function QueuePanel({
   onReorder: (orderedRunIds: string[]) => void;
   onCancelRunning: (runId: string) => void;
   canceling?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const pending = queue.pending;
   const hasItems = queue.running !== null || pending.length > 0;
@@ -40,7 +44,9 @@ export function QueuePanel({
           <button
             type="button"
             onClick={onClear}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:border-primary"
+            disabled={disabled}
+            title={disabled ? disabledReason : undefined}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[0.62rem] uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Trash2 className="size-3" aria-hidden="true" />
             清空
@@ -86,7 +92,8 @@ export function QueuePanel({
               <button
                 type="button"
                 onClick={() => move(index, -1)}
-                disabled={index === 0}
+                disabled={disabled || index === 0}
+                title={disabled ? disabledReason : "上移"}
                 aria-label="上移"
                 className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:border-primary"
               >
@@ -95,7 +102,8 @@ export function QueuePanel({
               <button
                 type="button"
                 onClick={() => move(index, 1)}
-                disabled={index === pending.length - 1}
+                disabled={disabled || index === pending.length - 1}
+                title={disabled ? disabledReason : "下移"}
                 aria-label="下移"
                 className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:border-primary"
               >
@@ -104,8 +112,10 @@ export function QueuePanel({
               <button
                 type="button"
                 onClick={() => onRemove(item.run_id)}
+                disabled={disabled}
+                title={disabled ? disabledReason : "移除"}
                 aria-label="移除"
-                className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:border-primary"
+                className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:border-primary"
               >
                 <X className="size-3.5" aria-hidden="true" />
               </button>

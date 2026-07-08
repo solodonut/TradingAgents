@@ -24,11 +24,14 @@ import {
   clearQueue,
   reorderQueue,
   checkServiceHealth,
+  getStartupCacheStatus,
   historyReportsZipUrl,
+  subscribeStartupCacheClear,
   subscribeServiceHealth,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
 import { sortServiceHealthItems } from "@/lib/service-health";
+import { startupCacheReady, startupCacheToServiceItem } from "@/lib/startup-cache";
 import type {
   ConfigOptions,
   Decision,
@@ -39,6 +42,7 @@ import type {
   ServiceHealthItem,
   ServiceHealthSummary,
   SSEEvent,
+  StartupCacheStatusDetail,
 } from "@/lib/types";
 
 const AGENT_SECTION_MAP: { agent: string; section: string }[] = [
@@ -200,6 +204,7 @@ export default function Home() {
   const [canceling, setCanceling] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const healthUnsubscribeRef = useRef<(() => void) | null>(null);
+  const startupCacheUnsubscribeRef = useRef<(() => void) | null>(null);
   const followGenRef = useRef(0);
 
   const [queue, setQueue] = useState<QueueState>({ running: null, pending: [] });
@@ -209,12 +214,19 @@ export default function Home() {
   const [healthCheckingIds, setHealthCheckingIds] = useState<Set<string>>(new Set());
   const [healthError, setHealthError] = useState<string | null>(null);
   const [healthLastCheckedAt, setHealthLastCheckedAt] = useState<string | null>(null);
+  const [startupCacheStatus, setStartupCacheStatus] = useState<StartupCacheStatusDetail | null>(
+    null,
+  );
+  const [startupCacheError, setStartupCacheError] = useState<string | null>(null);
   const lastFailureHealthRunRef = useRef<string | null>(null);
 
-  const refreshQueue = () =>
-    getQueue()
+  const refreshQueue = useCallback(
+    () =>
+      getQueue()
       .then(setQueue)
-      .catch(() => setQueue({ running: null, pending: [] }));
+      .catch(() => setQueue({ running: null, pending: [] })),
+    [],
+  );
 
   // Detail (history replay) mode
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -226,8 +238,9 @@ export default function Home() {
   const [runtimeStatus, setRuntimeStatus] = useState<RunStatusDetail | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
-  const refreshHistory = () =>
-    getHistory()
+  const refreshHistory = useCallback(
+    () =>
+      getHistory()
       .then((items) => {
         setHistory(items);
         setSelectedHistoryRunIds((prev) => {
@@ -238,7 +251,9 @@ export default function Home() {
           setError(null);
         }
       })
-      .catch(() => setHistory([]));
+      .catch(() => setHistory([])),
+    [],
+  );
 
   const runServiceHealthCheck = useCallback(() => {
     healthUnsubscribeRef.current?.();
@@ -310,17 +325,49 @@ export default function Home() {
       });
   }, [healthItems]);
 
+  const watchStartupCache = useCallback(() => {
+    startupCacheUnsubscribeRef.current?.();
+    getStartupCacheStatus()
+      .then((status) => {
+        setStartupCacheStatus(status);
+        setStartupCacheError(null);
+        if (status.status === "completed" || status.status === "error") return;
+        startupCacheUnsubscribeRef.current = subscribeStartupCacheClear(
+          (event) => {
+            setStartupCacheStatus(event.data);
+            setStartupCacheError(null);
+            if (event.data.status === "completed") {
+              refreshQueue();
+              refreshHistory();
+            }
+          },
+          () => {
+            startupCacheUnsubscribeRef.current = null;
+          },
+          (message) => {
+            setStartupCacheError(message);
+            window.setTimeout(() => {
+              getStartupCacheStatus().then(setStartupCacheStatus).catch(() => {});
+            }, 2000);
+          },
+        );
+      })
+      .catch((err) => setStartupCacheError((err as Error).message));
+  }, [refreshHistory, refreshQueue]);
+
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
     refreshHistory();
     refreshQueue();
+    watchStartupCache();
     const healthTimer = window.setTimeout(runServiceHealthCheck, 0);
     return () => {
       window.clearTimeout(healthTimer);
       unsubscribeRef.current?.();
       healthUnsubscribeRef.current?.();
+      startupCacheUnsubscribeRef.current?.();
     };
-  }, [runServiceHealthCheck]);
+  }, [refreshHistory, refreshQueue, runServiceHealthCheck, watchStartupCache]);
 
   // The backend advances the queue whenever a runner thread finishes
   // (scheduler.advance). The live SSE stream-close callback drives the UI in the
@@ -425,7 +472,7 @@ export default function Home() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [selectedId, detail?.status, runServiceHealthCheck]);
+  }, [selectedId, detail?.status, refreshHistory, runServiceHealthCheck]);
 
   const onDeleteHistory = (id: string) => {
     if (id === selectedId) exitDetail();
@@ -638,7 +685,15 @@ export default function Home() {
   const latestMessage = messages.at(-1);
   const completedAgents = Object.values(sidebarStatuses).filter((s) => s === "done").length;
   const workingAgents = Object.values(sidebarStatuses).filter((s) => s === "working").length;
-  const sortedHealthItems = sortServiceHealthItems(Object.values(healthItems));
+  const startupItem = startupCacheToServiceItem(startupCacheStatus);
+  const sortedHealthItems = sortServiceHealthItems([
+    ...(startupItem ? [startupItem] : []),
+    ...Object.values(healthItems),
+  ]);
+  const startupReady = startupCacheReady(startupCacheStatus);
+  const startupGateReason =
+    startupCacheError ||
+    (startupReady ? "" : startupCacheStatus?.message ?? "启动缓存清理完成后可开始分析");
 
   return (
     <div className="min-h-screen text-foreground lg:h-screen lg:overflow-hidden">
@@ -670,6 +725,7 @@ export default function Home() {
                 onCheck={runServiceHealthCheck}
                 onCheckOne={runSingleServiceHealthCheck}
                 checkingIds={healthCheckingIds}
+                startupCacheStatus={startupCacheStatus}
               />
             </div>
 
@@ -821,7 +877,15 @@ export default function Home() {
             </div>
 
             {!selectedRunning &&
-              options && <ConfigCard options={options} onStart={onStart} running={running} />}
+              options && (
+                <ConfigCard
+                  options={options}
+                  onStart={onStart}
+                  running={running}
+                  disabled={!startupReady}
+                  disabledReason={startupGateReason}
+                />
+              )}
 
             {error && (
               <div className="glass-readable rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
@@ -836,6 +900,8 @@ export default function Home() {
               onReorder={onReorderQueue}
               onCancelRunning={(runId) => void cancelRun(runId)}
               canceling={canceling}
+              disabled={!startupReady}
+              disabledReason={startupGateReason}
             />
 
             <AgentProgress statuses={sidebarStatuses} details={debateDetails} />
