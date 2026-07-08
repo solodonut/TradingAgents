@@ -38,6 +38,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- 预取快照:每个标的分析开始前预取新闻/分时/日线指标/基本面并落库到 webui.db，
+  新闻+行情快照 push 进新闻/市场分析师上下文(根治"分析丢数据")。新闻按标的类型
+  确定性分流(ETF→get_etf_news,股票→get_news)，不再依赖 LLM 选对工具;输入代码
+  即标注类型(ETF/股票)。新增按日期查看四类数据的独立详情页。分时/日线来自 tushare
+  `stk_mins`/`fund_daily`。
 - Clear endpoint local data caches on WebUI API startup, show startup maintenance progress in the Service Health area, and block new analysis runs until cache clearing succeeds.
 - **ETF 新闻聚合工具。** 新增 `get_etf_news(symbol, start_date, end_date)`，经
   `route_to_vendor("get_etf_news", ...)` 注册到 Tushare：ETF/基金分析可一次取得基金层面新闻、
