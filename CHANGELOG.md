@@ -10,6 +10,19 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **ETF「主要持仓新闻」全部「未发现相关新闻」、持仓名称全是「-」。** 两个叠加缺陷:
+  (1) `tushare_etf_news._stock_symbol` 给沪市持仓生成 tushare 惯例的 `.SH` 后缀,但下游
+  `resolve_ticker_name`/`get_news`/`is_a_share` 只认 yahoo/akshare 的 `.SS` 形式,导致沪市持仓
+  (如 600519/601318/601899)名称解析返回 `None`、快讯只能拿 6 位裸代码在正文里 `contains` 过滤
+  (正文只写「茅台」不写「600519」)→ 全空;深市 `.SZ` 因约定一致未受影响。改为把沪市统一归一成
+  `.SS`(`_stock_symbol` 与 AKShare 回退路径同改)。(2) `_parse_news_articles` 用 `###` 首行做去重键,
+  但新浪快讯无标题字段、一律渲染成 `### 快讯`,加上基金→主题→持仓三段共享同一个 `seen` 集合,
+  主题段先消费掉「快讯」这个键后,每只持仓的快讯都被判重清零。改为在去重键里并入正文首行标题,
+  区分同为「快讯」表头的不同条目。另外 `fund_portfolio` 本身无股票名称列,`get_etf_news` 渲染前
+  用 `resolve_ticker_name` 回填持仓名称。新增两条回归测试覆盖真实字段(无 name 列)、`.SS` 归一与
+  跨持仓快讯不再坍缩。(持仓权重停留在 2026-03-31 属正常:tushare `fund_portfolio` 最新披露季度即
+  Q1,Q2 尚未披露,非 bug。)已知同类隐患:`tushare_news.get_global_news` 的去重键同样只取 `###`
+  首行,对纯新浪快讯也会坍缩,本次未一并修改(超出 ETF 范围)。
 - **ETF 预取快照的技术指标类目必崩,报 `get_indicators() missing 1 required positional
   argument: 'look_back_days'`。** `prefetch._fetch_indicators` 调
   `route_to_vendor("get_indicators", ticker, start, trade_date)` 只传了 3 个位置参数,而

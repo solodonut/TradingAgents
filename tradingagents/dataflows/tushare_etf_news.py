@@ -19,6 +19,7 @@ from . import tushare_news
 from .akshare_utils import to_bare_code
 from .config import get_config
 from .errors import NoMarketDataError
+from .ticker_name import resolve_ticker_name
 from .tushare_utils import (
     cached_call,
     call_tushare,
@@ -99,7 +100,9 @@ def _fetch_akshare_holdings(symbol: str, curr_date: str | None) -> list[Holding]
         if pd.isna(code_value):
             continue
         stock_code = str(code_value).split(".")[0].zfill(6)
-        suffix = ".SH" if stock_code.startswith(("5", "6", "9")) else ".SZ"
+        # Shanghai uses the yahoo/akshare `.SS` form so downstream name/news
+        # lookups (which reject the tushare `.SH` suffix) accept it.
+        suffix = ".SS" if stock_code.startswith(("5", "6", "9")) else ".SZ"
         holdings.append(
             Holding(
                 symbol=f"{stock_code}{suffix}",
@@ -136,10 +139,12 @@ def _stock_symbol(value: str) -> str | None:
         return None
     code = match.group(1)
     suffix = (match.group(2) or "").upper()
-    if suffix == "SS":
-        suffix = "SH"
+    # Normalize Shanghai to the yahoo/akshare `.SS` form; the tushare `.SH`
+    # suffix is rejected by is_a_share/get_news/resolve_ticker_name downstream.
+    if suffix == "SH":
+        suffix = "SS"
     if not suffix:
-        suffix = "SH" if code.startswith(("5", "6", "9")) else "SZ"
+        suffix = "SS" if code.startswith(("5", "6", "9")) else "SZ"
     return f"{code}.{suffix}"
 
 
@@ -225,11 +230,16 @@ def _parse_news_articles(text: str, limit: int, seen: set[str]) -> list[str]:
     for block in blocks:
         first, _, rest = block.partition("\n")
         title = first.removeprefix("### ").strip()
-        key = _title_key(title.split(" (source:", 1)[0])
+        content = rest.strip()
+        # Sina flash items carry no title, so every one renders as `### 快讯`.
+        # Keying on the header alone collapses all flash to one entry across the
+        # shared seen-set; fold in the body's first line to keep them distinct.
+        title_part = title.split(" (source:", 1)[0]
+        first_content_line = content.split("\n", 1)[0].strip()
+        key = _title_key(f"{title_part}\n{first_content_line}")
         if key in seen:
             continue
         seen.add(key)
-        content = rest.strip()
         rendered = f"- **{title}**"
         if content:
             rendered += "\n  " + content.replace("\n", "\n  ")
@@ -345,6 +355,10 @@ def get_etf_news(
 
     if holdings:
         for holding in holdings[:top_holdings]:
+            # Tushare fund_portfolio has no stock-name column, so names arrive
+            # empty; backfill via the shared A-share name resolver (cached).
+            if not holding.name:
+                holding.name = resolve_ticker_name(holding.symbol) or ""
             body += f"### {_holding_heading(holding)}\n"
             try:
                 news_text = tushare_news.get_news(holding.symbol, start_date, end_date)

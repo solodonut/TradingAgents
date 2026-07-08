@@ -55,7 +55,7 @@ def test_get_etf_news_renders_sections_limits_and_dedupes(monkeypatch):
     assert out.count("### 60") + out.count("### 00") + out.count("### 30") == 5
     assert "601398" not in out
     assert out.count("重复标题") == 1
-    assert "600519.SH 第四条" not in out
+    assert "600519.SS 第四条" not in out
     assert "latest disclosed quarter" in out
 
 
@@ -101,7 +101,7 @@ def test_get_etf_news_one_holding_failure_continues(monkeypatch):
     monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame())
 
     def fake_stock_news(symbol, *args):
-        if symbol == "600519.SH":
+        if symbol == "600519.SS":
             raise RuntimeError("holding news down")
         return f"## {symbol} News\n\n### 平安新闻 (source: 快讯)\n内容\n\n"
 
@@ -109,9 +109,9 @@ def test_get_etf_news_one_holding_failure_continues(monkeypatch):
 
     out = tushare_etf_news.get_etf_news("510300", "2026-07-01", "2026-07-07")
 
-    assert "600519.SH 贵州茅台" in out
+    assert "600519.SS 贵州茅台" in out
     assert "Holding news unavailable: holding news down" in out
-    assert "601318.SH 中国平安" in out
+    assert "601318.SS 中国平安" in out
     assert "平安新闻" in out
 
 
@@ -137,10 +137,91 @@ def test_get_etf_news_uses_latest_disclosed_quarter_once_per_holding(monkeypatch
 
     out = tushare_etf_news.get_etf_news("510300", "2026-07-01", "2026-07-07")
 
-    assert out.count("### 601318.SH 中国平安") == 1
+    assert out.count("### 601318.SS 中国平安") == 1
     assert "weight 7.75%" in out
     assert "weight 7.62%" not in out
     assert "latest disclosed quarter (20260331)" in out
+
+
+@pytest.mark.unit
+def test_get_etf_news_backfills_names_and_normalizes_shanghai_suffix(monkeypatch):
+    """Real fund_portfolio has NO name column and yields Shanghai `.SH` symbols.
+
+    Regression for the report showing 持仓名称 = "-" and empty holdings news:
+    names must be backfilled via resolve_ticker_name, and Shanghai symbols must
+    be normalized to the `.SS` form the downstream news/name lookups accept.
+    """
+    from tradingagents.dataflows import tushare_etf_news
+
+    # Real schema: symbol + stk_mkv_ratio + end_date only, NO name column.
+    monkeypatch.setattr(tushare_etf_news, "_fetch_fund_basic", lambda ts_code: pd.DataFrame([
+        {"ts_code": ts_code, "name": "沪深300ETF", "benchmark": "沪深300指数"}
+    ]))
+    monkeypatch.setattr(tushare_etf_news, "_fetch_fund_portfolio", lambda ts_code: pd.DataFrame([
+        {"symbol": "600519.SH", "mkv": 100, "stk_mkv_ratio": 3.74, "end_date": "20260331"},
+        {"symbol": "300750.SZ", "mkv": 90, "stk_mkv_ratio": 4.37, "end_date": "20260331"},
+    ]))
+    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
+    monkeypatch.setattr(tushare_etf_news, "resolve_ticker_name", lambda sym: {
+        "600519.SS": "贵州茅台",
+        "300750.SZ": "宁德时代",
+    }.get(sym))
+    monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame())
+
+    seen_symbols = []
+
+    def fake_stock_news(symbol, *args):
+        seen_symbols.append(symbol)
+        return f"## {symbol} News\n\n### {symbol} 新闻 (source: 快讯)\n内容\n\n"
+
+    monkeypatch.setattr(tushare_etf_news.tushare_news, "get_news", fake_stock_news)
+
+    out = tushare_etf_news.get_etf_news("510300", "2026-07-01", "2026-07-07")
+
+    # Shanghai holding normalized to .SS and its name backfilled.
+    assert "600519.SS 贵州茅台" in out
+    assert "300750.SZ 宁德时代" in out
+    # Downstream news lookup received the .SS form (not the rejected .SH).
+    assert "600519.SS" in seen_symbols
+    assert "600519.SH" not in seen_symbols
+
+
+@pytest.mark.unit
+def test_get_etf_news_generic_flash_titles_not_collapsed_across_holdings(monkeypatch):
+    """Real sina flash items have empty titles → all render as `### 快讯`.
+
+    Regression: the shared seen-set + `###`-line dedup key collapsed every
+    holding's flash news to nothing once the theme step consumed one `快讯`
+    block. Distinct-body flash items must survive per holding.
+    """
+    from tradingagents.dataflows import tushare_etf_news
+
+    monkeypatch.setattr(tushare_etf_news, "_fetch_fund_basic", lambda ts_code: pd.DataFrame([
+        {"ts_code": ts_code, "name": "沪深300ETF", "benchmark": "沪深300指数"}
+    ]))
+    monkeypatch.setattr(tushare_etf_news, "_fetch_fund_portfolio", lambda ts_code: pd.DataFrame([
+        {"symbol": "600519.SH", "stk_mkv_ratio": 3.74, "stk_name": "贵州茅台", "end_date": "20260331"},
+        {"symbol": "300750.SZ", "stk_mkv_ratio": 4.37, "stk_name": "宁德时代", "end_date": "20260331"},
+    ]))
+    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
+    monkeypatch.setattr(tushare_etf_news, "resolve_ticker_name", lambda sym: None)
+    # Theme flash: empty title → renders as generic `### 快讯`, seeding the key.
+    monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame([
+        {"datetime": "2026-07-06 09:00:00", "title": "", "content": "沪深300指数震荡收涨"},
+    ]))
+
+    def fake_stock_news(symbol, *args):
+        # Each holding gets a DISTINCT-body flash rendered with the generic
+        # `### 快讯` header (mirrors real sina flash with empty title fields).
+        return f"## {symbol} News\n\n### 快讯 (source: 快讯)\n【{symbol} 专属公告】要点\n\n"
+
+    monkeypatch.setattr(tushare_etf_news.tushare_news, "get_news", fake_stock_news)
+
+    out = tushare_etf_news.get_etf_news("510300", "2026-07-01", "2026-07-07")
+
+    # Both holdings' distinct flash bodies must survive the shared dedup set.
+    assert "600519.SS 专属公告" in out
+    assert "300750.SZ 专属公告" in out
 
 
 @pytest.mark.unit
