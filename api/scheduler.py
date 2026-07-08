@@ -28,6 +28,9 @@ class QueueScheduler:
     def advance(self) -> str | None:
         with self._lock:
             store = self._store()
+            clearer = getattr(self._app.state, "startup_cache_clearer", None)
+            if clearer is not None and not clearer.is_ready():
+                return None
             if store.has_running_run():
                 return None
             while True:

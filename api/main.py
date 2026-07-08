@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import config as config_routes
+from api.startup_cache import StartupCacheClearer
 from api.store import Store
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients.health_check import check_and_select
@@ -217,6 +218,14 @@ def _wire_graph_factory():
         from api.scheduler import QueueScheduler
 
         app.state.scheduler = QueueScheduler(app)
+    if app.state.startup_cache_clearer is None:
+        app.state.startup_cache_clearer = StartupCacheClearer(DEFAULT_CONFIG["data_cache_dir"])
+
+    def _advance_after_cache_clear(state: dict) -> None:
+        if state.get("status") == "completed" and app.state.scheduler is not None:
+            app.state.scheduler.advance()
+
+    app.state.startup_cache_clearer.start(on_complete=_advance_after_cache_clear)
     # recover from a crash mid-run, then resume any leftover queue
     get_store().reset_orphaned_runs()
     app.state.scheduler.advance()

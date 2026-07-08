@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from api.schemas import AnalysisRequest, EnqueueRequest, QueueState, ReorderRequest
+from api.startup_cache import assert_startup_cache_ready
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])
 
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/api/queue", tags=["queue"])
 def enqueue(req: EnqueueRequest, request: Request) -> dict:
     from api.main import get_store
 
+    assert_startup_cache_ready(request)
     store = get_store()
     shared = req.model_dump(exclude={"tickers", "ticker_names"})
     run_ids: list[str] = []

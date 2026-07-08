@@ -295,6 +295,66 @@ def test_startup_cache_stream_route_returns_503_when_uninitialized(client):
     assert resp.json()["detail"] == "startup cache clearer not initialized"
 
 
+def test_analysis_and_queue_block_until_startup_cache_completed(client, tmp_path):
+    import api.main as main
+    from api.startup_cache import StartupCacheClearer
+
+    clearer = StartupCacheClearer(tmp_path / "cache")
+    main.app.state.startup_cache_clearer = clearer
+
+    analysis_resp = client.post(
+        "/api/analysis",
+        json={"ticker": "NVDA", "trade_date": "2024-05-10"},
+    )
+    queue_resp = client.post(
+        "/api/queue",
+        json={"tickers": ["NVDA"], "trade_date": "2024-05-10"},
+    )
+
+    assert analysis_resp.status_code == 503
+    assert queue_resp.status_code == 503
+    assert analysis_resp.json()["detail"] == "启动缓存清理未完成，暂不能开始分析"
+    assert queue_resp.json()["detail"] == "启动缓存清理未完成，暂不能开始分析"
+
+    clearer.run_sync()
+
+    ok_resp = client.post(
+        "/api/queue",
+        json={"tickers": ["NVDA"], "trade_date": "2024-05-10"},
+    )
+    assert ok_resp.status_code == 200
+
+
+def test_scheduler_does_not_advance_before_startup_cache_completed(tmp_path, monkeypatch):
+    import api.main as main
+    from api.scheduler import QueueScheduler
+    from api.startup_cache import StartupCacheClearer
+    from api.store import Store
+
+    store = Store(tmp_path / "sched.db")
+    monkeypatch.setattr(main, "get_store", lambda: store)
+    store.enqueue_run(
+        "r1",
+        "NVDA",
+        "2024-05-10",
+        "stock",
+        {"ticker": "NVDA", "trade_date": "2024-05-10"},
+    )
+
+    class App:
+        pass
+
+    app = App()
+    app.state = type("State", (), {})()
+    app.state.startup_cache_clearer = StartupCacheClearer(tmp_path / "cache")
+    app.state.graph_factory = lambda req: (_ for _ in ()).throw(AssertionError("must not launch"))
+
+    scheduler = QueueScheduler(app)
+
+    assert scheduler.advance() is None
+    assert store.get_status("r1") == "pending"
+
+
 def test_sse_json_wraps_payload_as_json_string():
     from api.startup_cache import sse_json
 

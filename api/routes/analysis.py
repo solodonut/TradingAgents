@@ -9,6 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from api.reporting import build_markdown_report
 from api.schemas import AnalysisRequest
+from api.startup_cache import assert_startup_cache_ready
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 def start_analysis(req: AnalysisRequest, request: Request) -> dict:
     from api.main import get_store
 
+    assert_startup_cache_ready(request)
     store = get_store()
     run_id = uuid.uuid4().hex
     store.enqueue_run(
