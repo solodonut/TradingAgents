@@ -38,6 +38,12 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- Clear endpoint local data caches on WebUI API startup, show startup maintenance progress in the Service Health area, and block new analysis runs until cache clearing succeeds.
+- **ETF 新闻聚合工具。** 新增 `get_etf_news(symbol, start_date, end_date)`，经
+  `route_to_vendor("get_etf_news", ...)` 注册到 Tushare：ETF/基金分析可一次取得基金层面新闻、
+  指数/主题新闻、前五大披露持仓相关新闻，并按 section 降级、标题去重与限流。China-only 新闻分析师
+  现同时绑定 `get_news` 与 `get_etf_news`，提示词明确 ETF/基金优先用聚合工具、个股仍用 ticker-only
+  `get_news`，避免把主题词或持仓名称误传给个股新闻工具。
 - Tushare 全面接管新闻资讯:新增 `tushare_news`,个股走公司公告(`anns_d`)+ 关键词过滤快讯(`news`),
   全局走快讯 + 长篇(`major_news`)+ 新闻联播(`cctv_news`);默认 `get_news`/`get_global_news` 以 Tushare 为主源。
 - **东财直连新闻源作为 AKShare 的同源兜底。** 新增 `dataflows/eastmoney_news.py`,直接请求
