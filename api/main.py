@@ -32,6 +32,7 @@ app.add_middleware(
 
 # Single-user invariant: only one analysis runs at a time.
 app.state.store = None
+app.state.store_lock = threading.Lock()
 app.state.run_lock = threading.Lock()
 app.state.queues = {}
 app.state.cancellations = {}
@@ -97,8 +98,9 @@ def _run_model_health_check() -> None:
 
 
 def get_store() -> Store:
-    if app.state.store is None:
-        app.state.store = Store(DB_PATH)
+    with app.state.store_lock:
+        if app.state.store is None:
+            app.state.store = Store(DB_PATH)
     return app.state.store
 
 
