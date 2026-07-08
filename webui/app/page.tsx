@@ -88,6 +88,7 @@ function summarizeHealthItems(items: ServiceHealthItem[]): ServiceHealthSummary 
 // before the manager that consumes it and is derived from runtime signals
 // rather than a section field.
 const MATRIX_ORDER = [
+  "info_collection",
   "market_analyst",
   "social_analyst",
   "news_analyst",
@@ -123,6 +124,7 @@ function nextLiveStatuses(
     if (status === "done") next[agent] = "done";
   }
   next[doneAgent] = "done";
+  if (doneAgent === "market_analyst") next["info_collection"] = "done";
   if (doneAgent === "research_manager") next["debate"] = "done";
   if (doneAgent === "portfolio_manager") next["risk_debate"] = "done";
 
@@ -141,6 +143,7 @@ function deriveHistoryProgress(
   for (const { agent, section } of AGENT_SECTION_MAP) {
     if (hasSection(run.result, section)) next[agent] = "done";
   }
+  if (hasSection(run.result, "market_report")) next["info_collection"] = "done";
   // The debate feeds the research manager; once investment_plan exists it's over.
   if (hasSection(run.result, "investment_plan")) next["debate"] = "done";
   // The risk debate feeds the portfolio manager; once final_trade_decision
@@ -577,11 +580,14 @@ export default function Home() {
     unsubscribeRef.current = subscribe(
       runId,
       (e: SSEEvent) => {
-        if (e.event === "agent_status")
-          setStatuses((s) =>
-            e.data.status === "done" ? nextLiveStatuses(s, e.data.agent) : s,
-          );
-        else if (e.event === "message")
+        if (e.event === "agent_status") {
+          setStatuses((s) => {
+            if (e.data.status === "done") return nextLiveStatuses(s, e.data.agent);
+            return s[e.data.agent] === "done" ? s : { ...s, [e.data.agent]: e.data.status };
+          });
+          if (e.data.detail)
+            setDebateDetails((d) => ({ ...d, [e.data.agent]: e.data.detail ?? "" }));
+        } else if (e.event === "message")
           setMessages((m) => [...m, { agent: e.data.agent, content: e.data.content }]);
         else if (e.event === "done")
           setDecision({ d: e.data.decision, detail: e.data.final_trade_decision });

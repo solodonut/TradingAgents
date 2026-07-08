@@ -131,7 +131,7 @@ export type StartupCacheEvent =
   | { event: "summary"; data: StartupCacheStatusDetail };
 
 export type SSEEvent =
-  | { event: "agent_status"; data: { agent: string; team: string; status: string } }
+  | { event: "agent_status"; data: { agent: string; team: string; status: string; detail?: string } }
   | { event: "message"; data: { agent: string; team: string; content: string; ts: number } }
   | { event: "report_section"; data: { section: string; content: string } }
   | { event: "stats"; data: Record<string, number> }

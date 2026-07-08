@@ -1,6 +1,8 @@
 import queue
 import threading
 
+from langchain_core.messages import AIMessage, ToolMessage
+
 from api.runner import REPORT_SECTIONS, AnalysisRunner, chunk_to_events, debate_events
 
 
@@ -20,6 +22,54 @@ def test_report_section_also_emits_agent_done():
         e["data"]["agent"] == "market_analyst" and e["data"]["status"] == "done"
         for e in statuses
     )
+
+
+def test_tool_messages_emit_collection_status():
+    seen = set()
+    events = chunk_to_events(
+        {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "get_stock_data",
+                            "args": {"symbol": "600519.SS"},
+                            "id": "call-1",
+                        }
+                    ],
+                ),
+                ToolMessage(content="csv", tool_call_id="call-1", name="get_stock_data"),
+            ]
+        },
+        seen,
+    )
+
+    statuses = [e["data"] for e in events if e["event"] == "agent_status"]
+    assert {
+        "agent": "info_collection",
+        "team": "data",
+        "status": "working",
+        "detail": "get_stock_data",
+    } in statuses
+    assert {
+        "agent": "market_analyst",
+        "team": "analyst",
+        "status": "working",
+        "detail": "get_stock_data",
+    } in statuses
+
+
+def test_tool_status_is_not_re_emitted_for_same_tool_message():
+    seen = set()
+    chunk = {
+        "messages": [
+            ToolMessage(content="csv", tool_call_id="call-1", name="get_stock_data")
+        ]
+    }
+
+    assert chunk_to_events(chunk, seen)
+    assert chunk_to_events(chunk, seen) == []
 
 
 def test_empty_report_field_is_ignored():

@@ -2,6 +2,7 @@
 import { Check, Circle, LoaderCircle } from "lucide-react";
 
 const AGENTS: { id: string; label: string }[] = [
+  { id: "info_collection", label: "收集信息" },
   { id: "market_analyst", label: "市场" },
   { id: "social_analyst", label: "情绪" },
   { id: "news_analyst", label: "新闻" },

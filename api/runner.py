@@ -33,6 +33,22 @@ REPORT_SECTIONS: dict[str, tuple[str, str]] = {
 
 REPORT_SECTION_KEYS = frozenset(REPORT_SECTIONS)
 
+TOOL_AGENT_MAP: dict[str, tuple[str, str]] = {
+    "get_stock_data": ("market_analyst", "analyst"),
+    "get_indicators": ("market_analyst", "analyst"),
+    "get_verified_market_snapshot": ("market_analyst", "analyst"),
+    "get_global_news": ("news_analyst", "analyst"),
+    "get_news": ("news_analyst", "analyst"),
+    "get_etf_news": ("news_analyst", "analyst"),
+    "get_macro_indicators": ("news_analyst", "analyst"),
+    "get_prediction_markets": ("news_analyst", "analyst"),
+    "get_insider_transactions": ("news_analyst", "analyst"),
+    "get_fundamentals": ("fundamentals_analyst", "analyst"),
+    "get_balance_sheet": ("fundamentals_analyst", "analyst"),
+    "get_cashflow": ("fundamentals_analyst", "analyst"),
+    "get_income_statement": ("fundamentals_analyst", "analyst"),
+}
+
 # Debate progress ---------------------------------------------------------
 # speaker key -> (prose prefix, Chinese label)
 INVEST_SPEAKERS: dict[str, tuple[str, str]] = {
@@ -130,6 +146,70 @@ def _rounds_config(graph) -> dict:
     }
 
 
+def _tool_call_key(message, tool_name: str, fallback_index: int) -> str:
+    tool_call_id = getattr(message, "tool_call_id", None)
+    if tool_call_id:
+        return f"tool:{tool_call_id}"
+    msg_id = getattr(message, "id", None)
+    return f"tool:{msg_id or fallback_index}:{tool_name}"
+
+
+def _tool_status_events(chunk: dict, seen: set[str]) -> list[dict]:
+    events: list[dict] = []
+    messages = chunk.get("messages")
+    if not isinstance(messages, list):
+        return events
+
+    for index, message in enumerate(messages):
+        tool_names: list[str] = []
+        tool_call_id = getattr(message, "tool_call_id", None)
+        if tool_call_id:
+            name = getattr(message, "name", None) or "tool"
+            key = _tool_call_key(message, name, index)
+            if key in seen:
+                continue
+            seen.add(key)
+            tool_names.append(str(name))
+        else:
+            for call in getattr(message, "tool_calls", None) or []:
+                if not isinstance(call, dict):
+                    continue
+                name = call.get("name") or "tool"
+                call_id = call.get("id") or f"{index}:{name}"
+                key = f"tool:{call_id}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                tool_names.append(str(name))
+
+        for tool_name in tool_names:
+            agent, team = TOOL_AGENT_MAP.get(tool_name, ("info_collection", "data"))
+            events.append(
+                {
+                    "event": "agent_status",
+                    "data": {
+                        "agent": "info_collection",
+                        "team": "data",
+                        "status": "working",
+                        "detail": tool_name,
+                    },
+                }
+            )
+            if agent != "info_collection":
+                events.append(
+                    {
+                        "event": "agent_status",
+                        "data": {
+                            "agent": agent,
+                            "team": team,
+                            "status": "working",
+                            "detail": tool_name,
+                        },
+                    }
+                )
+    return events
+
+
 def chunk_to_events(chunk: dict, seen: set[str]) -> list[dict]:
     """Translate one LangGraph stream chunk into SSE event dicts.
 
@@ -137,6 +217,7 @@ def chunk_to_events(chunk: dict, seen: set[str]) -> list[dict]:
     Mutates ``seen`` to track which report sections were already emitted.
     """
     events: list[dict] = []
+    events.extend(_tool_status_events(chunk, seen))
     for section, (agent, team) in REPORT_SECTIONS.items():
         content = chunk.get(section)
         if not content or section in seen:
