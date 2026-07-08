@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 每个 ETF 分析开始前预取四类数据(新闻/分时/日线K线+指标/基本面)落库到 webui.db,分析时把新闻+行情快照 push 进分析师上下文、其余走 DB-backed 读取,并新增按日期查看快照的独立 ETF 详情页。
+**Goal:** 每个标的分析开始前预取四类数据(新闻/分时/日线K线+指标/基本面)落库到 webui.db,分析时把新闻+行情快照 push 进分析师上下文、其余走 DB-backed 读取,并新增按日期查看快照的独立详情页。新闻按标的类型确定性分流(ETF→`get_etf_news`,股票→`get_news`),输入代码即标注类型。
 
 **Architecture:** 方案 A —— 预取步骤内嵌在 `real_graph_factory`(构建 init_state 处),快照存 webui.db 新表 `etf_snapshots`(键 `ticker+trade_date+category`)。三个新结构化取数函数供图表用,新闻复用现有 `get_etf_news` 字符串。runner 通过 `init_state["prefetched"]` 把摘要 push 给新闻/市场分析师。详情页两个纯读 API + 手绘 SVG 图表(无图表库依赖)。
 
@@ -524,11 +524,35 @@ git commit -m "feat(store): add etf_snapshots table and read/write methods"
 - Test: `tests/test_prefetch.py`
 
 **Interfaces:**
-- Consumes: `route_to_vendor`(`get_etf_news`、`get_indicators`);`tushare_intraday.get_etf_intraday/get_etf_daily_kline/get_etf_fundamentals_kv`;`Store.upsert_snapshot`(Task 4);config(Task 1 的 `prefetch_retries`/`prefetch_backoff_base`/`prefetch_daily_lookback`)。
+- Consumes: `route_to_vendor`(`get_etf_news`、`get_news`、`get_indicators`);`tushare_utils.resolve_symbol_type`(本任务 Step 0 新增);`tushare_intraday.get_etf_intraday/get_etf_daily_kline/get_etf_fundamentals_kv`;`Store.upsert_snapshot`(Task 4);config(Task 1 的 `prefetch_retries`/`prefetch_backoff_base`/`prefetch_daily_lookback`)。
+- Produces(本任务顺带新增,供 Task 12 复用): `resolve_symbol_type(symbol: str) -> str`,返回 `"etf"`(`is_fund_symbol` 为真)或 `"stock"`。
 - Produces:
   - `@dataclass CategoryResult(category: str, status: str, payload: dict)`
   - `@dataclass SnapshotSummary(ticker, trade_date, results: list[CategoryResult])`,方法 `for_context() -> dict`
   - `prefetch_snapshot(ticker: str, trade_date: str, store, *, config: dict | None = None, sleep=time.sleep) -> SnapshotSummary`
+
+- [ ] **Step 0: 新增类型原语 `resolve_symbol_type`(TDD)**
+
+先在 `tests/test_tushare_utils.py`(无则新建)追加:
+```python
+from tradingagents.dataflows.tushare_utils import resolve_symbol_type
+
+
+def test_resolve_symbol_type_etf_vs_stock():
+    assert resolve_symbol_type("510300.SS") == "etf"
+    assert resolve_symbol_type("159915.SZ") == "etf"
+    assert resolve_symbol_type("600519.SS") == "stock"
+    assert resolve_symbol_type("000001.SZ") == "stock"
+```
+运行确认失败:`.venv/bin/python -m pytest tests/test_tushare_utils.py::test_resolve_symbol_type_etf_vs_stock -v`(`AttributeError`)。
+
+在 `tradingagents/dataflows/tushare_utils.py` 的 `is_fund_symbol` 之后追加:
+```python
+def resolve_symbol_type(symbol: str) -> str:
+    """Return "etf" for a recognized mainland fund/ETF code, else "stock"."""
+    return "etf" if is_fund_symbol(symbol) else "stock"
+```
+运行确认通过。此原语同时供本任务 `_fetch_news` 与 Task 12 的 ticker 路由复用。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -607,6 +631,19 @@ def test_prefetch_never_raises(monkeypatch):
     store = FakeStore()
     summary = prefetch.prefetch_snapshot("510300.SS", "2026-07-07", store, config=_cfg(), sleep=lambda s: None)
     assert all(r.status == "missing" for r in summary.results)
+
+
+def test_fetch_news_routes_by_type(monkeypatch):
+    seen = []
+
+    def fake_route(method, *a, **k):
+        seen.append(method)
+        return "news body"
+
+    monkeypatch.setattr(prefetch, "route_to_vendor", fake_route)
+    prefetch._fetch_news("510300.SS", "2026-07-07")  # ETF → get_etf_news
+    prefetch._fetch_news("600519.SS", "2026-07-07")  # 股票 → get_news
+    assert seen == ["get_etf_news", "get_news"]
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -640,6 +677,7 @@ from .tushare_intraday import (
     get_etf_fundamentals_kv,
     get_etf_intraday,
 )
+from .tushare_utils import resolve_symbol_type
 
 _CATEGORIES = ("news", "intraday", "indicators", "fundamentals")
 _NODATA_PREFIXES = ("NO_DATA_AVAILABLE", "DATA_SOURCE_")
@@ -689,7 +727,9 @@ def _is_nodata(result) -> bool:
 def _fetch_news(ticker: str, trade_date: str):
     end = datetime.strptime(trade_date, "%Y-%m-%d")
     start = (end - relativedelta(days=7)).strftime("%Y-%m-%d")
-    result = route_to_vendor("get_etf_news", ticker, start, trade_date)
+    # 类型感知分流:ETF→get_etf_news(基金+主题+持仓聚合),股票→get_news(个股)。
+    method = "get_etf_news" if resolve_symbol_type(ticker) == "etf" else "get_news"
+    result = route_to_vendor(method, ticker, start, trade_date)
     if _is_nodata(result):
         return result
     return {"text": result}
@@ -757,14 +797,14 @@ def prefetch_snapshot(ticker, trade_date, store, *, config=None, sleep=time.slee
 
 - [ ] **Step 4: 运行确认通过**
 
-Run: `.venv/bin/python -m pytest tests/test_prefetch.py -v`
-Expected: PASS(4 passed)。
+Run: `.venv/bin/python -m pytest tests/test_prefetch.py tests/test_tushare_utils.py -v`
+Expected: PASS(prefetch 5 passed + resolve_symbol_type 1 passed)。
 
 - [ ] **Step 5: 提交**
 
 ```bash
-git add tradingagents/dataflows/prefetch.py tests/test_prefetch.py
-git commit -m "feat(dataflows): add prefetch_snapshot with retry/backoff and missing marking"
+git add tradingagents/dataflows/prefetch.py tradingagents/dataflows/tushare_utils.py tests/test_prefetch.py tests/test_tushare_utils.py
+git commit -m "feat(dataflows): add prefetch_snapshot with type-aware news routing, retry/backoff, missing marking"
 ```
 
 ---
@@ -974,14 +1014,14 @@ git commit -m "feat(agents): push prefetched news and quote into analyst context
 
 ---
 
-### Task 8: pull 路径 —— `get_etf_news` 工具优先读快照 DB
+### Task 8: pull 路径 —— `get_etf_news` / `get_news` 工具优先读快照 DB
 
 **Files:**
-- Modify: `tradingagents/agents/utils/news_data_tools.py`(`get_etf_news` 工具加"先查快照"短路)
+- Modify: `tradingagents/agents/utils/news_data_tools.py`(`get_etf_news` **和 `get_news`** 各加"先查快照"短路)
 - Modify: `tradingagents/dataflows/config.py`(暴露当前 run 的 ticker/date/store —— 见下)
 - Test: `tests/test_tushare_etf_news.py`(追加,或新建 `tests/test_etf_news_snapshot_shortcircuit.py`)
 
-**说明:** 工具需知道"当前 ticker/date + store"。最小侵入方案:在 `real_graph_factory` 注入预取时,把 `(ticker, trade_date, store)` 存入 dataflows 的 config 单例(一个 `_prefetch_ctx` 键);工具读取该 ctx,命中则直接返回快照的 `news.text`,否则回落现有在线逻辑。
+**说明:** 工具需知道"当前 ticker/date + store"。最小侵入方案:在 `real_graph_factory` 注入预取时,把 `(ticker, trade_date, store)` 存入 dataflows 的 config 单例(一个 `_prefetch_ctx` 键);工具读取该 ctx,命中则直接返回快照的 `news.text`,否则回落现有在线逻辑。新闻快照与工具无关(存的是文本),故 **`get_etf_news`(ETF 跑法)和 `get_news`(股票跑法)对称短路** —— 谁被调都命中同一份 `news` 快照。
 
 **Interfaces:**
 - Consumes: `Store.get_snapshot`(Task 4);config 单例。
@@ -1010,6 +1050,19 @@ def test_get_etf_news_uses_snapshot(monkeypatch):
         assert "SNAPSHOT NEWS" in out
     finally:
         dfconfig.set_prefetch_ctx(None, None, None)
+
+
+def test_get_news_uses_snapshot(monkeypatch):
+    from tradingagents.agents.utils.news_data_tools import get_news
+
+    dfconfig.set_prefetch_ctx("600519.SS", "2026-07-07", FakeStore())
+    try:
+        out = get_news.invoke(
+            {"ticker": "600519.SS", "start_date": "2026-07-01", "end_date": "2026-07-07"}
+        )
+        assert "SNAPSHOT NEWS" in out
+    finally:
+        dfconfig.set_prefetch_ctx(None, None, None)
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -1034,9 +1087,11 @@ def get_prefetch_ctx():
     return _PREFETCH_CTX
 ```
 
-- [ ] **Step 4: `get_etf_news` 工具短路** —— 在 `tradingagents/agents/utils/news_data_tools.py` 的 `get_etf_news` 函数体最前面加:
+- [ ] **Step 4: 两个工具对称短路** —— 在 `tradingagents/agents/utils/news_data_tools.py` 模块级(`@tool` 定义之前)加共享辅助:
 
 ```python
+def _snapshot_news(symbol: str) -> str | None:
+    """Return the prefetched news text for the current run's symbol, else None."""
     from tradingagents.dataflows.config import get_prefetch_ctx
 
     ctx = get_prefetch_ctx()
@@ -1044,6 +1099,21 @@ def get_prefetch_ctx():
         snap = ctx["store"].get_snapshot(symbol, ctx["trade_date"]).get("news")
         if snap and snap["status"] == "ok" and snap["payload"].get("text"):
             return snap["payload"]["text"]
+    return None
+```
+
+在 `get_etf_news` 函数体最前面加:
+```python
+    hit = _snapshot_news(symbol)
+    if hit is not None:
+        return hit
+```
+
+在 `get_news` 函数体最前面加(注意入参名是 `ticker`):
+```python
+    hit = _snapshot_news(ticker)
+    if hit is not None:
+        return hit
 ```
 
 (若无匹配快照则继续现有在线逻辑,不改动其余代码。)
@@ -1071,7 +1141,7 @@ Expected: PASS。
 
 ```bash
 git add tradingagents/dataflows/config.py tradingagents/agents/utils/news_data_tools.py api/main.py api/runner.py tests/test_etf_news_snapshot_shortcircuit.py
-git commit -m "feat(agents): serve get_etf_news from prefetched snapshot when available"
+git commit -m "feat(agents): serve get_etf_news and get_news from prefetched snapshot when available"
 ```
 
 ---
@@ -1453,33 +1523,148 @@ git commit -m "feat(webui): add ETF detail page with date-selectable snapshot vi
 
 ---
 
-### Task 12: 从 watchlist 链接进详情页 + 全量验证 + CHANGELOG
+### Task 12: 输入类型标注(ticker 路由返回 type) + watchlist 链接进详情页
 
 **Files:**
-- Modify: watchlist 渲染处的组件(用 Step 1 的 grep 定位)
-- Modify: `CHANGELOG.md`
+- Modify: `api/routes/ticker.py`(返回 `type`)
+- Modify: `webui/lib/api.ts`(`lookupTicker` 返回值加 `type`)
+- Modify: `webui/components/ConfigCard.tsx`(`TickerItem` 加 `type`;渲染类型徽章 + ticker 链接进详情页)
+- Test: `tests/webui/test_routes_ticker.py`
 
-- [ ] **Step 1: 定位 watchlist 渲染处**
+**Interfaces:**
+- Consumes: `resolve_symbol_type`(Task 5 Step 0);`getEtfSnapshotDates` 路由已由 Task 9 提供;详情页 `/etf/[ticker]` 由 Task 11 提供。
 
-Run: `cd webui && grep -rnE "getWatchlist|watchlist|WatchlistItem" app components | grep -v test`
-Expected: 找到渲染 watchlist 列表项的组件与代码行。
+- [ ] **Step 1: 后端失败测试**
 
-- [ ] **Step 2: 加链接** —— 在每个 watchlist 列表项的 ticker 文本外包一层 `Link`(仿 `app/logs/[runId]/page.tsx` 的 `Link` 用法):
+```python
+# tests/webui/test_routes_ticker.py
+from fastapi.testclient import TestClient
 
-```tsx
-import Link from "next/link";
-// 列表项渲染 ticker 处:
-<Link href={`/etf/${encodeURIComponent(item.ticker)}`} className="hover:underline">
-  {item.ticker}
-</Link>
+
+def test_ticker_lookup_returns_type():
+    from api.main import app
+
+    client = TestClient(app)
+    assert client.get("/api/ticker/510300.SS").json()["type"] == "etf"
+    assert client.get("/api/ticker/600519.SS").json()["type"] == "stock"
 ```
 
-- [ ] **Step 3: 前端类型检查**
+- [ ] **Step 2: 运行确认失败**
+
+Run: `.venv/bin/python -m pytest tests/webui/test_routes_ticker.py -v`
+Expected: FAIL(`KeyError: 'type'`)。
+
+- [ ] **Step 3: 后端实现** —— 改 `api/routes/ticker.py`:
+
+```python
+"""Ticker route: resolve a single code to its company name + type (read-only)."""
+
+from fastapi import APIRouter
+
+from tradingagents.dataflows.ticker_name import resolve_ticker_name
+from tradingagents.dataflows.tushare_utils import resolve_symbol_type
+
+router = APIRouter(prefix="/api/ticker", tags=["ticker"])
+
+
+@router.get("/{code}")
+def lookup_ticker(code: str) -> dict:
+    ticker = code.strip().upper()
+    name = resolve_ticker_name(ticker)
+    return {
+        "ticker": ticker,
+        "name": name,
+        "valid": bool(name),
+        "type": resolve_symbol_type(ticker),
+    }
+```
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `.venv/bin/python -m pytest tests/webui/test_routes_ticker.py -v`
+Expected: PASS。
+
+- [ ] **Step 5: 前端 `lookupTicker` 带回 type** —— 改 `webui/lib/api.ts`(错误分支不带 type,故设为可选):
+
+```typescript
+export async function lookupTicker(
+  code: string,
+): Promise<{ ticker: string; name: string | null; valid: boolean; type?: "etf" | "stock" }> {
+  const t = code.trim().toUpperCase();
+  try {
+    const r = await fetch(`${BASE}/api/ticker/${encodeURIComponent(t)}`);
+    if (!r.ok) return { ticker: t, name: null, valid: false };
+    return await r.json();
+  } catch {
+    return { ticker: t, name: null, valid: false };
+  }
+}
+```
+
+- [ ] **Step 6: ConfigCard 存 type + 徽章 + 详情页链接** —— 改 `webui/components/ConfigCard.tsx`:
+
+`TickerItem` 类型(约 line 7)加 `type`:
+```typescript
+type TickerItem = { ticker: string; name: string; type?: "etf" | "stock" };
+```
+
+顶部 import 加 `Link`:
+```typescript
+import Link from "next/link";
+```
+
+两处 `lookupTicker` 命中后写回名称的地方(补查 effect 约 line 137、新增项约 line 164),把 `type` 一并存下 —— 将
+```typescript
+prev.map((t) => (t.ticker === code ? { ...t, name: res.name as string } : t))
+```
+改为
+```typescript
+prev.map((t) => (t.ticker === code ? { ...t, name: res.name as string, type: res.type } : t))
+```
+
+渲染处(约 line 352-353)把裸 ticker 文本换成"链接 + 类型徽章":
+```tsx
+<span className="flex min-w-0 flex-1 items-baseline gap-2">
+  <Link
+    href={`/etf/${encodeURIComponent(t.ticker)}`}
+    className="shrink-0 font-mono text-sm text-foreground hover:underline"
+  >
+    {t.ticker}
+  </Link>
+  {t.type ? (
+    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+      {t.type === "etf" ? "ETF" : "股票"}
+    </span>
+  ) : null}
+  {t.name ? (
+```
+(其余 `t.name` 渲染块保持不变。)
+
+- [ ] **Step 7: 前端类型检查**
 
 Run: `cd webui && npx tsc --noEmit`
 Expected: 无类型错误。
 
-- [ ] **Step 4: 后端全量 lint + 测试**
+- [ ] **Step 8: 提交**
+
+```bash
+git add api/routes/ticker.py tests/webui/test_routes_ticker.py webui/lib/api.ts webui/components/ConfigCard.tsx
+git commit -m "feat(webui): label ticker type on lookup and link watchlist items to detail page"
+```
+
+---
+
+### Task 13: 全量验证 + CHANGELOG
+
+**Files:**
+- Modify: `CHANGELOG.md`
+
+- [ ] **Step 1: 前端类型检查 + 单测**
+
+Run: `cd webui && npx tsc --noEmit && npx vitest run`
+Expected: 无类型错误;vitest 全绿。
+
+- [ ] **Step 2: 后端全量 lint + 测试**
 
 Run:
 ```bash
@@ -1487,19 +1672,21 @@ cd "/Users/joseph/Home/Studio/Vibe Code Studio/TradingAgents" && .venv/bin/ruff 
 ```
 Expected: ruff 无错;pytest 全绿(不含 integration)。
 
-- [ ] **Step 5: 更新 CHANGELOG.md** —— 在 `## [Unreleased]` 下 `### Added` 追加:
+- [ ] **Step 3: 更新 CHANGELOG.md** —— 在 `## [Unreleased]` 下 `### Added` 追加:
 
 ```markdown
-- ETF 预取快照:每个 ETF 分析开始前预取新闻/分时/日线指标/基本面并落库到 webui.db,
-  新闻+行情快照 push 进新闻/市场分析师上下文(根治"分析丢数据"),新增按日期查看四类
-  数据的独立 ETF 详情页。分时/日线来自 tushare `stk_mins`/`fund_daily`。
+- 预取快照:每个标的分析开始前预取新闻/分时/日线指标/基本面并落库到 webui.db,
+  新闻+行情快照 push 进新闻/市场分析师上下文(根治"分析丢数据")。新闻按标的类型
+  确定性分流(ETF→get_etf_news,股票→get_news),不再依赖 LLM 选对工具;输入代码
+  即标注类型(ETF/股票)。新增按日期查看四类数据的独立详情页。分时/日线来自 tushare
+  `stk_mins`/`fund_daily`。
 ```
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 4: 提交**
 
 ```bash
-git add webui CHANGELOG.md
-git commit -m "feat(webui): link watchlist items to ETF detail page; update changelog"
+git add CHANGELOG.md
+git commit -m "docs: changelog for prefetch snapshot with type-aware news routing"
 ```
 
 ---
@@ -1514,14 +1701,17 @@ git commit -m "feat(webui): link watchlist items to ETF detail page; update chan
 - 失败处理 B(重试带退避 + missing 继续)→ Task 5 `_run_with_retry` ✓
 - 投喂 ③(push + DB pull)→ Task 7(push)+ Task 8(pull)✓
 - 快照存 webui.db → Task 4 ✓;与 startup-cache 隔离(不同存储位置)✓
-- 详情页(独立页 + 四类可视化 + 日期选择 + 空快照留空)→ Task 9/10/11/12 ✓
+- 详情页(独立页 + 四类可视化 + 日期选择 + 空快照留空)→ Task 9/10/11 + Task 12 链接 ✓
 - 分时源 tushare `stk_mins` + 积分风险优雅降级 → Task 1 Step 1 探活 + Task 5 missing 兜底 ✓
+- 新闻按类型确定性分流(ETF→get_etf_news,股票→get_news)→ Task 5 Step 0 `resolve_symbol_type` + `_fetch_news` 分支 + Task 8 两工具对称短路 ✓
+- 输入代码标注类型 → Task 12 ticker 路由返回 `type` + ConfigCard 徽章 ✓
+- 范围边界(仅新闻按类型分流,其余三类股票跑时优雅 missing)→ Task 1-3 保持 ETF 取数,Task 5 `_run_with_retry` 兜 missing ✓
 
 **2. 占位符扫描:** 无 TBD/TODO;每个代码步骤含完整代码。前端 `MarkdownContent` prop 名与 watchlist 渲染处以"先读/先 grep"步骤兜底,非占位。
 
-**3. 类型一致性:** `SnapshotSummary.for_context()` 键(`news_text`/`quote`/`missing`)在 Task 5 定义,Task 7 `build_prefetch_block` 与 Task 6 测试一致消费;`get_snapshot` 返回结构(`{category:{status,payload,fetched_at}}`)在 Task 4 定义,Task 8/9 一致消费;`upsert_snapshot` 签名 Task 4 定义,Task 5 一致调用。
+**3. 类型一致性:** `SnapshotSummary.for_context()` 键(`news_text`/`quote`/`missing`)在 Task 5 定义,Task 7 `build_prefetch_block` 与 Task 6 测试一致消费;`get_snapshot` 返回结构(`{category:{status,payload,fetched_at}}`)在 Task 4 定义,Task 8/9 一致消费;`upsert_snapshot` 签名 Task 4 定义,Task 5 一致调用;`resolve_symbol_type` 在 Task 5 Step 0 定义,Task 5 `_fetch_news` 与 Task 12 ticker 路由一致消费;`lookupTicker` 返回 `type` 在 Task 12 定义,ConfigCard `TickerItem.type` 一致消费。
 
 **已知需实现时确认的点(非阻塞):**
 - tushare `stk_mins`/`fund_nav` 字段名以真实返回为准(Task 1 Step 1 探活时核对);
 - `MarkdownContent` 的实际 prop 名(Task 11 Step 2 读组件确认);
-- watchlist 渲染组件位置(Task 12 Step 1 grep 定位)。
+- watchlist 渲染组件已定位为 `webui/components/ConfigCard.tsx`(徽章/链接约 line 137/164/352-353,行号以实际为准)。

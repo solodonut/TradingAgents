@@ -43,6 +43,9 @@
 | 详情页 | 独立页,四类全可视化,按日期看快照;历史日显示当时快照,当天无数据留空 |
 | 整体架构 | **方案 A**: 预取内嵌 runner,快照存 webui.db 新表,不动核心链路 |
 | 分时数据源 | tushare SDK `stk_mins`(已验证对 ETF 代码返回整天分钟 OHLCV) |
+| 新闻工具分流 | **类型感知**: ETF→`get_etf_news`,股票→`get_news`;预取阶段代码**强制**调对应工具并 push,不依赖 LLM 选(治 B) |
+| 类型识别范围 | **仅新闻**按类型分流;分时/指标/基本面保持 ETF 取数,股票跑时这三类优雅标 `missing`(YAGNI,后续可扩) |
+| 入口类型标注 | `GET /api/ticker/{code}` 返回 `type`(etf/stock),前端清单项显示类型徽章;判定复用 `resolve_symbol_type`(包 `is_fund_symbol`) |
 
 ## 5. 数据模型
 
@@ -91,9 +94,10 @@ prefetch_snapshot(ticker, trade_date, store) -> SnapshotSummary
 
 流程(四类逐类抓取,互相独立、互不阻塞):
 
-1. 每类调对应现有 dataflows 函数(新闻走 `get_etf_news`;指标/日线走
-   `tushare_indicator` / `fund_daily`;基本面走 `tushare_etf_profile`;分时走**新增**
-   `get_etf_intraday`,见第 8 节)。
+1. 每类调对应现有 dataflows 函数。**新闻按标的类型分流**——用 `resolve_symbol_type`
+   判定:ETF→`get_etf_news`,股票→`get_news`(两者结果都存进同一 `news` category);
+   指标/日线走 `tushare_indicator` / `fund_daily`;基本面走 `tushare_etf_profile`;
+   分时走**新增** `get_etf_intraday`,见第 8 节。
 2. **带退避重试**: 每类最多 N 次(默认 3),退避递增(1s/2s/4s)。仅针对疑似
    限流/超时等可恢复错误重试;拿到 `NO_DATA_AVAILABLE`(本就没这项数据)**不算失败、
    不重试**,直接记 `missing`。
@@ -135,8 +139,10 @@ initial_state["prefetched"] = summary.for_context()       # 摘要塞进初始 s
 
 ### 7c. pull 路径 —— 细粒度工具改读快照 DB(治 A 其余部分)
 
-- `get_etf_news` 及指标/日线/基本面相关工具:分析期间**优先从 `etf_snapshots` 读**当前
-  (ticker, date) 快照;存在就直接返回,不打在线 API;不存在才回落在线兜底。
+- `get_etf_news` **及 `get_news`**(对称)、指标/日线/基本面相关工具:分析期间**优先从
+  `etf_snapshots` 读**当前 (ticker, date) 快照;存在就直接返回,不打在线 API;不存在才回落
+  在线兜底。新闻快照与工具无关(存的是文本),故 ETF 跑法用 `get_etf_news`、股票跑法用
+  `get_news`,谁被调都命中同一份 `news` 快照。
 - 工具如何知道"当前 ticker/date":通过已有 config 单例 / 运行上下文传入,**不改
   `route_to_vendor` 签名**,只在这几个 ETF 相关工具函数内部加一层"先查快照"短路。
 
@@ -171,10 +177,13 @@ pull 让指标/历史 K 线这类量大数据按需取、又不打在线(治 A �
 - `GET /api/etf/{ticker}/snapshot?date=YYYY-MM-DD` → 那天四类 payload + 各自 status;
   `missing` 类返回空 + 标记。
 - 纯读 `etf_snapshots`,**不触发抓取**。
+- **现有 `GET /api/ticker/{code}`** 增加 `type` 字段(etf/stock),供前端在输入代码后即时
+  标注类型(与新闻分流同源,均基于 `resolve_symbol_type`)。
 
 ### 9b. 前端(`webui/`,Next.js 16 / React 19)
 
-- watchlist 每个 ETF 可点进独立详情页(新路由 `/etf/[ticker]`)。
+- watchlist 每个标的可点进独立详情页(新路由 `/etf/[ticker]`,名义 etf 但对任意 ticker 通用)。
+- 清单项在代码旁显示**类型徽章**("ETF" / "股票"),来自 `/api/ticker/{code}` 的 `type`。
 - 顶部日期选择器,默认最近一个有快照的日;选到无数据日 → 各块留空。
 - 四区块可视化: ①分时价格折线图 ②新闻列表(标题/来源/时间/小节/原文链接)
   ③技术指标(近 N 日 K 线 + MA/MACD/RSI)④基本面(PE/PB/净值/份额键值卡片)。
@@ -200,7 +209,10 @@ pull 让指标/历史 K 线这类量大数据按需取、又不打在线(治 A �
 
 - 新增: `tradingagents/dataflows/prefetch.py`、`api/routes/snapshots.py`、
   `webui/` 详情页路由与组件、分时取数(`tushare_stock.py` 或新 `tushare_intraday.py`)。
-- 改动: `api/store.py`(新表 + 读写方法)、`api/runner.py`(预取步骤 + push)、
-  `api/main.py`(注册路由)、`tradingagents/dataflows/interface.py`(`VENDOR_METHODS`
-  注册 `get_etf_intraday`)、新闻/市场分析师 prompt 组装、相关 state TypedDict、
-  ETF 相关工具函数(加快照短路)、`default_config.py`(重试/退避配置)。
+- 改动: `api/store.py`(新表 + 读写方法)、`api/runner.py`(预取步骤 + push + ctx 清理)、
+  `api/main.py`(注册路由 + 预取集成)、`api/routes/ticker.py`(返回 `type`)、
+  `tradingagents/dataflows/interface.py`(`VENDOR_METHODS` 注册 `get_etf_intraday`)、
+  `tradingagents/dataflows/tushare_utils.py`(`resolve_symbol_type`)、新闻/市场分析师
+  prompt 组装、相关 state TypedDict、ETF 相关工具函数(`get_etf_news` + `get_news` 加快照
+  短路)、`default_config.py`(重试/退避配置)、`webui/components/ConfigCard.tsx`(类型徽章 +
+  详情页链接)。
