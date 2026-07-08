@@ -185,3 +185,8 @@ def is_fund_symbol(symbol: str) -> bool:
         return is_etf_code(to_bare_code(symbol))
     except ValueError:
         return False
+
+
+def resolve_symbol_type(symbol: str) -> str:
+    """Return "etf" for a recognized mainland fund/ETF code, else "stock"."""
+    return "etf" if is_fund_symbol(symbol) else "stock"
