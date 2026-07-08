@@ -190,3 +190,11 @@ export type ChatSSEEvent =
   | { event: "token"; data: { content: string } }
   | { event: "done"; data: { content: string; tool_calls: Record<string, unknown>[] } }
   | { event: "error"; data: { message: string } };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type EtfSnapshotCategory = { status: "ok" | "partial" | "missing"; payload: any };
+export type EtfSnapshot = {
+  ticker: string;
+  trade_date: string;
+  categories: Record<string, EtfSnapshotCategory>;
+};

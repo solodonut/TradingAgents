@@ -3,6 +3,7 @@ import type {
   ChatMessageT,
   ChatSessionT,
   ConfigOptions,
+  EtfSnapshot,
   HistorySummary,
   PortfolioHolding,
   QueueState,
@@ -356,4 +357,18 @@ export async function getPortfolio(
 
 export function chatStreamUrl(id: string): string {
   return `${BASE}/api/chat/sessions/${id}/stream`;
+}
+
+export async function getEtfSnapshotDates(ticker: string): Promise<string[]> {
+  const r = await fetch(`${BASE}/api/etf/${encodeURIComponent(ticker)}/dates`);
+  if (!r.ok) throw new Error("failed to load snapshot dates");
+  return (await r.json()).dates as string[];
+}
+
+export async function getEtfSnapshot(ticker: string, date: string): Promise<EtfSnapshot> {
+  const r = await fetch(
+    `${BASE}/api/etf/${encodeURIComponent(ticker)}/snapshot?date=${encodeURIComponent(date)}`,
+  );
+  if (!r.ok) throw new Error("failed to load snapshot");
+  return r.json();
 }
