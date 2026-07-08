@@ -103,6 +103,33 @@ export type ServiceHealthEvent =
   | { event: "service_status"; data: ServiceHealthItem }
   | { event: "summary"; data: ServiceHealthSummary };
 
+export type StartupCacheStatus = "pending" | "running" | "completed" | "error";
+
+export interface StartupCacheError {
+  path: string;
+  message: string;
+}
+
+export interface StartupCacheStatusDetail {
+  status: StartupCacheStatus;
+  phase: string;
+  message: string;
+  current_path: string | null;
+  processed_items: number;
+  total_items: number;
+  deleted_files: number;
+  released_bytes: number;
+  errors: StartupCacheError[];
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string | null;
+  cache_root: string;
+}
+
+export type StartupCacheEvent =
+  | { event: "cache_clear_status"; data: StartupCacheStatusDetail }
+  | { event: "summary"; data: StartupCacheStatusDetail };
+
 export type SSEEvent =
   | { event: "agent_status"; data: { agent: string; team: string; status: string } }
   | { event: "message"; data: { agent: string; team: string; content: string; ts: number } }

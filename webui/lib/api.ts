@@ -10,6 +10,8 @@ import type {
   RunStatusDetail,
   ServiceHealthItem,
   ServiceHealthEvent,
+  StartupCacheEvent,
+  StartupCacheStatusDetail,
 } from "./types";
 import type { LogViewPayload } from "./log-view";
 
@@ -167,6 +169,14 @@ export function serviceHealthStreamUrl(): string {
   return `${BASE}/api/health/services/stream`;
 }
 
+export function startupCacheStatusUrl(): string {
+  return `${BASE}/api/startup-cache/status`;
+}
+
+export function startupCacheStreamUrl(): string {
+  return `${BASE}/api/startup-cache/stream`;
+}
+
 export async function checkServiceHealth(serviceId: string): Promise<ServiceHealthItem> {
   const encodedId = serviceId.split("/").map(encodeURIComponent).join("/");
   const r = await fetch(`${BASE}/api/health/services/${encodedId}`);
@@ -202,6 +212,45 @@ export function subscribeServiceHealth(
   es.onerror = () => {
     es.close();
     onError("服务检查连接中断");
+    onClose();
+  };
+  return () => es.close();
+}
+
+export async function getStartupCacheStatus(): Promise<StartupCacheStatusDetail> {
+  const r = await fetch(startupCacheStatusUrl());
+  if (!r.ok) throw new Error("无法加载启动缓存清理状态");
+  return r.json();
+}
+
+export function subscribeStartupCacheClear(
+  onEvent: (e: StartupCacheEvent) => void,
+  onClose: () => void,
+  onError: (message: string) => void,
+): () => void {
+  const es = new EventSource(startupCacheStreamUrl());
+  const statusHandler = (ev: MessageEvent) => {
+    try {
+      onEvent({ event: "cache_clear_status", data: JSON.parse(ev.data) });
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  const summaryHandler = (ev: MessageEvent) => {
+    try {
+      onEvent({ event: "summary", data: JSON.parse(ev.data) });
+    } catch {
+      /* ignore malformed */
+    } finally {
+      es.close();
+      onClose();
+    }
+  };
+  es.addEventListener("cache_clear_status", statusHandler);
+  es.addEventListener("summary", summaryHandler);
+  es.onerror = () => {
+    es.close();
+    onError("启动缓存清理连接中断");
     onClose();
   };
   return () => es.close();
