@@ -29,3 +29,11 @@ def test_queue_routes_registered():
 
     client = TestClient(app)
     assert client.get("/api/queue").status_code == 200
+
+
+@pytest.mark.smoke
+def test_snapshot_routes_registered():
+    from api.main import app
+
+    client = TestClient(app)
+    assert client.get("/api/etf/510300.SS/dates").status_code == 200

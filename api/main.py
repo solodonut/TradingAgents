@@ -139,6 +139,10 @@ from api.routes import watchlist as watchlist_routes  # noqa: E402
 
 app.include_router(watchlist_routes.router)
 
+from api.routes import snapshots as snapshots_routes  # noqa: E402
+
+app.include_router(snapshots_routes.router)
+
 
 def real_graph_factory(req):
     """Build a TradingAgentsGraph from a request.
