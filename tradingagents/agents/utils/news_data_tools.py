@@ -5,6 +5,18 @@ from langchain_core.tools import tool
 from tradingagents.dataflows.interface import route_to_vendor
 
 
+def _snapshot_news(symbol: str) -> str | None:
+    """Return the prefetched news text for the current run's symbol, else None."""
+    from tradingagents.dataflows.config import get_prefetch_ctx
+
+    ctx = get_prefetch_ctx()
+    if ctx and ctx.get("ticker") == symbol and ctx.get("store") is not None:
+        snap = ctx["store"].get_snapshot(symbol, ctx["trade_date"]).get("news")
+        if snap and snap["status"] == "ok" and snap["payload"].get("text"):
+            return snap["payload"]["text"]
+    return None
+
+
 def _is_unavailable_result(result: str) -> bool:
     return result.startswith(
         (
@@ -42,6 +54,9 @@ def get_news(
     Returns:
         str: A formatted string containing news data
     """
+    hit = _snapshot_news(ticker)
+    if hit is not None:
+        return hit
     prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence = (
         _provenance_helpers()
     )
@@ -77,6 +92,9 @@ def get_etf_news(
     Retrieve ETF/fund-specific news for a mainland China ETF or fund.
     Returns fund-level, index/theme, and top disclosed holdings news.
     """
+    hit = _snapshot_news(symbol)
+    if hit is not None:
+        return hit
     prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence = (
         _provenance_helpers()
     )

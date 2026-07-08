@@ -274,6 +274,9 @@ class AnalysisRunner:
                         with contextlib.suppress(Exception):
                             run_logger.close()
             finally:
+                from tradingagents.dataflows.config import set_prefetch_ctx
+
+                set_prefetch_ctx(None, None, None)
                 self._q.put(None)
 
     def _is_cancelled(self) -> bool:

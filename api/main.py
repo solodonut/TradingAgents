@@ -191,6 +191,9 @@ def _inject_prefetched(init_state: dict, ticker: str, trade_date: str, store) ->
     try:
         summary = prefetch_snapshot(ticker, trade_date, store)
         init_state["prefetched"] = summary.for_context()
+        from tradingagents.dataflows.config import set_prefetch_ctx
+
+        set_prefetch_ctx(ticker, trade_date, store)
     except Exception:  # noqa: BLE001 - prefetch must never block a run
         logger.exception("prefetch: snapshot failed for %s %s", ticker, trade_date)
         init_state["prefetched"] = None

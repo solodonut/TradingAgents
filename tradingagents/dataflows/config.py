@@ -37,5 +37,19 @@ def get_config() -> dict:
     return deepcopy(_config)
 
 
+_PREFETCH_CTX: dict | None = None
+
+
+def set_prefetch_ctx(ticker, trade_date, store) -> None:
+    global _PREFETCH_CTX
+    _PREFETCH_CTX = None if ticker is None else {
+        "ticker": ticker, "trade_date": trade_date, "store": store
+    }
+
+
+def get_prefetch_ctx():
+    return _PREFETCH_CTX
+
+
 # Initialize with default config
 initialize_config()
