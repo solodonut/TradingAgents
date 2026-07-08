@@ -56,3 +56,28 @@ def test_get_etf_daily_kline_sorted_ascending(monkeypatch):
     dates = [k["date"] for k in out["kline"]]
     assert dates == ["2026-07-04", "2026-07-07"]
     assert out["kline"][-1]["c"] == 4.826
+
+
+def test_get_etf_fundamentals_kv_builds_items(monkeypatch):
+    monkeypatch.setattr(
+        tushare_intraday,
+        "_fetch_fund_basic_row",
+        lambda ts_code: {"name": "沪深300ETF", "list_date": "20120528"},
+    )
+    monkeypatch.setattr(
+        tushare_intraday,
+        "_fetch_fund_nav_row",
+        lambda ts_code, trade_date: {"unit_nav": 4.82, "fund_share": 1234.5},
+    )
+    out = tushare_intraday.get_etf_fundamentals_kv("510300.SS", "2026-07-07")
+    labels = {it["label"] for it in out["items"]}
+    assert "基金简称" in labels and "最新净值" in labels
+
+
+def test_get_etf_fundamentals_kv_all_missing_raises(monkeypatch):
+    monkeypatch.setattr(tushare_intraday, "_fetch_fund_basic_row", lambda ts_code: {})
+    monkeypatch.setattr(
+        tushare_intraday, "_fetch_fund_nav_row", lambda ts_code, trade_date: {}
+    )
+    with pytest.raises(NoMarketDataError):
+        tushare_intraday.get_etf_fundamentals_kv("510300.SS", "2026-07-07")

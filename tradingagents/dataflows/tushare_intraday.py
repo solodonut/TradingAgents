@@ -91,3 +91,48 @@ def get_etf_daily_kline(symbol: str, trade_date: str, lookback: int = 60) -> dic
     if not kline:
         raise NoMarketDataError(symbol, ts_code, "empty daily kline")
     return {"kline": kline}
+
+
+_FUND_TTL_SECONDS = 24 * 3600
+
+
+def _fetch_fund_basic_row(ts_code: str) -> dict:
+    def _fetch():
+        df = call_tushare(lambda: get_tushare_client().fund_basic(ts_code=ts_code))
+        return df.iloc[0].to_dict() if df is not None and not df.empty else {}
+
+    return cached_call(f"fund_basic_kv/{ts_code}", _FUND_TTL_SECONDS, _fetch)
+
+
+def _fetch_fund_nav_row(ts_code: str, trade_date: str) -> dict:
+    end = trade_date.replace("-", "")
+
+    def _fetch():
+        df = call_tushare(
+            lambda: get_tushare_client().fund_nav(ts_code=ts_code, end_date=end)
+        )
+        return df.iloc[0].to_dict() if df is not None and not df.empty else {}
+
+    return cached_call(f"fund_nav_kv/{ts_code}/{end}", _FUND_TTL_SECONDS, _fetch)
+
+
+def get_etf_fundamentals_kv(symbol: str, trade_date: str) -> dict:
+    ts_code = to_ts_code(symbol)
+    basic = _fetch_fund_basic_row(ts_code) or {}
+    nav = _fetch_fund_nav_row(ts_code, trade_date) or {}
+
+    candidates = [
+        ("基金简称", basic.get("name")),
+        ("上市日期", basic.get("list_date")),
+        ("管理人", basic.get("management")),
+        ("最新净值", nav.get("unit_nav") or nav.get("accum_nav")),
+        ("份额(万)", nav.get("fund_share")),
+    ]
+    items = [
+        {"label": label, "value": str(value)}
+        for label, value in candidates
+        if value not in (None, "", "nan")
+    ]
+    if not items:
+        raise NoMarketDataError(symbol, ts_code, "no fundamentals fields")
+    return {"items": items}
