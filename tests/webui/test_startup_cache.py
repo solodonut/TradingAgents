@@ -240,6 +240,39 @@ def test_assert_startup_cache_ready_raises_specific_message_for_terminal_error(t
         assert_startup_cache_ready(request)
 
 
+def test_startup_cache_status_route(client, tmp_path):
+    import api.main as main
+    from api.startup_cache import StartupCacheClearer
+
+    clearer = StartupCacheClearer(tmp_path / "cache")
+    clearer.run_sync()
+    main.app.state.startup_cache_clearer = clearer
+
+    resp = client.get("/api/startup-cache/status")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "completed"
+
+
+def test_startup_cache_stream_route(client, tmp_path):
+    import api.main as main
+    from api.startup_cache import StartupCacheClearer
+
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+    (cache_root / "one.csv").write_text("x", encoding="utf-8")
+    clearer = StartupCacheClearer(cache_root)
+    clearer.run_sync()
+    main.app.state.startup_cache_clearer = clearer
+
+    with client.stream("GET", "/api/startup-cache/stream") as stream:
+        body = "".join(stream.iter_text())
+
+    assert "event: cache_clear_status" in body
+    assert "event: summary" in body
+    assert '"status": "completed"' in body
+
+
 def test_sse_json_wraps_payload_as_json_string():
     from api.startup_cache import sse_json
 

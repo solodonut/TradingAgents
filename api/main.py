@@ -39,6 +39,7 @@ app.state.starting_telemetry = None
 app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
 app.state.chat_llm_factory = None  # set at startup; tests inject their own
 app.state.scheduler = None  # QueueScheduler, created at startup; tests reset to None
+app.state.startup_cache_clearer = None  # StartupCacheClearer, created at startup
 app.state.model_health = None  # set by the startup health check; tests may inject
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,10 @@ app.include_router(queue_routes.router)
 from api.routes import health as health_routes  # noqa: E402
 
 app.include_router(health_routes.router)
+
+from api.routes import startup_cache as startup_cache_routes  # noqa: E402
+
+app.include_router(startup_cache_routes.router)
 
 from api.routes import ticker as ticker_routes  # noqa: E402
 
