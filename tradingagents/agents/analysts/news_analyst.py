@@ -2,6 +2,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from tradingagents.agents.utils.agent_utils import (
     get_citation_instruction,
+    get_etf_news,
     get_global_news,
     get_instrument_context_from_state,
     get_language_instruction,
@@ -16,7 +17,7 @@ from tradingagents.dataflows.config import get_config
 def _china_only_tools():
     config = get_config()
     if config.get("domestic_china_only", False):
-        return [get_news]
+        return [get_news, get_etf_news]
 
     tools = [get_news, get_global_news]
     if config.get("data_vendors", {}).get("macro_data") not in {"disabled", "none", "off"}:
@@ -37,7 +38,7 @@ def create_news_analyst(llm):
 
         if get_config().get("domestic_china_only", False):
             system_message = (
-                f"You are a China mainland market news researcher. Analyze recent domestic news over the past week that is relevant for this {asset_label}, using only the available get_news(query, start_date, end_date) tool backed by China-market data. Focus on A-share/ETF headlines, policy, liquidity, sector rotation, fund flows, issuer/product context, and exchange or regulator news when available. Do not request or cite overseas-only sources such as Yahoo Finance, FRED, Polymarket, StockTwits, or Reddit. If a data source is unavailable, state that clearly instead of estimating."
+                f"You are a China mainland market news researcher. Analyze recent domestic news over the past week that is relevant for this {asset_label}, using only the available China-market tools. For mainland ETF/fund symbols, call get_etf_news(symbol, start_date, end_date) first because ETF context depends on fund-level, index/theme, and top-holding news. For individual A-share stocks, call get_news(ticker, start_date, end_date). Do not pass free-text themes or company names to get_news; it is ticker-only. Focus on A-share/ETF headlines, policy, liquidity, sector rotation, fund flows, issuer/product context, and exchange or regulator news when available. Do not request or cite overseas-only sources such as Yahoo Finance, FRED, Polymarket, StockTwits, or Reddit. If a data source is unavailable, state that clearly instead of estimating."
                 + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
                 + get_language_instruction()
                 + get_citation_instruction()

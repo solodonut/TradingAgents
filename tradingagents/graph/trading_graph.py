@@ -15,6 +15,7 @@ from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_balance_sheet,
     get_cashflow,
+    get_etf_news,
     get_fundamentals,
     get_global_news,
     get_income_statement,
@@ -206,7 +207,7 @@ class TradingAgentsGraph:
     def _create_tool_nodes(self) -> dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
         if getattr(self, "config", {}).get("domestic_china_only", False):
-            news_tools = [get_news]
+            news_tools = [get_news, get_etf_news]
         else:
             news_tools = [
                 get_news,

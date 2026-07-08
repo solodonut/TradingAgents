@@ -66,6 +66,42 @@ def get_news(
     )
     return prefix_with_evidence(result, citation_id, f"get_news: {ticker}")
 
+
+@tool
+def get_etf_news(
+    symbol: Annotated[str, "Mainland China ETF/fund symbol"],
+    start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
+    end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+) -> str:
+    """
+    Retrieve ETF/fund-specific news for a mainland China ETF or fund.
+    Returns fund-level, index/theme, and top disclosed holdings news.
+    """
+    prefix_with_evidence, register_dataset_evidence, register_unavailable_evidence = (
+        _provenance_helpers()
+    )
+    result = route_to_vendor("get_etf_news", symbol, start_date, end_date)
+    query = {"symbol": symbol, "start_date": start_date, "end_date": end_date}
+    if isinstance(result, str) and _is_unavailable_result(result):
+        citation_id = register_unavailable_evidence(
+            tool_name="get_etf_news",
+            vendor="configured vendors",
+            query=query,
+            reason=result,
+        )
+        return prefix_with_evidence(result, citation_id, "get_etf_news unavailable")
+    citation_id = register_dataset_evidence(
+        kind="news",
+        source_name="configured news vendor",
+        title=f"get_etf_news: {symbol}",
+        vendor="configured vendors",
+        tool_name="get_etf_news",
+        query=query,
+        published_at=f"{start_date}..{end_date}",
+    )
+    return prefix_with_evidence(result, citation_id, f"get_etf_news: {symbol}")
+
+
 @tool
 def get_global_news(
     curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],

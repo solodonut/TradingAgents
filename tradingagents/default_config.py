@@ -127,6 +127,9 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "news_article_limit": 20,             # max articles per ticker (ticker-news)
     "global_news_article_limit": 10,      # max articles for global/macro news
     "global_news_lookback_days": 7,       # macro news lookback window
+    "etf_news_top_holdings": 5,           # max disclosed ETF holdings to enrich with news
+    "etf_news_per_holding_limit": 3,      # max articles per ETF top holding
+    "etf_news_theme_limit": 5,            # max index/theme articles in ETF news package
     # Search queries used by get_global_news for macro headlines. Extend or
     # replace to broaden geographic / sector coverage.
     "global_news_queries": [
@@ -163,6 +166,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
         "get_news": "tushare,akshare,eastmoney",
+        "get_etf_news": "tushare",
         "get_global_news": "tushare,yfinance",
         "get_etf_profile": "akshare,tushare,tdx,longbridge",
     },

@@ -3,6 +3,7 @@
 from tradingagents.agents.utils.agent_utils import (
     get_balance_sheet,
     get_cashflow,
+    get_etf_news,
     get_etf_profile,
     get_fundamentals,
     get_global_news,
@@ -26,6 +27,7 @@ ADVISOR_TOOLS = [
     get_cashflow,
     get_income_statement,
     get_news,
+    get_etf_news,
     get_global_news,
     get_insider_transactions,
     get_macro_indicators,

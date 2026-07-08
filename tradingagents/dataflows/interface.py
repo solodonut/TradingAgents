@@ -41,6 +41,7 @@ from .longbridge import (
 )
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
 from .tdx import get_etf_profile as get_tdx_etf_profile
+from .tushare_etf_news import get_etf_news as get_tushare_etf_news
 from .tushare_etf_profile import get_etf_profile as get_tushare_etf_profile
 from .tushare_fundamentals import (
     get_balance_sheet as get_tushare_balance_sheet,
@@ -107,6 +108,7 @@ TOOLS_CATEGORIES = {
         "description": "News and insider data",
         "tools": [
             "get_news",
+            "get_etf_news",
             "get_global_news",
             "get_insider_transactions",
         ]
@@ -202,6 +204,9 @@ VENDOR_METHODS = {
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
         "tushare": get_tushare_global_news,
+    },
+    "get_etf_news": {
+        "tushare": get_tushare_etf_news,
     },
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
