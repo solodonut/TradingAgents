@@ -10,6 +10,15 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **ETF 预取快照的技术指标类目必崩,报 `get_indicators() missing 1 required positional
+  argument: 'look_back_days'`。** `prefetch._fetch_indicators` 调
+  `route_to_vendor("get_indicators", ticker, start, trade_date)` 只传了 3 个位置参数,而
+  `get_indicators(symbol, indicator, curr_date, look_back_days)` 需要 4 个:日期字符串 `start`
+  被错塞进 `indicator` 位,`look_back_days` 整个缺失,任何 vendor(tushare/akshare)都直接抛错,
+  ETF 详情页「技术指标/日线」区块的 `indicator_text` 始终为空。改为遍历核心指标集
+  (`macd,rsi,close_50_sma,boll`),以完整签名 `(ticker, indicator, trade_date, lookback)` 逐个调用
+  并拼接;跳过返回 NO_DATA 的指标,全缺时 `indicator_text` 为 `None`。旧测试整体 mock 了
+  `_fetch_indicators`,故未覆盖到真实调用,新增回归测试断言调用参数与拼接结果。
 - **新分析默认日期在 UTC+8 凌晨会回退到昨天。** WebUI「新分析配置」的默认 `trade_date` 原用
   `new Date().toISOString().slice(0, 10)`,该值取的是 UTC 日期;北京时间(UTC+8)00:00–08:00 之间
   UTC 仍停留在前一天,导致默认分析日期落后一天(如今天是 20260702 却默认 20260701)。改为按浏览器

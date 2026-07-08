@@ -25,6 +25,8 @@ from .tushare_utils import resolve_symbol_type
 
 _CATEGORIES = ("news", "intraday", "indicators", "fundamentals")
 _NODATA_PREFIXES = ("NO_DATA_AVAILABLE", "DATA_SOURCE_")
+# 详情页「技术指标/日线」区块展示的核心指标集:趋势(均线)+动量(rsi)+MACD+布林。
+_PREFETCH_INDICATORS = ("macd", "rsi", "close_50_sma", "boll")
 
 
 @dataclass
@@ -85,10 +87,14 @@ def _fetch_intraday(ticker: str, trade_date: str):
 
 def _fetch_indicators(ticker: str, trade_date: str, lookback: int):
     kline = get_etf_daily_kline(ticker, trade_date, lookback=lookback)
-    end = datetime.strptime(trade_date, "%Y-%m-%d")
-    start = (end - relativedelta(days=lookback)).strftime("%Y-%m-%d")
-    text = route_to_vendor("get_indicators", ticker, start, trade_date)
-    return {"kline": kline["kline"], "indicator_text": None if _is_nodata(text) else text}
+    sections = []
+    for ind in _PREFETCH_INDICATORS:
+        # get_indicators(symbol, indicator, curr_date, look_back_days)
+        text = route_to_vendor("get_indicators", ticker, ind, trade_date, lookback)
+        if not _is_nodata(text):
+            sections.append(f"## {ind}\n{text}")
+    indicator_text = "\n\n".join(sections) if sections else None
+    return {"kline": kline["kline"], "indicator_text": indicator_text}
 
 
 def _fetch_fundamentals(ticker: str, trade_date: str):
