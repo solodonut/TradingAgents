@@ -9,6 +9,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_verified_market_snapshot,
     with_evidence_items,
 )
+from tradingagents.agents.utils.prefetch_context import build_prefetch_block
 
 
 def create_market_analyst(llm):
@@ -56,6 +57,10 @@ Before writing the final report, call get_verified_market_snapshot for this tick
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
             + get_language_instruction()
             + get_citation_instruction()
+        )
+
+        system_message += build_prefetch_block(
+            state.get("prefetched"), want_news=False, want_quote=True
         )
 
         prompt = ChatPromptTemplate.from_messages(

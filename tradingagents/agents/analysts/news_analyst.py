@@ -11,6 +11,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_prediction_markets,
     with_evidence_items,
 )
+from tradingagents.agents.utils.prefetch_context import build_prefetch_block
 from tradingagents.dataflows.config import get_config
 
 
@@ -50,6 +51,10 @@ def create_news_analyst(llm):
                 + get_language_instruction()
                 + get_citation_instruction()
             )
+
+        system_message += build_prefetch_block(
+            state.get("prefetched"), want_news=True, want_quote=False
+        )
 
         prompt = ChatPromptTemplate.from_messages(
             [
