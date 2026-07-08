@@ -12,9 +12,9 @@ router = APIRouter(prefix="/api/queue", tags=["queue"])
 
 @router.post("")
 def enqueue(req: EnqueueRequest, request: Request) -> dict:
+    assert_startup_cache_ready(request)
     from api.main import get_store
 
-    assert_startup_cache_ready(request)
     store = get_store()
     shared = req.model_dump(exclude={"tickers", "ticker_names"})
     run_ids: list[str] = []

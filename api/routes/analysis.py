@@ -16,9 +16,9 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 @router.post("")
 def start_analysis(req: AnalysisRequest, request: Request) -> dict:
+    assert_startup_cache_ready(request)
     from api.main import get_store
 
-    assert_startup_cache_ready(request)
     store = get_store()
     run_id = uuid.uuid4().hex
     store.enqueue_run(
