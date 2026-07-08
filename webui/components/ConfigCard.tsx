@@ -1,10 +1,11 @@
 "use client";
+import Link from "next/link";
 import { Cpu, GripVertical, LoaderCircle, Play, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getWatchlist, lookupTicker, saveWatchlist } from "@/lib/api";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
-type TickerItem = { ticker: string; name: string };
+type TickerItem = { ticker: string; name: string; type?: "etf" | "stock" };
 
 export function ConfigCard({
   options,
@@ -136,7 +137,7 @@ export function ConfigCard({
         if (cancelled) return;
         if (res.name) {
           setTickers((prev) =>
-            prev.map((t) => (t.ticker === code ? { ...t, name: res.name as string } : t)),
+            prev.map((t) => (t.ticker === code ? { ...t, name: res.name as string, type: res.type } : t)),
           );
         }
       }
@@ -350,7 +351,17 @@ export function ConfigCard({
                       <GripVertical className="size-3.5" />
                     </span>
                     <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                      <span className="shrink-0 font-mono text-sm text-foreground">{t.ticker}</span>
+                      <Link
+                        href={`/etf/${encodeURIComponent(t.ticker)}`}
+                        className="shrink-0 font-mono text-sm text-foreground hover:underline"
+                      >
+                        {t.ticker}
+                      </Link>
+                      {t.type ? (
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {t.type === "etf" ? "ETF" : "股票"}
+                        </span>
+                      ) : null}
                       {t.name ? (
                         <span
                           title={t.name}

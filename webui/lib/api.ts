@@ -26,7 +26,7 @@ export async function getConfigOptions(): Promise<ConfigOptions> {
 
 export async function lookupTicker(
   code: string,
-): Promise<{ ticker: string; name: string | null; valid: boolean }> {
+): Promise<{ ticker: string; name: string | null; valid: boolean; type?: "etf" | "stock" }> {
   const t = code.trim().toUpperCase();
   try {
     const r = await fetch(`${BASE}/api/ticker/${encodeURIComponent(t)}`);
