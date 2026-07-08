@@ -498,6 +498,11 @@ export function ConfigCard({
                 ? `分析 ${tickers.length} 个标的`
                 : "开始分析"}
         </button>
+        {disabled && disabledReason && (
+          <p className="px-0.5 font-mono text-[0.68rem] leading-5 text-amber-300">
+            {disabledReason}
+          </p>
+        )}
       </div>
     </form>
   );

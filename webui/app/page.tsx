@@ -205,11 +205,11 @@ export default function Home() {
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const healthUnsubscribeRef = useRef<(() => void) | null>(null);
   const startupCacheUnsubscribeRef = useRef<(() => void) | null>(null);
+  const startupCacheRetryTimerRef = useRef<number | null>(null);
   const followGenRef = useRef(0);
 
   const [queue, setQueue] = useState<QueueState>({ running: null, pending: [] });
   const [healthItems, setHealthItems] = useState<Record<string, ServiceHealthItem>>({});
-  const [healthSummary, setHealthSummary] = useState<ServiceHealthSummary | null>(null);
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthCheckingIds, setHealthCheckingIds] = useState<Set<string>>(new Set());
   const [healthError, setHealthError] = useState<string | null>(null);
@@ -255,19 +255,23 @@ export default function Home() {
     [],
   );
 
+  const clearStartupCacheRetry = useCallback(() => {
+    if (startupCacheRetryTimerRef.current !== null) {
+      window.clearTimeout(startupCacheRetryTimerRef.current);
+      startupCacheRetryTimerRef.current = null;
+    }
+  }, []);
+
   const runServiceHealthCheck = useCallback(() => {
     healthUnsubscribeRef.current?.();
     setHealthChecking(true);
     setHealthCheckingIds(new Set());
     setHealthError(null);
-    setHealthSummary(null);
     setHealthItems({});
     healthUnsubscribeRef.current = subscribeServiceHealth(
       (event) => {
         if (event.event === "service_status") {
           setHealthItems((items) => ({ ...items, [event.data.id]: event.data }));
-        } else {
-          setHealthSummary(event.data);
         }
       },
       () => {
@@ -283,38 +287,35 @@ export default function Home() {
     const currentItem = healthItems[serviceId] ?? null;
     if (!currentItem) return;
 
-    const checkingItems = {
-      ...healthItems,
+    setHealthItems((prev) => ({
+      ...prev,
       [serviceId]: {
         ...currentItem,
         status: "checking" as const,
         message: "Checking service",
         latency_ms: null,
       },
-    };
-    setHealthItems(checkingItems);
-    setHealthSummary(summarizeHealthItems(Object.values(checkingItems)));
+    }));
     setHealthCheckingIds((ids) => new Set(ids).add(serviceId));
     checkServiceHealth(serviceId)
       .then((item) => {
-        const next = { ...checkingItems, [item.id]: item };
-        setHealthItems(next);
-        setHealthSummary(summarizeHealthItems(Object.values(next)));
+        setHealthItems((prev) => ({ ...prev, [item.id]: item }));
         setHealthError(null);
         setHealthLastCheckedAt(new Date().toISOString());
       })
       .catch((err) => {
-        const next = {
-          ...checkingItems,
-          [serviceId]: {
-            ...currentItem,
-            status: "error" as const,
-            message: (err as Error).message,
-            latency_ms: null,
-          },
-        };
-        setHealthItems(next);
-        setHealthSummary(summarizeHealthItems(Object.values(next)));
+        setHealthItems((prev) => {
+          const existing = prev[serviceId] ?? currentItem;
+          return {
+            ...prev,
+            [serviceId]: {
+              ...existing,
+              status: "error" as const,
+              message: (err as Error).message,
+              latency_ms: null,
+            },
+          };
+        });
       })
       .finally(() => {
         setHealthCheckingIds((ids) => {
@@ -325,8 +326,36 @@ export default function Home() {
       });
   }, [healthItems]);
 
+  const scheduleStartupCacheRetry = useCallback(() => {
+    clearStartupCacheRetry();
+    const poll = () => {
+      startupCacheRetryTimerRef.current = window.setTimeout(() => {
+        startupCacheRetryTimerRef.current = null;
+        getStartupCacheStatus()
+          .then((status) => {
+            setStartupCacheStatus(status);
+            setStartupCacheError(null);
+            if (status.status === "completed" || status.status === "error") {
+              if (status.status === "completed") {
+                refreshQueue();
+                refreshHistory();
+              }
+              return;
+            }
+            poll();
+          })
+          .catch((err) => {
+            setStartupCacheError((err as Error).message);
+            poll();
+          });
+      }, 3000);
+    };
+    poll();
+  }, [clearStartupCacheRetry, refreshHistory, refreshQueue]);
+
   const watchStartupCache = useCallback(() => {
     startupCacheUnsubscribeRef.current?.();
+    clearStartupCacheRetry();
     getStartupCacheStatus()
       .then((status) => {
         setStartupCacheStatus(status);
@@ -346,14 +375,16 @@ export default function Home() {
           },
           (message) => {
             setStartupCacheError(message);
-            window.setTimeout(() => {
-              getStartupCacheStatus().then(setStartupCacheStatus).catch(() => {});
-            }, 2000);
+            startupCacheUnsubscribeRef.current = null;
+            scheduleStartupCacheRetry();
           },
         );
       })
-      .catch((err) => setStartupCacheError((err as Error).message));
-  }, [refreshHistory, refreshQueue]);
+      .catch((err) => {
+        setStartupCacheError((err as Error).message);
+        scheduleStartupCacheRetry();
+      });
+  }, [clearStartupCacheRetry, scheduleStartupCacheRetry, refreshHistory, refreshQueue]);
 
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
@@ -366,8 +397,9 @@ export default function Home() {
       unsubscribeRef.current?.();
       healthUnsubscribeRef.current?.();
       startupCacheUnsubscribeRef.current?.();
+      clearStartupCacheRetry();
     };
-  }, [refreshHistory, refreshQueue, runServiceHealthCheck, watchStartupCache]);
+  }, [clearStartupCacheRetry, refreshHistory, refreshQueue, runServiceHealthCheck, watchStartupCache]);
 
   // The backend advances the queue whenever a runner thread finishes
   // (scheduler.advance). The live SSE stream-close callback drives the UI in the
@@ -690,6 +722,8 @@ export default function Home() {
     ...(startupItem ? [startupItem] : []),
     ...Object.values(healthItems),
   ]);
+  const renderedHealthSummary =
+    sortedHealthItems.length > 0 ? summarizeHealthItems(sortedHealthItems) : null;
   const startupReady = startupCacheReady(startupCacheStatus);
   const startupGateReason =
     startupCacheError ||
@@ -718,7 +752,7 @@ export default function Home() {
             <div className="mb-3">
               <ServiceHealthPanel
                 items={sortedHealthItems}
-                summary={healthSummary}
+                summary={renderedHealthSummary}
                 checking={healthChecking}
                 error={healthError}
                 lastCheckedAt={healthLastCheckedAt}

@@ -53,6 +53,9 @@ export function QueuePanel({
           </button>
         )}
       </div>
+      {disabled && disabledReason && (
+        <p className="mt-2 font-mono text-[0.68rem] leading-5 text-amber-300">{disabledReason}</p>
+      )}
 
       <ul className="mt-2 space-y-1.5">
         {queue.running && (
