@@ -104,6 +104,27 @@ def test_startup_cache_clearer_skips_symlink_targets(tmp_path):
     assert outside.exists()
 
 
+def test_startup_cache_clearer_rejects_symlink_cache_root(tmp_path):
+    from api.startup_cache import StartupCacheClearer
+
+    real_cache = tmp_path / "real-cache"
+    real_file = real_cache / "akshare" / "outside.pkl"
+    real_file.parent.mkdir(parents=True)
+    real_file.write_bytes(b"keep")
+    symlink_root = tmp_path / "cache-link"
+    symlink_root.symlink_to(real_cache, target_is_directory=True)
+
+    clearer = StartupCacheClearer(cache_root=symlink_root)
+    clearer.run_sync()
+
+    state = clearer.snapshot()
+    assert state["status"] == "error"
+    assert state["errors"] == [
+        {"path": "startup", "message": "cache root must not be a symlink"}
+    ]
+    assert real_file.exists()
+
+
 def test_startup_cache_clearer_run_sync_rejects_live_background_run(tmp_path, monkeypatch):
     from api.startup_cache import StartupCacheClearer
 
@@ -151,7 +172,7 @@ def test_startup_cache_clearer_file_size_failure_continues_remaining_files(tmp_p
 
     def fake_size(path):
         if path == doomed:
-            raise FileNotFoundError("gone")
+            raise PermissionError("denied")
         return len(path.read_bytes())
 
     monkeypatch.setattr(clearer, "_get_file_size", fake_size)
@@ -163,7 +184,37 @@ def test_startup_cache_clearer_file_size_failure_continues_remaining_files(tmp_p
     assert state["processed_items"] == state["total_items"] == 2
     assert doomed.exists()
     assert not survivor.exists()
-    assert state["errors"] == [{"path": "akshare/bad.pkl", "message": "gone"}]
+    assert state["errors"] == [{"path": "akshare/bad.pkl", "message": "denied"}]
+
+
+def test_startup_cache_clearer_missing_file_during_delete_is_not_fatal(tmp_path, monkeypatch):
+    from api.startup_cache import StartupCacheClearer
+
+    cache_root = tmp_path / "cache"
+    missing = cache_root / "akshare" / "gone.pkl"
+    survivor = cache_root / "akshare" / "good.pkl"
+    missing.parent.mkdir(parents=True)
+    missing.write_bytes(b"gone")
+    survivor.write_bytes(b"good")
+
+    clearer = StartupCacheClearer(cache_root=cache_root)
+
+    def fake_size(path):
+        if path == missing:
+            path.unlink()
+            raise FileNotFoundError("gone")
+        return len(path.read_bytes())
+
+    monkeypatch.setattr(clearer, "_get_file_size", fake_size)
+
+    clearer.run_sync()
+
+    state = clearer.snapshot()
+    assert state["status"] == "completed"
+    assert state["processed_items"] == state["total_items"] == 2
+    assert state["errors"] == []
+    assert not missing.exists()
+    assert not survivor.exists()
 
 
 def test_startup_cache_clearer_start_ignores_second_call_while_thread_alive(tmp_path):
@@ -353,6 +404,30 @@ def test_scheduler_does_not_advance_before_startup_cache_completed(tmp_path, mon
 
     assert scheduler.advance() is None
     assert store.get_status("r1") == "pending"
+
+
+def test_queue_mutations_block_until_startup_cache_completed(client, tmp_path):
+    import api.main as main
+    from api.startup_cache import StartupCacheClearer
+
+    store = main.get_store()
+    store.enqueue_run(
+        "pending",
+        "NVDA",
+        "2024-05-10",
+        "stock",
+        {"ticker": "NVDA", "trade_date": "2024-05-10"},
+    )
+    main.app.state.startup_cache_clearer = StartupCacheClearer(tmp_path / "cache")
+
+    remove_resp = client.delete("/api/queue/pending")
+    clear_resp = client.delete("/api/queue")
+    reorder_resp = client.patch("/api/queue/order", json={"ordered_run_ids": ["pending"]})
+
+    assert remove_resp.status_code == 503
+    assert clear_resp.status_code == 503
+    assert reorder_resp.status_code == 503
+    assert store.get_status("pending") == "pending"
 
 
 def test_sse_json_wraps_payload_as_json_string():

@@ -206,7 +206,7 @@ export function ServiceHealthPanel({
                       <StatusIcon status={item.status} />
                       {statusLabel(item.status)}
                     </div>
-                    {onCheckOne && (
+                    {onCheckOne && item.id !== STARTUP_CACHE_ITEM_ID && (
                       <button
                         type="button"
                         onClick={() => onCheckOne(item.id)}

@@ -48,7 +48,8 @@ def get_queue() -> QueueState:
 
 
 @router.delete("/{run_id}", status_code=204)
-def remove_item(run_id: str) -> Response:
+def remove_item(run_id: str, request: Request) -> Response:
+    assert_startup_cache_ready(request)
     from api.main import get_store
 
     if not get_store().remove_pending(run_id):
@@ -57,14 +58,16 @@ def remove_item(run_id: str) -> Response:
 
 
 @router.delete("")
-def clear_queue() -> dict:
+def clear_queue(request: Request) -> dict:
+    assert_startup_cache_ready(request)
     from api.main import get_store
 
     return {"removed": get_store().clear_pending()}
 
 
 @router.patch("/order", response_model=QueueState)
-def reorder(req: ReorderRequest) -> QueueState:
+def reorder(req: ReorderRequest, request: Request) -> QueueState:
+    assert_startup_cache_ready(request)
     from api.main import get_store
 
     store = get_store()

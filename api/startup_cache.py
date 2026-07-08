@@ -112,6 +112,8 @@ class StartupCacheClearer:
                     size = self._get_file_size(path)
                     path.unlink()
                     self._increment_success(size)
+                except FileNotFoundError:
+                    self._increment_missing()
                 except Exception as exc:  # noqa: BLE001 - report and continue
                     self._record_error(rel, str(exc))
 
@@ -174,6 +176,8 @@ class StartupCacheClearer:
     def _scan_targets(self) -> list[Path]:
         if not self.cache_root.exists():
             return []
+        if self.cache_root.is_symlink():
+            raise RuntimeError("cache root must not be a symlink")
 
         targets: list[Path] = []
         for path in self.cache_root.rglob("*"):
@@ -216,6 +220,13 @@ class StartupCacheClearer:
             self._state.processed_items += 1
             self._state.deleted_files += 1
             self._state.released_bytes += size
+            self._state.updated_at = _now_iso()
+            data = self._state_dict_locked()
+        self._publish(data)
+
+    def _increment_missing(self) -> None:
+        with self._lock:
+            self._state.processed_items += 1
             self._state.updated_at = _now_iso()
             data = self._state_dict_locked()
         self._publish(data)
