@@ -169,6 +169,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "get_etf_news": "tushare",
         "get_global_news": "tushare,yfinance",
         "get_etf_profile": "akshare,tushare,tdx,longbridge",
+        "get_etf_intraday": "tushare",
     },
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all
@@ -189,4 +190,8 @@ DEFAULT_CONFIG = _apply_env_overrides({
         ".SZ":  "399001.SZ",   # Shenzhen (SZSE Component)
         "":     "SPY",         # default for US-listed tickers (no suffix)
     },
+    # ETF prefetch snapshot
+    "prefetch_retries": 3,            # 每类可恢复错误的重试次数
+    "prefetch_backoff_base": 1.0,     # 退避基数(秒),第 n 次退避 = base * 2**(n-1)
+    "prefetch_daily_lookback": 60,    # 详情页日线K线回看天数
 })

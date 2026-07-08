@@ -50,6 +50,7 @@ from .tushare_fundamentals import (
     get_income_statement as get_tushare_income_statement,
 )
 from .tushare_indicator import get_indicators as get_tushare_indicators
+from .tushare_intraday import get_etf_intraday as get_tushare_etf_intraday
 from .tushare_news import get_global_news as get_tushare_global_news, get_news as get_tushare_news
 from .tushare_stock import get_stock_data as get_tushare_stock
 from .y_finance import (
@@ -129,6 +130,7 @@ TOOLS_CATEGORIES = {
         "description": "ETF-specific data: discount/premium, IOPV, scale, holdings",
         "tools": [
             "get_etf_profile",
+            "get_etf_intraday",
         ]
     }
 }
@@ -226,6 +228,9 @@ VENDOR_METHODS = {
         "tushare": get_tushare_etf_profile,
         "tdx": get_tdx_etf_profile,
         "longbridge": get_longbridge_etf_profile,
+    },
+    "get_etf_intraday": {
+        "tushare": get_tushare_etf_intraday,
     },
 }
 
