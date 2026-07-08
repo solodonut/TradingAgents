@@ -52,6 +52,7 @@ class AgentState(MessagesState):
     evidence_items: Annotated[
         list[dict], "Run-level evidence registry items used for source citations"
     ]
+    prefetched: Annotated[dict | None, "Pre-fetched ETF snapshot summary for context injection"]
 
     sender: Annotated[str, "Agent that sent this message"]
 

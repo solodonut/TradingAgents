@@ -38,6 +38,7 @@ class Propagator:
             "instrument_context": instrument_context,
             "trade_date": str(trade_date),
             "evidence_items": [],
+            "prefetched": None,
             "past_context": past_context,
             "investment_debate_state": InvestDebateState(
                 {

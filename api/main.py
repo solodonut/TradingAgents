@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import config as config_routes
 from api.startup_cache import StartupCacheClearer
 from api.store import Store
+from tradingagents.dataflows.prefetch import prefetch_snapshot
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients.health_check import check_and_select
 
@@ -180,9 +181,19 @@ def real_graph_factory(req):
         past_context=past_context,
         instrument_context=instrument_context,
     )
+    _inject_prefetched(init_state, req.ticker, req.trade_date, store=get_store())
     # Attach the proper stream args so the runner can pass them through.
     graph._stream_args = graph.propagator.get_graph_args()
     return graph, init_state, None, None
+
+
+def _inject_prefetched(init_state: dict, ticker: str, trade_date: str, store) -> None:
+    try:
+        summary = prefetch_snapshot(ticker, trade_date, store)
+        init_state["prefetched"] = summary.for_context()
+    except Exception:  # noqa: BLE001 - prefetch must never block a run
+        logger.exception("prefetch: snapshot failed for %s %s", ticker, trade_date)
+        init_state["prefetched"] = None
 
 
 def real_chat_llm_factory(model: str | None = None):

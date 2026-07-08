@@ -83,3 +83,23 @@ def test_real_graph_factory_passes_telemetry_callback(monkeypatch):
     main.real_graph_factory(req)
 
     assert len(captured["callbacks"]) == 1
+
+
+def test_real_graph_factory_injects_prefetched(monkeypatch):
+    import api.main as main
+
+    captured = {}
+
+    class FakeSummary:
+        def for_context(self):
+            return {"ticker": "510300.SS", "missing": [], "news_text": "n", "quote": None}
+
+    def fake_prefetch(ticker, trade_date, store, **kw):
+        captured["ticker"] = ticker
+        return FakeSummary()
+
+    monkeypatch.setattr(main, "prefetch_snapshot", fake_prefetch)
+    init_state = {"company_of_interest": "510300.SS"}
+    main._inject_prefetched(init_state, "510300.SS", "2026-07-07", store=None)
+    assert init_state["prefetched"]["news_text"] == "n"
+    assert captured["ticker"] == "510300.SS"
