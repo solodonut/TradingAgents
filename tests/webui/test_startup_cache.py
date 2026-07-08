@@ -254,6 +254,17 @@ def test_startup_cache_status_route(client, tmp_path):
     assert resp.json()["status"] == "completed"
 
 
+def test_startup_cache_status_route_returns_503_when_uninitialized(client):
+    import api.main as main
+
+    main.app.state.startup_cache_clearer = None
+
+    resp = client.get("/api/startup-cache/status")
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "startup cache clearer not initialized"
+
+
 def test_startup_cache_stream_route(client, tmp_path):
     import api.main as main
     from api.startup_cache import StartupCacheClearer
@@ -271,6 +282,17 @@ def test_startup_cache_stream_route(client, tmp_path):
     assert "event: cache_clear_status" in body
     assert "event: summary" in body
     assert '"status": "completed"' in body
+
+
+def test_startup_cache_stream_route_returns_503_when_uninitialized(client):
+    import api.main as main
+
+    main.app.state.startup_cache_clearer = None
+
+    resp = client.get("/api/startup-cache/stream")
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "startup cache clearer not initialized"
 
 
 def test_sse_json_wraps_payload_as_json_string():

@@ -13,7 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "webui.db")
     main.app.state.store = None  # force re-init against temp DB
     main.app.state.startup_cache_clearer = None
-    main.DEFAULT_CONFIG["data_cache_dir"] = str(tmp_path / "cache")
+    monkeypatch.setitem(main.DEFAULT_CONFIG, "data_cache_dir", str(tmp_path / "cache"))
     main.app.state.queues = {}
     main.app.state.cancellations = {}
     main.app.state.telemetry = {}
