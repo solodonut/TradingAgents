@@ -32,6 +32,7 @@ test("formatBytes renders compact binary units", () => {
 
 test("startupCacheToServiceItem converts running state to system item", () => {
   const item = startupCacheToServiceItem(state("running"));
+  assert.ok(item);
   assert.equal(item.id, "system:startup-cache-clear");
   assert.equal(item.kind, "system");
   assert.equal(item.status, "checking");
