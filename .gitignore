@@ -238,6 +238,5 @@ stitch_liquid_glass_ui_theme/
 
 # Local agent tooling state (superpowers/brainstorm)
 .superpowers/**
-docs/**
 !docs/llm-api-architecture.md
 report/**
