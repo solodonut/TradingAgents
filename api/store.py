@@ -74,6 +74,16 @@ CREATE TABLE IF NOT EXISTS watchlist (
     name     TEXT NOT NULL DEFAULT '',
     position INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS etf_snapshots (
+    ticker       TEXT NOT NULL,
+    trade_date   TEXT NOT NULL,
+    category     TEXT NOT NULL,
+    status       TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    fetched_at   TEXT NOT NULL,
+    PRIMARY KEY (ticker, trade_date, category)
+);
 """
 
 
@@ -600,3 +610,41 @@ class Store:
         if row is None:
             return None
         return SessionProfile(**json.loads(row["profile_json"]))
+
+    # ---- ETF prefetch snapshots ----
+
+    def upsert_snapshot(
+        self, ticker: str, trade_date: str, category: str, status: str, payload: dict
+    ) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO etf_snapshots "
+                "(ticker, trade_date, category, status, payload_json, fetched_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (ticker, trade_date, category, status, _dumps(payload), _now()),
+            )
+
+    def get_snapshot(self, ticker: str, trade_date: str) -> dict[str, dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT category, status, payload_json, fetched_at FROM etf_snapshots "
+                "WHERE ticker=? AND trade_date=?",
+                (ticker, trade_date),
+            ).fetchall()
+        return {
+            r["category"]: {
+                "status": r["status"],
+                "payload": json.loads(r["payload_json"]),
+                "fetched_at": r["fetched_at"],
+            }
+            for r in rows
+        }
+
+    def list_snapshot_dates(self, ticker: str) -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT trade_date FROM etf_snapshots WHERE ticker=? "
+                "ORDER BY trade_date DESC",
+                (ticker,),
+            ).fetchall()
+        return [r["trade_date"] for r in rows]

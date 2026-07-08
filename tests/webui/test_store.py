@@ -248,3 +248,29 @@ def test_list_runs_excludes_pending(tmp_path):
 
     ids = {r.run_id for r in store.list_runs()}
     assert ids == {"a"}
+
+
+def test_snapshot_upsert_and_get(tmp_path):
+    store = Store(tmp_path / "s.db")
+    store.upsert_snapshot("510300.SS", "2026-07-07", "news", "ok", {"text": "hi"})
+    store.upsert_snapshot("510300.SS", "2026-07-07", "intraday", "missing", {})
+    snap = store.get_snapshot("510300.SS", "2026-07-07")
+    assert snap["news"]["status"] == "ok"
+    assert snap["news"]["payload"] == {"text": "hi"}
+    assert snap["intraday"]["status"] == "missing"
+
+
+def test_snapshot_upsert_overwrites_same_key(tmp_path):
+    store = Store(tmp_path / "s.db")
+    store.upsert_snapshot("510300.SS", "2026-07-07", "news", "ok", {"text": "v1"})
+    store.upsert_snapshot("510300.SS", "2026-07-07", "news", "ok", {"text": "v2"})
+    snap = store.get_snapshot("510300.SS", "2026-07-07")
+    assert snap["news"]["payload"] == {"text": "v2"}
+
+
+def test_list_snapshot_dates_desc(tmp_path):
+    store = Store(tmp_path / "s.db")
+    store.upsert_snapshot("510300.SS", "2026-07-04", "news", "ok", {})
+    store.upsert_snapshot("510300.SS", "2026-07-07", "news", "ok", {})
+    assert store.list_snapshot_dates("510300.SS") == ["2026-07-07", "2026-07-04"]
+    assert store.list_snapshot_dates("000001.SS") == []
