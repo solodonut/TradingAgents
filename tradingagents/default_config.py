@@ -167,7 +167,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "tool_vendors": {
         "get_news": "tushare,akshare,eastmoney",
         "get_etf_news": "tushare",
-        "get_global_news": "tushare,yfinance",
+        "get_global_news": "tushare",
         "get_etf_profile": "akshare,tushare,tdx,longbridge",
         "get_etf_intraday": "tushare",
     },
