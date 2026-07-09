@@ -12,7 +12,7 @@ import requests
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients.health_check import check_and_select
 
-ServiceStatus = Literal["checking", "ok", "error", "disabled"]
+ServiceStatus = Literal["checking", "ok", "warning", "error", "disabled"]
 ServiceKind = Literal["llm", "data", "system"]
 
 _REQUEST_TIMEOUT = 5
@@ -242,6 +242,7 @@ def generate_service_health_events(config: dict | None = None) -> Iterator[dict]
         "total": len(latest),
         "checking": sum(1 for item in latest if item["status"] == "checking"),
         "ok": sum(1 for item in latest if item["status"] == "ok"),
+        "warning": sum(1 for item in latest if item["status"] == "warning"),
         "error": sum(1 for item in latest if item["status"] == "error"),
         "disabled": sum(1 for item in latest if item["status"] == "disabled"),
     }

@@ -77,6 +77,33 @@ def test_service_health_stream_emits_progress_and_summary(client, monkeypatch):
     assert summary["error"] == 0
 
 
+def test_service_health_stream_counts_warning_status(client, monkeypatch):
+    import api.service_health as service_health
+
+    monkeypatch.setattr(service_health, "_probe_llm_services", lambda config: iter(()))
+
+    def fake_data_probe(config):
+        yield {
+            "id": "data:akshare",
+            "name": "AKShare",
+            "kind": "data",
+            "status": "warning",
+            "message": "Reachable, but latest daily data is 2026-07-08; expected 2026-07-09",
+            "latency_ms": 7,
+        }
+
+    monkeypatch.setattr(service_health, "_probe_data_services", fake_data_probe)
+
+    with client.stream("GET", "/api/health/services/stream") as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    events = _sse_events(body)
+    summary = events[-1][1]
+    assert summary["warning"] == 1
+    assert summary["error"] == 0
+
+
 def test_service_health_stream_reports_internal_probe_error(client, monkeypatch):
     import api.service_health as service_health
 
