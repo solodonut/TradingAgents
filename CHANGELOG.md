@@ -72,6 +72,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **数据服务健康检查新增“当日数据新鲜度”验证。** WebUI Service Health 现在对
+  Tushare、AKShare、Yahoo Finance、Alpha Vantage、FRED 在可达性之外再拉取轻量样本并解析最新日期:
+  当日数据为 `ok`,可达但最新数据不是今天为黄色 `warning`,断连/鉴权失败/返回体不可解析为
+  `error`。Tushare 探测改为 POST JSON 且 token 只放请求体,异常消息会脱敏 `token`/`apikey`/
+  `api_key`;Eastmoney 新闻直连与 Polymarket 仍保持可达性检查。
 - 预取快照:每个标的分析开始前预取新闻/分时/日线指标/基本面并落库到 webui.db，
   新闻+行情快照 push 进新闻/市场分析师上下文(根治"分析丢数据")。新闻按标的类型
   确定性分流(ETF→get_etf_news,股票→get_news)，不再依赖 LLM 选对工具;输入代码
