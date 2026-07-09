@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -63,6 +65,72 @@ def _http_probe(
     except Exception as exc:  # noqa: BLE001 - any exception is a service failure
         elapsed = int((time.monotonic() - start) * 1000)
         return False, f"{type(exc).__name__}: {exc}", elapsed
+
+
+def _today_compact() -> str:
+    return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+
+
+def _format_compact_date(value: str) -> str:
+    return f"{value[:4]}-{value[4:6]}-{value[6:8]}"
+
+
+def _normalize_date(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        if value > 10_000_000_000:
+            value = value / 1000
+        try:
+            return datetime.fromtimestamp(value, tz=ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+        except (OSError, OverflowError, ValueError):
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 8:
+        return digits[:8]
+    return None
+
+
+def _extract_latest_date(payload: object) -> str | None:
+    dates: list[str] = []
+
+    def visit(value: object, key: str | None = None) -> None:
+        if key and key.lower() in {"date", "trade_date", "cal_date", "latesttradingday"}:
+            normalized = _normalize_date(value)
+            if normalized:
+                dates.append(normalized)
+        elif isinstance(value, int) and key and key.lower() in {"timestamp", "time"}:
+            normalized = _normalize_date(value)
+            if normalized:
+                dates.append(normalized)
+
+        if isinstance(value, dict):
+            for child_key, child_value in value.items():
+                normalized_key = _normalize_date(child_key)
+                if normalized_key:
+                    dates.append(normalized_key)
+                visit(child_value, str(child_key))
+        elif isinstance(value, list):
+            for child in value:
+                visit(child, key)
+
+    visit(payload)
+    return max(dates) if dates else None
+
+
+def _freshness_status(latest_date: str) -> tuple[ServiceStatus, str]:
+    expected = _today_compact()
+    latest_label = _format_compact_date(latest_date)
+    expected_label = _format_compact_date(expected)
+    if latest_date == expected:
+        return "ok", f"Reachable; latest daily data is {latest_label}"
+    return (
+        "warning",
+        f"Reachable, but latest daily data is {latest_label}; expected {expected_label}",
+    )
 
 
 def _probe_llm_services(config: dict) -> Iterator[dict]:

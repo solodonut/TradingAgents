@@ -281,3 +281,34 @@ def test_data_probe_reports_tushare_reachable(monkeypatch):
     tushare = next(item for item in statuses if item["id"] == "data:tushare")
     assert tushare["status"] == "ok"
     assert tushare["latency_ms"] == 12
+
+
+def test_freshness_status_reports_ok_for_today(monkeypatch):
+    import api.service_health as service_health
+
+    monkeypatch.setattr(service_health, "_today_compact", lambda: "20260709")
+
+    status, message = service_health._freshness_status("20260709")
+
+    assert status == "ok"
+    assert message == "Reachable; latest daily data is 2026-07-09"
+
+
+def test_freshness_status_reports_warning_for_stale_date(monkeypatch):
+    import api.service_health as service_health
+
+    monkeypatch.setattr(service_health, "_today_compact", lambda: "20260709")
+
+    status, message = service_health._freshness_status("20260708")
+
+    assert status == "warning"
+    assert message == "Reachable, but latest daily data is 2026-07-08; expected 2026-07-09"
+
+
+def test_extract_latest_date_handles_nested_vendor_payloads():
+    from api.service_health import _extract_latest_date
+
+    assert _extract_latest_date({"data": {"items": [{"trade_date": "20260708"}]}}) == "20260708"
+    assert _extract_latest_date({"Time Series (Daily)": {"2026-07-09": {"4. close": "10"}}}) == "20260709"
+    assert _extract_latest_date({"observations": [{"date": "2026-07-08"}]}) == "20260708"
+    assert _extract_latest_date({"chart": {"result": [{"timestamp": [1783555200]}]}}) == "20260709"
