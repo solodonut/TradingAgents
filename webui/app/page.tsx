@@ -76,6 +76,7 @@ function summarizeHealthItems(items: ServiceHealthItem[]): ServiceHealthSummary 
     total: items.length,
     checking: items.filter((item) => item.status === "checking").length,
     ok: items.filter((item) => item.status === "ok").length,
+    warning: items.filter((item) => item.status === "warning").length,
     error: items.filter((item) => item.status === "error").length,
     disabled: items.filter((item) => item.status === "disabled").length,
   };
