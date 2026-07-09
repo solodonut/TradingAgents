@@ -5,6 +5,7 @@ import {
   Ban,
   CheckCircle2,
   ChevronDown,
+  CircleAlert,
   LoaderCircle,
   RefreshCw,
   Wifi,
@@ -19,6 +20,7 @@ import type {
 
 function statusLabel(status: ServiceHealthItem["status"]): string {
   if (status === "ok") return "可达";
+  if (status === "warning") return "警告";
   if (status === "error") return "异常";
   if (status === "disabled") return "禁用";
   return "检查中";
@@ -26,6 +28,7 @@ function statusLabel(status: ServiceHealthItem["status"]): string {
 
 function statusClass(status: ServiceHealthItem["status"]): string {
   if (status === "ok") return "text-emerald-300";
+  if (status === "warning") return "text-amber-300";
   if (status === "error") return "text-destructive";
   if (status === "disabled") return "text-muted-foreground";
   return "text-amber-300";
@@ -33,6 +36,7 @@ function statusClass(status: ServiceHealthItem["status"]): string {
 
 function StatusIcon({ status }: { status: ServiceHealthItem["status"] }) {
   if (status === "ok") return <CheckCircle2 className="size-3.5" aria-hidden="true" />;
+  if (status === "warning") return <CircleAlert className="size-3.5" aria-hidden="true" />;
   if (status === "error") return <AlertTriangle className="size-3.5" aria-hidden="true" />;
   if (status === "disabled") return <Ban className="size-3.5" aria-hidden="true" />;
   return (
@@ -63,6 +67,12 @@ function trafficLight({
     return {
       className: "bg-destructive shadow-[0_0_14px_rgba(255,82,82,0.55)]",
       label: "异常",
+    };
+  }
+  if (items.some((item) => item.status === "warning")) {
+    return {
+      className: "bg-amber-300 shadow-[0_0_14px_rgba(252,211,77,0.55)]",
+      label: "警告",
     };
   }
   if (checking || items.some((item) => item.status === "checking")) {
@@ -104,6 +114,7 @@ export function ServiceHealthPanel({
   const [expanded, setExpanded] = useState(false);
   const visible = items.length > 0 || checking || error;
   const hasFailures = Boolean(error) || items.some((item) => item.status === "error");
+  const hasWarnings = items.some((item) => item.status === "warning");
   const light = trafficLight({ items, checking, error });
 
   return (
@@ -136,7 +147,8 @@ export function ServiceHealthPanel({
             </span>
             {summary && (
               <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
-                OK {summary.ok} · Error {summary.error} · Disabled {summary.disabled}
+                OK {summary.ok} · Warning {summary.warning} · Error {summary.error} · Disabled{" "}
+                {summary.disabled}
               </span>
             )}
           </span>
@@ -151,6 +163,11 @@ export function ServiceHealthPanel({
           {hasFailures && !expanded && (
             <span className="hidden font-mono text-[0.65rem] uppercase tracking-[0.12em] text-destructive sm:inline">
               有服务不可达
+            </span>
+          )}
+          {!hasFailures && hasWarnings && !expanded && (
+            <span className="hidden font-mono text-[0.65rem] uppercase tracking-[0.12em] text-amber-300 sm:inline">
+              有数据未更新
             </span>
           )}
           <button
