@@ -9,6 +9,9 @@ Improve WebUI service health checks for data vendors so they verify both reachab
 - Extend data-service health checks in `api/service_health.py`.
 - Preserve the existing streaming and single-service health endpoints.
 - Add a `warning` health status for stale-but-reachable data services.
+- Apply freshness checks to every enabled data vendor with a clear date-bearing
+  data contract, including AKShare, Tushare, Yahoo Finance, Alpha Vantage, and
+  FRED.
 - Keep disabled services, missing credentials, and connectivity failures on their current paths.
 - Keep tests mocked; health-check tests must not require real API keys or consume live vendor quota.
 
@@ -56,10 +59,13 @@ For each enabled data service:
    - `warning` with a message such as `Reachable, but latest daily data is 2026-07-08; expected 2026-07-09`.
    - `error` if the freshness endpoint errors, returns no rows, or cannot be parsed.
 
-The first implementation should cover:
+Freshness validation is required for all applicable data vendors in the first
+implementation:
 
 - `tushare`: validate a lightweight daily market data endpoint for a stable mainland sample symbol.
-- `akshare`: validate a lightweight A-share daily market sample.
+- `akshare`: validate a lightweight A-share daily market sample. AKShare should
+  be checked with the same warning semantics as Tushare: reachable but latest
+  data older than today is `warning`, not `ok`.
 - `yfinance`: validate a daily sample for a stable US symbol.
 - `alpha_vantage`: validate the latest quote or daily time series date for a stable US symbol.
 - `fred`: validate the latest observation date.
@@ -97,6 +103,11 @@ Backend tests in `tests/webui/test_routes_health.py` should cover:
 - Tushare freshness probe failure or unparsable response -> `error`.
 - Tushare reachability failure does not run the freshness probe.
 - Missing Tushare token remains `error`.
+- AKShare reachable and freshness returns today's date -> `ok`.
+- AKShare reachable and freshness returns yesterday's date -> `warning`.
+- AKShare freshness probe failure or unparsable response -> `error`.
+- Yahoo Finance, Alpha Vantage, and FRED each have at least one mocked freshness
+  test proving their latest-date parser drives `ok` or `warning`.
 - Disabled data services remain `disabled`.
 - Summary counts include `warning`.
 
