@@ -19,6 +19,7 @@ ServiceKind = Literal["llm", "data", "system"]
 
 _REQUEST_TIMEOUT = 5
 _MAX_ERROR_LEN = 300
+_SECRET_KEYS = {"token", "apikey", "api_key"}
 
 
 def _event(
@@ -64,7 +65,32 @@ def _http_probe(
         return False, f"HTTP {response.status_code}", elapsed
     except Exception as exc:  # noqa: BLE001 - any exception is a service failure
         elapsed = int((time.monotonic() - start) * 1000)
-        return False, f"{type(exc).__name__}: {exc}", elapsed
+        message = _redact_secret_values(f"{type(exc).__name__}: {exc}", params)
+        return False, message, elapsed
+
+
+def _redact_secret_values(message: str, *containers: object) -> str:
+    secrets: set[str] = set()
+
+    def collect(value: object, key: str | None = None) -> None:
+        if key and key.lower() in _SECRET_KEYS and value is not None:
+            text = str(value)
+            if text:
+                secrets.add(text)
+        elif isinstance(value, dict):
+            for child_key, child_value in value.items():
+                collect(child_value, str(child_key))
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                collect(child)
+
+    for container in containers:
+        collect(container)
+
+    redacted = message
+    for secret in secrets:
+        redacted = redacted.replace(secret, "[REDACTED]")
+    return redacted
 
 
 def _json_probe(
@@ -93,7 +119,8 @@ def _json_probe(
         return True, response.json(), elapsed
     except Exception as exc:  # noqa: BLE001 - any exception is a service failure
         elapsed = int((time.monotonic() - start) * 1000)
-        return False, f"{type(exc).__name__}: {exc}", elapsed
+        message = _redact_secret_values(f"{type(exc).__name__}: {exc}", params, json_payload)
+        return False, message, elapsed
 
 
 def _today_compact() -> str:
@@ -137,6 +164,23 @@ def _extract_latest_date(payload: object) -> str | None:
                 dates.append(normalized)
 
         if isinstance(value, dict):
+            fields = value.get("fields")
+            items = value.get("items")
+            if isinstance(fields, list) and isinstance(items, list):
+                date_indexes = [
+                    index
+                    for index, field in enumerate(fields)
+                    if str(field).lower() in {"date", "trade_date", "cal_date"}
+                ]
+                for item in items:
+                    if not isinstance(item, (list, tuple)):
+                        continue
+                    for index in date_indexes:
+                        if index < len(item):
+                            normalized = _normalize_date(item[index])
+                            if normalized:
+                                dates.append(normalized)
+
             for child_key, child_value in value.items():
                 normalized_key = _normalize_date(child_key)
                 if normalized_key:
@@ -166,18 +210,40 @@ def _freshness_status(latest_date: str) -> tuple[ServiceStatus, str]:
     )
 
 
-def _run_freshness_probe(spec: dict, api_key: str | None) -> tuple[ServiceStatus, str, int]:
-    freshness = dict(spec["freshness"])
-    params = dict(freshness.get("params", {}))
-    json_payload = dict(freshness.get("json_payload", {}))
+def _json_probe_args(probe_spec: dict, api_key: str | None) -> tuple[dict, dict]:
+    params = dict(probe_spec.get("params", {}))
+    json_payload = dict(probe_spec.get("json_payload", {}))
 
-    key_target = freshness.get("api_key")
+    key_target = probe_spec.get("api_key")
     if api_key and key_target == "params:apikey":
         params["apikey"] = api_key
     elif api_key and key_target == "params:api_key":
         params["api_key"] = api_key
     elif api_key and key_target == "json:token":
         json_payload["token"] = api_key
+
+    return params, json_payload
+
+
+def _run_json_reachability_probe(spec: dict, api_key: str | None) -> tuple[bool, str, int]:
+    reachability = dict(spec["reachability"])
+    params, json_payload = _json_probe_args(reachability, api_key)
+
+    ok, payload, latency_ms = _json_probe(
+        str(reachability["url"]),
+        method=str(reachability.get("method", "GET")),
+        params=params or None,
+        json_payload=json_payload or None,
+        headers=reachability.get("headers"),
+    )
+    if not ok:
+        return False, str(payload), latency_ms
+    return True, "Reachable", latency_ms
+
+
+def _run_freshness_probe(spec: dict, api_key: str | None) -> tuple[ServiceStatus, str, int]:
+    freshness = dict(spec["freshness"])
+    params, json_payload = _json_probe_args(freshness, api_key)
 
     ok, payload, latency_ms = _json_probe(
         str(freshness["url"]),
@@ -304,6 +370,16 @@ _DATA_SERVICES = {
             "fields": "cal_date,is_open",
         },
         "env": "TUSHARE_TOKEN",
+        "reachability": {
+            "url": "https://api.tushare.pro",
+            "method": "POST",
+            "json_payload": {
+                "api_name": "trade_cal",
+                "params": {},
+                "fields": "cal_date,is_open",
+            },
+            "api_key": "json:token",
+        },
         "freshness": {
             "url": "https://api.tushare.pro",
             "method": "POST",
@@ -371,13 +447,16 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
             if service_id == "fred":
                 params["api_key"] = api_key
             elif service_id == "tushare":
-                params["token"] = api_key
+                pass
             else:
                 params["apikey"] = api_key
 
-        ok, message, latency_ms = _http_probe(
-            str(spec["url"]), params=params, headers=spec.get("headers")
-        )
+        if "reachability" in spec:
+            ok, message, latency_ms = _run_json_reachability_probe(spec, api_key)
+        else:
+            ok, message, latency_ms = _http_probe(
+                str(spec["url"]), params=params, headers=spec.get("headers")
+            )
         status: ServiceStatus = "ok" if ok else "error"
         if ok and "freshness" in spec:
             status, message, freshness_latency_ms = _run_freshness_probe(spec, api_key)

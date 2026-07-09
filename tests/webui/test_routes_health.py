@@ -276,20 +276,25 @@ def test_data_probe_reports_missing_tushare_token(monkeypatch):
 def test_data_probe_reports_tushare_fresh_today(monkeypatch):
     from api.service_health import _probe_data_services
 
+    calls = []
     monkeypatch.setenv("TUSHARE_TOKEN", "token")
     monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
-    monkeypatch.setattr(
-        "api.service_health._http_probe",
-        lambda url, params=None, headers=None: (True, "Reachable", 12),
-    )
-    monkeypatch.setattr(
-        "api.service_health._json_probe",
-        lambda url, method="GET", params=None, json_payload=None, headers=None: (
-            True,
-            {"data": {"items": [{"trade_date": "20260709"}]}},
-            24,
-        ),
-    )
+
+    def json_probe(url, method="GET", params=None, json_payload=None, headers=None):
+        calls.append(
+            {
+                "url": url,
+                "method": method,
+                "params": params,
+                "json_payload": json_payload,
+                "headers": headers,
+            }
+        )
+        if len(calls) == 1:
+            return True, {"data": {"items": [["20260709", 1]]}}, 12
+        return True, {"data": {"items": [{"trade_date": "20260709"}]}}, 24
+
+    monkeypatch.setattr("api.service_health._json_probe", json_probe)
 
     statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "tushare"}}))
 
@@ -297,31 +302,50 @@ def test_data_probe_reports_tushare_fresh_today(monkeypatch):
     assert tushare["status"] == "ok"
     assert tushare["latency_ms"] == 36
     assert "latest daily data is 2026-07-09" in tushare["message"]
+    assert len(calls) == 2
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["json_payload"]["api_name"] == "trade_cal"
+    assert calls[0]["json_payload"]["token"] == "token"
+    assert calls[1]["method"] == "POST"
+    assert calls[1]["json_payload"]["api_name"] == "daily"
+    assert calls[1]["json_payload"]["token"] == "token"
 
 
 def test_data_probe_reports_tushare_warning_when_stale(monkeypatch):
     from api.service_health import _probe_data_services
 
+    calls = []
     monkeypatch.setenv("TUSHARE_TOKEN", "token")
     monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
-    monkeypatch.setattr(
-        "api.service_health._http_probe",
-        lambda url, params=None, headers=None: (True, "Reachable", 12),
-    )
-    monkeypatch.setattr(
-        "api.service_health._json_probe",
-        lambda url, method="GET", params=None, json_payload=None, headers=None: (
-            True,
-            {"data": {"items": [{"trade_date": "20260708"}]}},
-            24,
-        ),
-    )
+
+    def json_probe(url, method="GET", params=None, json_payload=None, headers=None):
+        calls.append(
+            {
+                "url": url,
+                "method": method,
+                "params": params,
+                "json_payload": json_payload,
+                "headers": headers,
+            }
+        )
+        if len(calls) == 1:
+            return True, {"data": {"items": [["20260709", 1]]}}, 12
+        return True, {"data": {"items": [{"trade_date": "20260708"}]}}, 24
+
+    monkeypatch.setattr("api.service_health._json_probe", json_probe)
 
     statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "tushare"}}))
 
     tushare = next(item for item in statuses if item["id"] == "data:tushare")
     assert tushare["status"] == "warning"
     assert "latest daily data is 2026-07-08; expected 2026-07-09" in tushare["message"]
+    assert len(calls) == 2
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["json_payload"]["api_name"] == "trade_cal"
+    assert calls[0]["json_payload"]["token"] == "token"
+    assert calls[1]["method"] == "POST"
+    assert calls[1]["json_payload"]["api_name"] == "daily"
+    assert calls[1]["json_payload"]["token"] == "token"
 
 
 def test_data_probe_does_not_run_freshness_after_reachability_failure(monkeypatch):
@@ -497,3 +521,35 @@ def test_extract_latest_date_handles_nested_vendor_payloads():
     assert _extract_latest_date({"Time Series (Daily)": {"2026-07-09": {"4. close": "10"}}}) == "20260709"
     assert _extract_latest_date({"observations": [{"date": "2026-07-08"}]}) == "20260708"
     assert _extract_latest_date({"chart": {"result": [{"timestamp": [1783555200]}]}}) == "20260709"
+
+
+def test_extract_latest_date_handles_tushare_fields_items_payload():
+    from api.service_health import _extract_latest_date
+
+    payload = {"data": {"fields": ["trade_date", "close"], "items": [["20260709", 10.0]]}}
+
+    assert _extract_latest_date(payload) == "20260709"
+
+
+def test_http_probe_redacts_secret_values_from_request_exceptions(monkeypatch):
+    import requests
+
+    from api.service_health import _http_probe
+
+    def broken_get(*args, **kwargs):
+        raise requests.exceptions.RequestException(
+            "failed https://example.test/query?apikey=SECRET123&api_key=SECRET456&token=SECRET789"
+        )
+
+    monkeypatch.setattr("api.service_health.requests.get", broken_get)
+
+    ok, message, _latency_ms = _http_probe(
+        "https://example.test/query",
+        params={"apikey": "SECRET123", "api_key": "SECRET456", "token": "SECRET789"},
+    )
+
+    assert ok is False
+    assert "SECRET123" not in message
+    assert "SECRET456" not in message
+    assert "SECRET789" not in message
+    assert "[REDACTED]" in message
