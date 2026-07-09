@@ -8,6 +8,18 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ## [Unreleased]
 
+### Changed
+
+- **ETF 详情页 (`/etf/[ticker]`) 可读性重做。** 原页面约七成纵向空间被「技术指标/日线」的
+  原始数值转储占满(MACD/RSI/50 日均线/布林各约 60 行 `日期: 15 位小数` 加成片的
+  「N/A: Not a trading day」),图表无轴/无价格/无日期标签,页头只有代码没有基金名与价格。
+  改为:头部展示基金简称+代码+管理人;KPI 行(最新收盘/日内区间/成交量/最新净值,红涨绿跌);
+  价格走势图加渐变面积、最新值圆点、高低参考线与日期范围;把指标转储折叠成四张指标卡
+  (最新值 + 一句判定徽章「多头动能/超买/价在下方」等 + 迷你 sparkline,描述见 hover);
+  新闻用 prose 排版并压制其内部标题层级。删除「分时价格」板块。新增纯函数
+  `lib/etf-indicators.ts`(解析 `indicator_text`)与 `lib/etf-chart.ts` 的 `buildAreaPath`/
+  `chartMarks`,共 12 条 node 测试;未加新依赖,沿用既有暗色 glass 设计系统。
+
 ### Fixed
 
 - **ETF「主要持仓新闻」全部「未发现相关新闻」、持仓名称全是「-」。** 两个叠加缺陷:
