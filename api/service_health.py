@@ -98,11 +98,10 @@ def _extract_latest_date(payload: object) -> str | None:
     dates: list[str] = []
 
     def visit(value: object, key: str | None = None) -> None:
-        if key and key.lower() in {"date", "trade_date", "cal_date", "latesttradingday"}:
-            normalized = _normalize_date(value)
-            if normalized:
-                dates.append(normalized)
-        elif isinstance(value, int) and key and key.lower() in {"timestamp", "time"}:
+        if key and (
+            key.lower() in {"date", "trade_date", "cal_date", "latesttradingday"}
+            or (isinstance(value, int) and key.lower() in {"timestamp", "time"})
+        ):
             normalized = _normalize_date(value)
             if normalized:
                 dates.append(normalized)
