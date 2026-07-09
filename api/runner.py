@@ -146,14 +146,6 @@ def _rounds_config(graph) -> dict:
     }
 
 
-def _tool_call_key(message, tool_name: str, fallback_index: int) -> str:
-    tool_call_id = getattr(message, "tool_call_id", None)
-    if tool_call_id:
-        return f"tool:{tool_call_id}"
-    msg_id = getattr(message, "id", None)
-    return f"tool:{msg_id or fallback_index}:{tool_name}"
-
-
 def _tool_status_events(chunk: dict, seen: set[str]) -> list[dict]:
     events: list[dict] = []
     messages = chunk.get("messages")
@@ -161,28 +153,23 @@ def _tool_status_events(chunk: dict, seen: set[str]) -> list[dict]:
         return events
 
     for index, message in enumerate(messages):
-        tool_names: list[str] = []
         tool_call_id = getattr(message, "tool_call_id", None)
         if tool_call_id:
-            name = getattr(message, "name", None) or "tool"
-            key = _tool_call_key(message, name, index)
-            if key in seen:
-                continue
-            seen.add(key)
-            tool_names.append(str(name))
+            name = str(getattr(message, "name", None) or "tool")
+            pairs = [(name, f"tool:{tool_call_id}")]
         else:
+            pairs = []
             for call in getattr(message, "tool_calls", None) or []:
                 if not isinstance(call, dict):
                     continue
-                name = call.get("name") or "tool"
+                name = str(call.get("name") or "tool")
                 call_id = call.get("id") or f"{index}:{name}"
-                key = f"tool:{call_id}"
-                if key in seen:
-                    continue
-                seen.add(key)
-                tool_names.append(str(name))
+                pairs.append((name, f"tool:{call_id}"))
 
-        for tool_name in tool_names:
+        for tool_name, key in pairs:
+            if key in seen:
+                continue
+            seen.add(key)
             agent, team = TOOL_AGENT_MAP.get(tool_name, ("info_collection", "data"))
             events.append(
                 {
