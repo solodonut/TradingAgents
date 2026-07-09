@@ -225,6 +225,39 @@ def _json_probe_args(probe_spec: dict, api_key: str | None) -> tuple[dict, dict]
     return params, json_payload
 
 
+def _same_json_probe(base: dict, freshness: dict) -> bool:
+    return (
+        str(base.get("url")) == str(freshness.get("url"))
+        and str(base.get("method", "GET")).upper() == str(freshness.get("method", "GET")).upper()
+        and dict(base.get("params", {})) == dict(freshness.get("params", {}))
+        and dict(base.get("json_payload", {})) == dict(freshness.get("json_payload", {}))
+        and base.get("headers") == freshness.get("headers")
+        and base.get("api_key") == freshness.get("api_key")
+    )
+
+
+def _run_combined_freshness_probe(spec: dict, api_key: str | None) -> tuple[ServiceStatus, str, int]:
+    freshness = dict(spec["freshness"])
+    params, json_payload = _json_probe_args(freshness, api_key)
+
+    ok, payload, latency_ms = _json_probe(
+        str(freshness["url"]),
+        method=str(freshness.get("method", "GET")),
+        params=params or None,
+        json_payload=json_payload or None,
+        headers=freshness.get("headers"),
+    )
+    if not ok:
+        return "error", str(payload), latency_ms
+
+    latest_date = _extract_latest_date(payload)
+    if not latest_date:
+        return "error", "Reachable, but freshness response had no usable date", latency_ms
+
+    status, message = _freshness_status(latest_date)
+    return status, message, latency_ms
+
+
 def _run_json_reachability_probe(spec: dict, api_key: str | None) -> tuple[bool, str, int]:
     reachability = dict(spec["reachability"])
     params, json_payload = _json_probe_args(reachability, api_key)
@@ -451,6 +484,19 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
             else:
                 params["apikey"] = api_key
 
+        freshness = spec.get("freshness")
+        if freshness and _same_json_probe(spec, dict(freshness)):
+            status, message, latency_ms = _run_combined_freshness_probe(spec, api_key)
+            yield _event(
+                service_id=f"data:{service_id}",
+                name=name,
+                kind="data",
+                status=status,
+                message=message,
+                latency_ms=latency_ms,
+            )
+            continue
+
         if "reachability" in spec:
             ok, message, latency_ms = _run_json_reachability_probe(spec, api_key)
         else:
@@ -458,7 +504,7 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
                 str(spec["url"]), params=params, headers=spec.get("headers")
             )
         status: ServiceStatus = "ok" if ok else "error"
-        if ok and "freshness" in spec:
+        if ok and freshness:
             status, message, freshness_latency_ms = _run_freshness_probe(spec, api_key)
             latency_ms += freshness_latency_ms
         yield _event(

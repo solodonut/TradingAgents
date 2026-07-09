@@ -399,10 +399,13 @@ def test_data_probe_reports_yfinance_ok_when_fresh(monkeypatch):
     from api.service_health import _probe_data_services
 
     monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
-    monkeypatch.setattr(
-        "api.service_health._http_probe",
-        lambda url, params=None, headers=None: (True, "Reachable", 11),
-    )
+    http_calls = {"count": 0}
+
+    def http_probe(url, params=None, headers=None):
+        http_calls["count"] += 1
+        return True, "Reachable", 11
+
+    monkeypatch.setattr("api.service_health._http_probe", http_probe)
     monkeypatch.setattr(
         "api.service_health._json_probe",
         lambda url, method="GET", params=None, json_payload=None, headers=None: (
@@ -417,6 +420,8 @@ def test_data_probe_reports_yfinance_ok_when_fresh(monkeypatch):
     yahoo = next(item for item in statuses if item["id"] == "data:yfinance")
     assert yahoo["status"] == "ok"
     assert "latest daily data is 2026-07-09" in yahoo["message"]
+    assert yahoo["latency_ms"] == 19
+    assert http_calls["count"] == 0
 
 
 def test_data_probe_reports_alpha_vantage_warning_when_stale(monkeypatch):
