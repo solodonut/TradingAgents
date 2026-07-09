@@ -79,7 +79,7 @@ export interface RunStatusDetail {
   updated_at: string | null;
 }
 
-export type ServiceHealthStatus = "checking" | "ok" | "error" | "disabled";
+export type ServiceHealthStatus = "checking" | "ok" | "warning" | "error" | "disabled";
 export type ServiceHealthKind = "llm" | "data" | "system";
 
 export interface ServiceHealthItem {
@@ -95,6 +95,7 @@ export interface ServiceHealthSummary {
   total: number;
   checking: number;
   ok: number;
+  warning: number;
   error: number;
   disabled: number;
 }

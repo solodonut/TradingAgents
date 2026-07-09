@@ -12,11 +12,13 @@ const item = (id: string, status: ServiceHealthItem["status"]): ServiceHealthIte
   latency_ms: null,
 });
 
-test("sortServiceHealthItems orders reachable, errors, then disabled", () => {
+test("sortServiceHealthItems orders reachable, errors, warnings, checking, then disabled", () => {
   const sorted = sortServiceHealthItems([
     item("disabled-a", "disabled"),
+    item("warning-a", "warning"),
     item("error-a", "error"),
     item("ok-a", "ok"),
+    item("checking-a", "checking"),
     item("error-b", "error"),
     item("disabled-b", "disabled"),
     item("ok-b", "ok"),
@@ -24,7 +26,16 @@ test("sortServiceHealthItems orders reachable, errors, then disabled", () => {
 
   assert.deepEqual(
     sorted.map((service) => service.id),
-    ["ok-a", "ok-b", "error-a", "error-b", "disabled-a", "disabled-b"],
+    [
+      "ok-a",
+      "ok-b",
+      "error-a",
+      "error-b",
+      "warning-a",
+      "checking-a",
+      "disabled-a",
+      "disabled-b",
+    ],
   );
 });
 

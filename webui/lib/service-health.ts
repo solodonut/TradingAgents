@@ -3,8 +3,9 @@ import type { ServiceHealthItem } from "./types";
 const STATUS_ORDER: Record<ServiceHealthItem["status"], number> = {
   ok: 0,
   error: 1,
-  checking: 2,
-  disabled: 3,
+  warning: 2,
+  checking: 3,
+  disabled: 4,
 };
 
 export function sortServiceHealthItems(items: ServiceHealthItem[]): ServiceHealthItem[] {
