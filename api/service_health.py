@@ -67,6 +67,35 @@ def _http_probe(
         return False, f"{type(exc).__name__}: {exc}", elapsed
 
 
+def _json_probe(
+    url: str,
+    *,
+    method: str = "GET",
+    params: dict | None = None,
+    json_payload: dict | None = None,
+    headers: dict | None = None,
+) -> tuple[bool, object, int]:
+    start = time.monotonic()
+    try:
+        if method.upper() == "POST":
+            response = requests.post(
+                url,
+                params=params,
+                json=json_payload,
+                headers=headers,
+                timeout=_REQUEST_TIMEOUT,
+            )
+        else:
+            response = requests.get(url, params=params, headers=headers, timeout=_REQUEST_TIMEOUT)
+        elapsed = int((time.monotonic() - start) * 1000)
+        if not 200 <= response.status_code < 400:
+            return False, f"HTTP {response.status_code}", elapsed
+        return True, response.json(), elapsed
+    except Exception as exc:  # noqa: BLE001 - any exception is a service failure
+        elapsed = int((time.monotonic() - start) * 1000)
+        return False, f"{type(exc).__name__}: {exc}", elapsed
+
+
 def _today_compact() -> str:
     return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
 
@@ -99,7 +128,8 @@ def _extract_latest_date(payload: object) -> str | None:
 
     def visit(value: object, key: str | None = None) -> None:
         if key and (
-            key.lower() in {"date", "trade_date", "cal_date", "latesttradingday"}
+            key.lower()
+            in {"date", "trade_date", "cal_date", "latesttradingday", "07. latest trading day"}
             or (isinstance(value, int) and key.lower() in {"timestamp", "time"})
         ):
             normalized = _normalize_date(value)
@@ -115,6 +145,10 @@ def _extract_latest_date(payload: object) -> str | None:
         elif isinstance(value, list):
             for child in value:
                 visit(child, key)
+        elif isinstance(value, str) and "," in value:
+            normalized = _normalize_date(value.split(",", 1)[0])
+            if normalized:
+                dates.append(normalized)
 
     visit(payload)
     return max(dates) if dates else None
@@ -130,6 +164,37 @@ def _freshness_status(latest_date: str) -> tuple[ServiceStatus, str]:
         "warning",
         f"Reachable, but latest daily data is {latest_label}; expected {expected_label}",
     )
+
+
+def _run_freshness_probe(spec: dict, api_key: str | None) -> tuple[ServiceStatus, str, int]:
+    freshness = dict(spec["freshness"])
+    params = dict(freshness.get("params", {}))
+    json_payload = dict(freshness.get("json_payload", {}))
+
+    key_target = freshness.get("api_key")
+    if api_key and key_target == "params:apikey":
+        params["apikey"] = api_key
+    elif api_key and key_target == "params:api_key":
+        params["api_key"] = api_key
+    elif api_key and key_target == "json:token":
+        json_payload["token"] = api_key
+
+    ok, payload, latency_ms = _json_probe(
+        str(freshness["url"]),
+        method=str(freshness.get("method", "GET")),
+        params=params or None,
+        json_payload=json_payload or None,
+        headers=freshness.get("headers"),
+    )
+    if not ok:
+        return "error", str(payload), latency_ms
+
+    latest_date = _extract_latest_date(payload)
+    if not latest_date:
+        return "error", "Reachable, but freshness response had no usable date", latency_ms
+
+    status, message = _freshness_status(latest_date)
+    return status, message, latency_ms
 
 
 def _probe_llm_services(config: dict) -> Iterator[dict]:
@@ -181,6 +246,18 @@ _DATA_SERVICES = {
         "url": "https://push2.eastmoney.com/api/qt/stock/get",
         "params": {"secid": "1.000001", "fields": "f43"},
         "env": None,
+        "freshness": {
+            "url": "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+            "params": {
+                "secid": "1.000001",
+                "klt": "101",
+                "fqt": "1",
+                "lmt": "1",
+                "end": "20500101",
+                "fields1": "f1,f2,f3,f4,f5,f6",
+                "fields2": "f51,f52,f53,f54,f55,f56",
+            },
+        },
     },
     "eastmoney": {
         # East Money direct-search news fallback (search-api-web), probed
@@ -202,12 +279,21 @@ _DATA_SERVICES = {
         "url": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL",
         "params": {"range": "1d", "interval": "1d"},
         "env": None,
+        "freshness": {
+            "url": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL",
+            "params": {"range": "1d", "interval": "1d"},
+        },
     },
     "alpha_vantage": {
         "name": "Alpha Vantage",
         "url": "https://www.alphavantage.co/query",
         "params": {"function": "GLOBAL_QUOTE", "symbol": "AAPL"},
         "env": "ALPHA_VANTAGE_API_KEY",
+        "freshness": {
+            "url": "https://www.alphavantage.co/query",
+            "params": {"function": "GLOBAL_QUOTE", "symbol": "AAPL"},
+            "api_key": "params:apikey",
+        },
     },
     "tushare": {
         "name": "Tushare Pro",
@@ -218,12 +304,32 @@ _DATA_SERVICES = {
             "fields": "cal_date,is_open",
         },
         "env": "TUSHARE_TOKEN",
+        "freshness": {
+            "url": "https://api.tushare.pro",
+            "method": "POST",
+            "json_payload": {
+                "api_name": "daily",
+                "params": {"ts_code": "000001.SZ", "limit": 1},
+                "fields": "trade_date",
+            },
+            "api_key": "json:token",
+        },
     },
     "fred": {
         "name": "FRED",
         "url": "https://api.stlouisfed.org/fred/series/observations",
         "params": {"series_id": "DGS10", "limit": "1", "file_type": "json"},
         "env": "FRED_API_KEY",
+        "freshness": {
+            "url": "https://api.stlouisfed.org/fred/series/observations",
+            "params": {
+                "series_id": "DGS10",
+                "limit": "1",
+                "file_type": "json",
+                "sort_order": "desc",
+            },
+            "api_key": "params:api_key",
+        },
     },
     "polymarket": {
         "name": "Polymarket",
@@ -250,6 +356,7 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
 
         env_var = spec.get("env")
         params = dict(spec["params"])
+        api_key = None
         if env_var:
             api_key = os.getenv(str(env_var))
             if not api_key:
@@ -271,11 +378,15 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
         ok, message, latency_ms = _http_probe(
             str(spec["url"]), params=params, headers=spec.get("headers")
         )
+        status: ServiceStatus = "ok" if ok else "error"
+        if ok and "freshness" in spec:
+            status, message, freshness_latency_ms = _run_freshness_probe(spec, api_key)
+            latency_ms += freshness_latency_ms
         yield _event(
             service_id=f"data:{service_id}",
             name=name,
             kind="data",
-            status="ok" if ok else "error",
+            status=status,
             message=message,
             latency_ms=latency_ms,
         )

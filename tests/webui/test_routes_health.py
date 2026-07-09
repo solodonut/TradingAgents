@@ -223,6 +223,14 @@ def test_data_probe_splits_akshare_and_eastmoney(monkeypatch):
         "api.service_health._http_probe",
         lambda url, params=None, headers=None: (True, "Reachable", 9),
     )
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"data": {"klines": ["2026-07-09,10,11,12,9,100"]}},
+            13,
+        ),
+    )
 
     statuses = list(
         _probe_data_services({"tool_vendors": {"get_news": "akshare,eastmoney,longbridge"}})
@@ -265,22 +273,199 @@ def test_data_probe_reports_missing_tushare_token(monkeypatch):
     assert "TUSHARE_TOKEN" in tushare["message"]
 
 
-def test_data_probe_reports_tushare_reachable(monkeypatch):
+def test_data_probe_reports_tushare_fresh_today(monkeypatch):
     from api.service_health import _probe_data_services
 
     monkeypatch.setenv("TUSHARE_TOKEN", "token")
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
     monkeypatch.setattr(
         "api.service_health._http_probe",
         lambda url, params=None, headers=None: (True, "Reachable", 12),
     )
-
-    statuses = list(
-        _probe_data_services({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"data": {"items": [{"trade_date": "20260709"}]}},
+            24,
+        ),
     )
+
+    statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "tushare"}}))
 
     tushare = next(item for item in statuses if item["id"] == "data:tushare")
     assert tushare["status"] == "ok"
-    assert tushare["latency_ms"] == 12
+    assert tushare["latency_ms"] == 36
+    assert "latest daily data is 2026-07-09" in tushare["message"]
+
+
+def test_data_probe_reports_tushare_warning_when_stale(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setenv("TUSHARE_TOKEN", "token")
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (True, "Reachable", 12),
+    )
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"data": {"items": [{"trade_date": "20260708"}]}},
+            24,
+        ),
+    )
+
+    statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "tushare"}}))
+
+    tushare = next(item for item in statuses if item["id"] == "data:tushare")
+    assert tushare["status"] == "warning"
+    assert "latest daily data is 2026-07-08; expected 2026-07-09" in tushare["message"]
+
+
+def test_data_probe_does_not_run_freshness_after_reachability_failure(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    calls = {"freshness": 0}
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (False, "HTTP 503", 12),
+    )
+
+    def json_probe(*args, **kwargs):
+        calls["freshness"] += 1
+        return True, {"data": {"items": [{"trade_date": "20260709"}]}}, 24
+
+    monkeypatch.setattr("api.service_health._json_probe", json_probe)
+
+    statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "akshare"}}))
+
+    akshare = next(item for item in statuses if item["id"] == "data:akshare")
+    assert akshare["status"] == "error"
+    assert akshare["message"] == "HTTP 503"
+    assert calls["freshness"] == 0
+
+
+def test_data_probe_reports_akshare_warning_when_stale(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (True, "Reachable", 9),
+    )
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"data": {"klines": ["2026-07-08,10,11,12,9,100"]}},
+            13,
+        ),
+    )
+
+    statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "akshare"}}))
+
+    akshare = next(item for item in statuses if item["id"] == "data:akshare")
+    assert akshare["status"] == "warning"
+    assert "latest daily data is 2026-07-08; expected 2026-07-09" in akshare["message"]
+
+
+def test_data_probe_reports_yfinance_ok_when_fresh(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (True, "Reachable", 11),
+    )
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"chart": {"result": [{"timestamp": [1783555200]}]}},
+            19,
+        ),
+    )
+
+    statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "yfinance"}}))
+
+    yahoo = next(item for item in statuses if item["id"] == "data:yfinance")
+    assert yahoo["status"] == "ok"
+    assert "latest daily data is 2026-07-09" in yahoo["message"]
+
+
+def test_data_probe_reports_alpha_vantage_warning_when_stale(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "token")
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (True, "Reachable", 11),
+    )
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"Global Quote": {"07. latest trading day": "2026-07-08"}},
+            17,
+        ),
+    )
+
+    statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "alpha_vantage"}}))
+
+    alpha = next(item for item in statuses if item["id"] == "data:alpha_vantage")
+    assert alpha["status"] == "warning"
+    assert "latest daily data is 2026-07-08; expected 2026-07-09" in alpha["message"]
+
+
+def test_data_probe_reports_fred_warning_when_stale(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setenv("FRED_API_KEY", "token")
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (True, "Reachable", 11),
+    )
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"observations": [{"date": "2026-07-08", "value": "4.12"}]},
+            17,
+        ),
+    )
+
+    statuses = list(_probe_data_services({"data_vendors": {"macro_data": "fred"}}))
+
+    fred = next(item for item in statuses if item["id"] == "data:fred")
+    assert fred["status"] == "warning"
+    assert "latest daily data is 2026-07-08; expected 2026-07-09" in fred["message"]
+
+
+def test_data_probe_reports_error_when_freshness_payload_has_no_date(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr(
+        "api.service_health._http_probe",
+        lambda url, params=None, headers=None: (True, "Reachable", 9),
+    )
+    monkeypatch.setattr(
+        "api.service_health._json_probe",
+        lambda url, method="GET", params=None, json_payload=None, headers=None: (
+            True,
+            {"data": {"items": []}},
+            13,
+        ),
+    )
+
+    statuses = list(_probe_data_services({"data_vendors": {"core_stock_apis": "akshare"}}))
+
+    akshare = next(item for item in statuses if item["id"] == "data:akshare")
+    assert akshare["status"] == "error"
+    assert akshare["message"] == "Reachable, but freshness response had no usable date"
 
 
 def test_freshness_status_reports_ok_for_today(monkeypatch):
