@@ -152,6 +152,10 @@ class StartupCacheClearer:
     def is_ready(self) -> bool:
         return self.snapshot()["status"] == "completed"
 
+    def is_active(self) -> bool:
+        with self._lock:
+            return self._is_active_locked()
+
     def subscribe(self) -> Iterator[dict]:
         q: queue.Queue[dict | None] = queue.Queue()
         with self._lock:
