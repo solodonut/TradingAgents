@@ -32,6 +32,25 @@ def test_startup_cache_clearer_deletes_endpoint_cache_files(tmp_path):
     assert checkpoint_file.exists()
 
 
+def test_startup_cache_clearer_full_mode_deletes_checkpoints(tmp_path):
+    from api.startup_cache import StartupCacheClearer
+
+    cache_root = tmp_path / "cache"
+    vendor_cache = cache_root / "tushare" / "fund_daily.pkl"
+    checkpoint = cache_root / "checkpoints" / "510330.db"
+    vendor_cache.parent.mkdir(parents=True)
+    checkpoint.parent.mkdir(parents=True)
+    vendor_cache.write_bytes(b"market-cache")
+    checkpoint.write_bytes(b"resume-state")
+
+    clearer = StartupCacheClearer(cache_root, include_checkpoints=True)
+    clearer.run_sync()
+
+    assert clearer.snapshot()["status"] == "completed"
+    assert not vendor_cache.exists()
+    assert not checkpoint.exists()
+
+
 def test_startup_cache_clearer_error_blocks_on_delete_failure(tmp_path, monkeypatch):
     from api.startup_cache import StartupCacheClearer
 

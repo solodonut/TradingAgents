@@ -45,9 +45,16 @@ class StartupCacheState:
 class StartupCacheClearer:
     """Clear endpoint data caches once per API process startup."""
 
-    def __init__(self, cache_root: str | Path, *, max_errors: int = 20):
+    def __init__(
+        self,
+        cache_root: str | Path,
+        *,
+        include_checkpoints: bool = False,
+        max_errors: int = 20,
+    ):
         self.cache_root = Path(cache_root).expanduser()
         self._cache_root_resolved = self.cache_root.resolve(strict=False)
+        self.include_checkpoints = include_checkpoints
         self.max_errors = max_errors
         self._state = StartupCacheState()
         self._lock = threading.Lock()
@@ -197,7 +204,7 @@ class StartupCacheClearer:
             rel = path.relative_to(self.cache_root)
         except ValueError:
             return True
-        return rel.parts[:1] == ("checkpoints",)
+        return not self.include_checkpoints and rel.parts[:1] == ("checkpoints",)
 
     def _relative(self, path: Path) -> str:
         try:
