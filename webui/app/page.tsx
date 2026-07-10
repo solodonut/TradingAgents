@@ -24,9 +24,11 @@ import {
   clearQueue,
   reorderQueue,
   checkServiceHealth,
+  clearAllCaches,
   getStartupCacheStatus,
   historyReportsZipUrl,
   subscribeStartupCacheClear,
+  subscribeManualCacheClear,
   subscribeServiceHealth,
 } from "@/lib/api";
 import { subscribe } from "@/lib/sse";
@@ -210,6 +212,7 @@ export default function Home() {
   const healthUnsubscribeRef = useRef<(() => void) | null>(null);
   const startupCacheUnsubscribeRef = useRef<(() => void) | null>(null);
   const startupCacheRetryTimerRef = useRef<number | null>(null);
+  const manualCacheUnsubscribeRef = useRef<(() => void) | null>(null);
   const followGenRef = useRef(0);
 
   const [queue, setQueue] = useState<QueueState>({ running: null, pending: [] });
@@ -222,6 +225,8 @@ export default function Home() {
     null,
   );
   const [startupCacheError, setStartupCacheError] = useState<string | null>(null);
+  const [manualCacheStatus, setManualCacheStatus] = useState<StartupCacheStatusDetail | null>(null);
+  const [manualCacheError, setManualCacheError] = useState<string | null>(null);
   const lastFailureHealthRunRef = useRef<string | null>(null);
 
   const refreshQueue = useCallback(
@@ -390,6 +395,37 @@ export default function Home() {
       });
   }, [clearStartupCacheRetry, scheduleStartupCacheRetry, refreshHistory, refreshQueue]);
 
+  const watchManualCache = useCallback(() => {
+    manualCacheUnsubscribeRef.current?.();
+    manualCacheUnsubscribeRef.current = subscribeManualCacheClear(
+      (event) => {
+        setManualCacheStatus(event.data);
+        setManualCacheError(null);
+        if (event.data.status === "completed") {
+          refreshQueue();
+          refreshHistory();
+        }
+      },
+      () => {
+        manualCacheUnsubscribeRef.current = null;
+      },
+      (message) => setManualCacheError(message),
+    );
+  }, [refreshHistory, refreshQueue]);
+
+  const clearAllCachesWithConfirmation = useCallback(() => {
+    if (!window.confirm("将删除所有市场数据缓存和 checkpoints，已中断分析无法恢复。分析历史、队列、持仓快照和记忆不会删除。是否继续？")) {
+      return;
+    }
+    clearAllCaches()
+      .then((state) => {
+        setManualCacheStatus(state);
+        setManualCacheError(null);
+        watchManualCache();
+      })
+      .catch((err) => setManualCacheError((err as Error).message));
+  }, [watchManualCache]);
+
   useEffect(() => {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
     refreshHistory();
@@ -401,6 +437,7 @@ export default function Home() {
       unsubscribeRef.current?.();
       healthUnsubscribeRef.current?.();
       startupCacheUnsubscribeRef.current?.();
+      manualCacheUnsubscribeRef.current?.();
       clearStartupCacheRetry();
     };
   }, [clearStartupCacheRetry, refreshHistory, refreshQueue, runServiceHealthCheck, watchStartupCache]);
@@ -767,6 +804,9 @@ export default function Home() {
                 onCheckOne={runSingleServiceHealthCheck}
                 checkingIds={healthCheckingIds}
                 startupCacheStatus={startupCacheStatus}
+                manualCacheStatus={manualCacheStatus}
+                manualCacheError={manualCacheError}
+                onClearAllCaches={clearAllCachesWithConfirmation}
               />
             </div>
 

@@ -178,6 +178,24 @@ export function startupCacheStreamUrl(): string {
   return `${BASE}/api/startup-cache/stream`;
 }
 
+export function manualCacheStatusUrl(): string {
+  return `${BASE}/api/cache/status`;
+}
+
+export function manualCacheStreamUrl(): string {
+  return `${BASE}/api/cache/stream`;
+}
+
+export async function clearAllCaches(): Promise<StartupCacheStatusDetail> {
+  const r = await fetch(`${BASE}/api/cache/clear`, { method: "POST" });
+  if (r.status === 409) {
+    const body = await r.json().catch(() => null);
+    throw new Error(body?.detail ?? "无法清除缓存");
+  }
+  if (!r.ok) throw new Error("无法清除缓存");
+  return r.json();
+}
+
 export async function checkServiceHealth(serviceId: string): Promise<ServiceHealthItem> {
   const encodedId = serviceId.split("/").map(encodeURIComponent).join("/");
   const r = await fetch(`${BASE}/api/health/services/${encodedId}`);
@@ -252,6 +270,39 @@ export function subscribeStartupCacheClear(
   es.onerror = () => {
     es.close();
     onError("启动缓存清理连接中断");
+    onClose();
+  };
+  return () => es.close();
+}
+
+export function subscribeManualCacheClear(
+  onEvent: (e: StartupCacheEvent) => void,
+  onClose: () => void,
+  onError: (message: string) => void,
+): () => void {
+  const es = new EventSource(manualCacheStreamUrl());
+  const statusHandler = (ev: MessageEvent) => {
+    try {
+      onEvent({ event: "cache_clear_status", data: JSON.parse(ev.data) });
+    } catch {
+      /* ignore malformed */
+    }
+  };
+  const summaryHandler = (ev: MessageEvent) => {
+    try {
+      onEvent({ event: "summary", data: JSON.parse(ev.data) });
+    } catch {
+      /* ignore malformed */
+    } finally {
+      es.close();
+      onClose();
+    }
+  };
+  es.addEventListener("cache_clear_status", statusHandler);
+  es.addEventListener("summary", summaryHandler);
+  es.onerror = () => {
+    es.close();
+    onError("缓存清理连接中断");
     onClose();
   };
   return () => es.close();

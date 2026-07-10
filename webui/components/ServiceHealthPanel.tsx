@@ -8,10 +8,12 @@ import {
   CircleAlert,
   LoaderCircle,
   RefreshCw,
+  Trash2,
   Wifi,
 } from "lucide-react";
 import { useState } from "react";
 import { STARTUP_CACHE_ITEM_ID, formatBytes } from "@/lib/startup-cache";
+import { manualCacheActionDisabled } from "@/lib/manual-cache";
 import type {
   ServiceHealthItem,
   ServiceHealthSummary,
@@ -100,6 +102,9 @@ export function ServiceHealthPanel({
   onCheckOne,
   checkingIds = new Set(),
   startupCacheStatus,
+  manualCacheStatus,
+  manualCacheError,
+  onClearAllCaches,
 }: {
   items: ServiceHealthItem[];
   summary: ServiceHealthSummary | null;
@@ -110,6 +115,9 @@ export function ServiceHealthPanel({
   onCheckOne?: (serviceId: string) => void;
   checkingIds?: Set<string>;
   startupCacheStatus?: StartupCacheStatusDetail | null;
+  manualCacheStatus?: StartupCacheStatusDetail | null;
+  manualCacheError?: string | null;
+  onClearAllCaches?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const visible = items.length > 0 || checking || error;
@@ -183,12 +191,33 @@ export function ServiceHealthPanel({
             )}
             检查
           </button>
+          <button
+            type="button"
+            onClick={onClearAllCaches}
+            disabled={!onClearAllCaches || manualCacheActionDisabled(manualCacheStatus ?? null)}
+            className="glass-control inline-flex h-7 items-center gap-1.5 rounded-md border-destructive/50 px-2 font-mono text-[0.68rem] uppercase tracking-[0.12em] text-destructive transition-colors hover:border-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:border-destructive disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <Trash2 className="size-3.5" aria-hidden="true" />
+            {manualCacheStatus?.status === "running" ? "清理中" : "清除全部缓存"}
+          </button>
         </div>
       </div>
 
       {expanded && error && (
         <div className="glass-readable mt-3 rounded-md border-destructive/50 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
           {error}
+        </div>
+      )}
+
+      {expanded && (manualCacheStatus || manualCacheError) && (
+        <div className="glass-readable mt-3 rounded-md border-destructive/30 px-3 py-2 font-mono text-xs text-muted-foreground">
+          <div>全量缓存清理：{manualCacheStatus?.message ?? "未启动"}</div>
+          {manualCacheStatus && (
+            <div className="mt-1">
+              进度 {manualCacheStatus.processed_items}/{manualCacheStatus.total_items} · 删除 {manualCacheStatus.deleted_files} 个文件 · 释放 {formatBytes(manualCacheStatus.released_bytes)}
+            </div>
+          )}
+          {manualCacheError && <div className="mt-1 text-destructive">{manualCacheError}</div>}
         </div>
       )}
 
