@@ -3,6 +3,7 @@ import type {
   ChatMessageT,
   ChatSessionT,
   ConfigOptions,
+  DiagnosticEvent,
   EtfSnapshot,
   HistorySummary,
   PortfolioHolding,
@@ -231,6 +232,46 @@ export function subscribeServiceHealth(
   es.onerror = () => {
     es.close();
     onError("服务检查连接中断");
+    onClose();
+  };
+  return () => es.close();
+}
+
+export function etfDiagnosticsStreamUrl(code: string, refDate?: string): string {
+  const url = new URL(`${BASE}/api/diagnostics/etf/${encodeURIComponent(code)}`);
+  if (refDate) url.searchParams.set("ref_date", refDate);
+  return url.toString();
+}
+
+export function subscribeEtfDiagnostics(
+  code: string,
+  refDate: string | undefined,
+  onEvent: (e: DiagnosticEvent) => void,
+  onClose: () => void,
+  onError: (message: string) => void,
+): () => void {
+  const es = new EventSource(etfDiagnosticsStreamUrl(code, refDate));
+  const handler =
+    (type: "start" | "cell" | "done" | "error") => (ev: MessageEvent) => {
+      try {
+        onEvent({ event: type, data: JSON.parse(ev.data) } as DiagnosticEvent);
+      } catch {
+        /* ignore malformed */
+      }
+    };
+  (["start", "cell"] as const).forEach((t) => es.addEventListener(t, handler(t)));
+  es.addEventListener("done", (ev) => {
+    handler("done")(ev as MessageEvent);
+    es.close();
+    onClose();
+  });
+  es.addEventListener("error", (ev) => {
+    // 服务端显式 error 事件带 data;连接层错误没有 data。
+    if ((ev as MessageEvent).data) handler("error")(ev as MessageEvent);
+  });
+  es.onerror = () => {
+    es.close();
+    onError("诊断连接中断");
     onClose();
   };
   return () => es.close();

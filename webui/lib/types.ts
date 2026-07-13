@@ -199,3 +199,35 @@ export type EtfSnapshot = {
   trade_date: string;
   categories: Record<string, EtfSnapshotCategory>;
 };
+
+export type DiagnosticStatus = "ok" | "no_data" | "no_perm" | "unavailable";
+
+export interface DiagnosticCell {
+  method: string;
+  vendor: string;
+  group: string;
+  status: DiagnosticStatus;
+  elapsed_ms: number;
+  raw: string;
+  error_type: string | null;
+}
+
+export interface DiagnosticStart {
+  total: number;
+  code: string;
+  ref_date: string;
+}
+
+export interface DiagnosticSummary {
+  ok: number;
+  no_data: number;
+  no_perm: number;
+  unavailable: number;
+  elapsed_ms: number;
+}
+
+export type DiagnosticEvent =
+  | { event: "start"; data: DiagnosticStart }
+  | { event: "cell"; data: DiagnosticCell }
+  | { event: "done"; data: DiagnosticSummary }
+  | { event: "error"; data: { message: string } };
