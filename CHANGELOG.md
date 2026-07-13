@@ -8,6 +8,16 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- **ETF 数据端点诊断页 (`/etf/diagnostics`)。** 给定一个 ETF 代码,逐格测试 `VENDOR_METHODS`
+  数据源矩阵的每个 `(方法, vendor)` 组合(刻意绕过 `route_to_vendor`,直接调用底层实现,只读),
+  通过 SSE (`GET /api/diagnostics/etf/{code}`) 流式回填四态状态——✅成功 / ⚠️无数据·输入不对 /
+  🔒无权限 / ❌不可用——并可展开查看每格的原始返回全文或错误详情。分类依据错误类型、哨兵前缀
+  (`NO_DATA_AVAILABLE:` / `DATA_SOURCE_UNAVAILABLE:`)与权限关键词启发式。页面按 ETF 核心 /
+  股票基本面 / 参考·与 ETF 无关 三区展示,先按总数铺骨架再逐格变色;新增只读模块
+  `tradingagents/dataflows/diagnostics.py`。
+
 ### Changed
 
 - **ETF 详情页 (`/etf/[ticker]`) 可读性重做。** 原页面约七成纵向空间被「技术指标/日线」的
