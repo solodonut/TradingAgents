@@ -10,6 +10,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **ETF 诊断页支持多选供应商 + 记住选择 + 功能说明。** 诊断页新增供应商多选勾选框(含全选 /
+  清空),未选中的供应商由后端直接跳过、不发请求(省时、避免限流,进度总数只计选中格子);选择
+  写入 `localStorage` 并在下次打开时与当前可用供应商取交集恢复。每个数据功能显示一句中文说明,
+  结果区改为按「方法 → 供应商」二级分组,方法名不再重复。新增只读元数据端点
+  `GET /api/diagnostics/etf/meta`(供应商名单 + 方法说明),SSE 端点新增 `vendors` 过滤参数。
 - **ETF 数据端点诊断页 (`/etf/diagnostics`)。** 给定一个 ETF 代码,逐格测试 `VENDOR_METHODS`
   数据源矩阵的每个 `(方法, vendor)` 组合(刻意绕过 `route_to_vendor`,直接调用底层实现,只读),
   通过 SSE (`GET /api/diagnostics/etf/{code}`) 流式回填四态状态——✅成功 / ⚠️无数据·输入不对 /
