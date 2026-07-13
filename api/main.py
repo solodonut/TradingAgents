@@ -45,6 +45,8 @@ app.state.scheduler = None  # QueueScheduler, created at startup; tests reset to
 app.state.startup_cache_clearer = None  # StartupCacheClearer, created at startup
 app.state.manual_cache_clearer = None  # StartupCacheClearer, created on manual clear
 app.state.model_health = None  # set by the startup health check; tests may inject
+app.state.diagnostics_probe_iter = None  # tests inject a fake probe iterator
+app.state.diagnostics_count = None  # tests inject a fake total counter
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +149,10 @@ app.include_router(watchlist_routes.router)
 from api.routes import snapshots as snapshots_routes  # noqa: E402
 
 app.include_router(snapshots_routes.router)
+
+from api.routes import diagnostics as diagnostics_routes  # noqa: E402
+
+app.include_router(diagnostics_routes.router)
 
 
 def real_graph_factory(req):
