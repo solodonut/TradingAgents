@@ -15,7 +15,6 @@ def _cfg():
 
 def test_prefetch_all_ok(monkeypatch):
     monkeypatch.setattr(prefetch, "_fetch_news", lambda t, d: {"text": "news"})
-    monkeypatch.setattr(prefetch, "_fetch_intraday", lambda t, d: {"points": [1]})
     monkeypatch.setattr(prefetch, "_fetch_indicators", lambda t, d, lb: {"kline": [1]})
     monkeypatch.setattr(prefetch, "_fetch_fundamentals", lambda t, d: {"items": [1]})
     store = FakeStore()
@@ -23,9 +22,34 @@ def test_prefetch_all_ok(monkeypatch):
         "510300.SS", "2026-07-07", store, config=_cfg(), sleep=lambda s: None
     )
     assert {r.category: r.status for r in summary.results} == {
-        "news": "ok", "intraday": "ok", "indicators": "ok", "fundamentals": "ok"
+        "news": "ok", "indicators": "ok", "fundamentals": "ok"
     }
     assert store.rows["news"][0] == "ok"
+
+
+def test_prefetch_does_not_call_intraday(monkeypatch):
+    monkeypatch.setattr(prefetch, "_fetch_news", lambda t, d: {"text": "news"})
+    monkeypatch.setattr(
+        prefetch,
+        "_fetch_intraday",
+        lambda t, d: (_ for _ in ()).throw(AssertionError("intraday must not run")),
+        raising=False,
+    )
+    monkeypatch.setattr(prefetch, "_fetch_indicators", lambda t, d, lb: {"kline": [1]})
+    monkeypatch.setattr(prefetch, "_fetch_fundamentals", lambda t, d: {"items": [1]})
+    store = FakeStore()
+
+    summary = prefetch.prefetch_snapshot(
+        "510300.SS", "2026-07-07", store, config=_cfg(), sleep=lambda s: None
+    )
+
+    assert [result.category for result in summary.results] == [
+        "news",
+        "indicators",
+        "fundamentals",
+    ]
+    assert set(store.rows) == {"news", "indicators", "fundamentals"}
+    assert summary.for_context()["quote"] is None
 
 
 def test_prefetch_marks_missing_on_persistent_error(monkeypatch):
@@ -36,11 +60,6 @@ def test_prefetch_marks_missing_on_persistent_error(monkeypatch):
         raise TimeoutError("rate limited")
 
     monkeypatch.setattr(prefetch, "_fetch_news", boom)
-    monkeypatch.setattr(
-        prefetch,
-        "_fetch_intraday",
-        lambda t, d: {"points": [{"t": "15:00", "price": 4.82, "vol": 1.0}]},
-    )
     monkeypatch.setattr(prefetch, "_fetch_indicators", lambda t, d, lb: {"kline": [1]})
     monkeypatch.setattr(prefetch, "_fetch_fundamentals", lambda t, d: {"items": [1]})
     store = FakeStore()
@@ -52,7 +71,7 @@ def test_prefetch_marks_missing_on_persistent_error(monkeypatch):
     assert calls["n"] == 2  # retries 用尽(prefetch_retries=2)
     ctx = summary.for_context()
     assert "news" in ctx["missing"]
-    assert ctx["quote"]["last_price"] == 4.82  # 分时成功 → quote 从末点取价
+    assert ctx["quote"] is None
 
 
 def test_prefetch_no_data_not_retried(monkeypatch):
@@ -63,7 +82,6 @@ def test_prefetch_no_data_not_retried(monkeypatch):
         return "NO_DATA_AVAILABLE: none"
 
     monkeypatch.setattr(prefetch, "_fetch_news", nodata)
-    monkeypatch.setattr(prefetch, "_fetch_intraday", lambda t, d: {"points": [1]})
     monkeypatch.setattr(prefetch, "_fetch_indicators", lambda t, d, lb: {"kline": [1]})
     monkeypatch.setattr(prefetch, "_fetch_fundamentals", lambda t, d: {"items": [1]})
     store = FakeStore()
@@ -77,7 +95,6 @@ def test_prefetch_no_data_not_retried(monkeypatch):
 
 def test_prefetch_never_raises(monkeypatch):
     monkeypatch.setattr(prefetch, "_fetch_news", lambda t, d: (_ for _ in ()).throw(RuntimeError("x")))
-    monkeypatch.setattr(prefetch, "_fetch_intraday", lambda t, d: (_ for _ in ()).throw(RuntimeError("x")))
     monkeypatch.setattr(prefetch, "_fetch_indicators", lambda t, d, lb: (_ for _ in ()).throw(RuntimeError("x")))
     monkeypatch.setattr(prefetch, "_fetch_fundamentals", lambda t, d: (_ for _ in ()).throw(RuntimeError("x")))
     store = FakeStore()

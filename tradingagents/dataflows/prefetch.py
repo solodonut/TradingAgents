@@ -19,11 +19,10 @@ from .interface import route_to_vendor
 from .tushare_intraday import (
     get_etf_daily_kline,
     get_etf_fundamentals_kv,
-    get_etf_intraday,
 )
 from .tushare_utils import resolve_symbol_type
 
-_CATEGORIES = ("news", "intraday", "indicators", "fundamentals")
+_CATEGORIES = ("news", "indicators", "fundamentals")
 _NODATA_PREFIXES = ("NO_DATA_AVAILABLE", "DATA_SOURCE_")
 # 详情页「技术指标/日线」区块展示的核心指标集:趋势(均线)+动量(rsi)+MACD+布林。
 _PREFETCH_INDICATORS = ("macd", "rsi", "close_50_sma", "boll")
@@ -49,17 +48,11 @@ class SnapshotSummary:
         """Compact block pushed into analyst context (news text + quote + missing)."""
         missing = [r.category for r in self.results if r.status == "missing"]
         news = self._by("news")
-        intraday = self._by("intraday")
-        quote = None
-        if intraday and intraday.status != "missing":
-            pts = intraday.payload.get("points") or []
-            if pts:
-                quote = {"last_price": pts[-1]["price"], "trade_date": self.trade_date}
         return {
             "ticker": self.ticker,
             "trade_date": self.trade_date,
             "news_text": (news.payload.get("text") if news and news.status != "missing" else None),
-            "quote": quote,
+            "quote": None,
             "missing": missing,
         }
 
@@ -79,10 +72,6 @@ def _fetch_news(ticker: str, trade_date: str):
     if _is_nodata(result):
         return result
     return {"text": result}
-
-
-def _fetch_intraday(ticker: str, trade_date: str):
-    return get_etf_intraday(ticker, trade_date)
 
 
 def _fetch_indicators(ticker: str, trade_date: str, lookback: int):
@@ -131,7 +120,6 @@ def prefetch_snapshot(ticker, trade_date, store, *, config=None, sleep=time.slee
 
     fetchers = {
         "news": lambda: _fetch_news(ticker, trade_date),
-        "intraday": lambda: _fetch_intraday(ticker, trade_date),
         "indicators": lambda: _fetch_indicators(ticker, trade_date, lookback),
         "fundamentals": lambda: _fetch_fundamentals(ticker, trade_date),
     }
