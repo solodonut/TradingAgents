@@ -216,9 +216,17 @@ export default function EtfDetailPage() {
     <main className="mx-auto max-w-5xl space-y-4 p-6">
       {/* Header: identity + date picker */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> 返回
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> 返回
+          </Link>
+          <Link
+            href="/etf/diagnostics"
+            className="rounded-md border border-border/60 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-primary"
+          >
+            端点诊断
+          </Link>
+        </div>
         <select
           value={date}
           onChange={(e) => setDate(e.target.value)}
