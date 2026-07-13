@@ -13,7 +13,7 @@ report.
 - Change the human-facing evidence prefix generated for tool results to use a
   display label derived from the evidence item’s data/purpose.
 - Preserve the existing per-section and report-wide source tables, including safe links.
-- Use a stable readable fallback when an evidence item has no source name.
+- Use a stable readable fallback when an evidence item has no data/purpose display label.
 
 ## Design
 
@@ -23,10 +23,11 @@ data/purpose label in brackets. For the 159915 analysis, examples include
 `[历史行情（OHLCV）]`, `[已验证市场快照]`, `[10 日 EMA]`, `[MACD 柱状图（macdh）]`,
 `[资产负债表]`, `[现金流量表]`, `[利润表]`, and `[综合基本面]`.
 
-The display label is metadata distinct from the vendor name. `source_name` continues to
+The display label is deliberately not the vendor name. `source_name` continues to
 identify the provider in the source tables (for example AKShare or a configured vendor),
-while the visible inline label identifies what the evidence represents. Indicator labels
-must include their requested parameter where applicable: `10 日 EMA`, `200 日 SMA`,
+but must not be used for the visible inline citation. The visible label identifies what
+the evidence represents. Indicator labels must include their requested parameter where
+applicable: `10 日 EMA`, `200 日 SMA`,
 `50 日 SMA`, `MACD`, `ATR`, `RSI`, `VWMA`, `布林带整体数据（boll）`,
 `布林下轨（boll_lb）`, and `布林上轨（boll_ub）`.
 
