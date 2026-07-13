@@ -4,6 +4,7 @@ import type {
   ChatSessionT,
   ConfigOptions,
   DiagnosticEvent,
+  DiagnosticMeta,
   EtfSnapshot,
   HistorySummary,
   PortfolioHolding,
@@ -237,20 +238,32 @@ export function subscribeServiceHealth(
   return () => es.close();
 }
 
-export function etfDiagnosticsStreamUrl(code: string, refDate?: string): string {
+export async function getEtfDiagnosticsMeta(): Promise<DiagnosticMeta> {
+  const r = await fetch(`${BASE}/api/diagnostics/etf/meta`);
+  if (!r.ok) throw new Error("failed to load diagnostics meta");
+  return r.json();
+}
+
+export function etfDiagnosticsStreamUrl(
+  code: string,
+  refDate?: string,
+  vendors?: string[],
+): string {
   const url = new URL(`${BASE}/api/diagnostics/etf/${encodeURIComponent(code)}`);
   if (refDate) url.searchParams.set("ref_date", refDate);
+  if (vendors && vendors.length) url.searchParams.set("vendors", vendors.join(","));
   return url.toString();
 }
 
 export function subscribeEtfDiagnostics(
   code: string,
   refDate: string | undefined,
+  vendors: string[],
   onEvent: (e: DiagnosticEvent) => void,
   onClose: () => void,
   onError: (message: string) => void,
 ): () => void {
-  const es = new EventSource(etfDiagnosticsStreamUrl(code, refDate));
+  const es = new EventSource(etfDiagnosticsStreamUrl(code, refDate, vendors));
   const handler =
     (type: "start" | "cell" | "done" | "error") => (ev: MessageEvent) => {
       try {

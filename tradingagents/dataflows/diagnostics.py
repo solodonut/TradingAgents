@@ -103,6 +103,24 @@ METHOD_GROUP: dict[str, str] = {
     "get_prediction_markets": "参考·与 ETF 无关",
 }
 
+# 每个方法一句中文说明,展示在诊断页。key 必须与 METHOD_GROUP 一致(测试保证)。
+METHOD_DESC: dict[str, str] = {
+    "get_stock_data": "日线 OHLCV 历史行情",
+    "get_indicators": "技术指标(如 close_50_sma)",
+    "get_etf_profile": "ETF 基本档案(规模 / 费率 / 跟踪指数)",
+    "get_etf_intraday": "ETF 分时行情(默认 5min)",
+    "get_etf_news": "ETF 相关新闻",
+    "get_news": "标的相关新闻",
+    "get_fundamentals": "基本面概况",
+    "get_balance_sheet": "资产负债表(年报)",
+    "get_cashflow": "现金流量表(年报)",
+    "get_income_statement": "利润表(年报)",
+    "get_insider_transactions": "内部人交易",
+    "get_global_news": "全球宏观新闻",
+    "get_macro_indicators": "宏观经济指标(如 CPI)",
+    "get_prediction_markets": "预测市场行情(Polymarket)",
+}
+
 # 各方法签名不一,把 (code, ref_date) 映射成每个方法的实参。参数与生产调用方保持一致格式
 # (curr_date 用 YYYY-MM-DD)。非 symbol 方法(global_news/macro/prediction)用固定参数、不注入 code。
 METHOD_PROBES: dict[str, Callable[[str, str], tuple]] = {
@@ -172,12 +190,31 @@ def probe_cell(method: str, vendor: str, code: str, ref_date: str) -> CellResult
     )
 
 
-def iter_probes(code: str, ref_date: str) -> Iterator[CellResult]:
-    """串行遍历所有 (method, vendor) 格子。串行是刻意的:避免并发触发限流、便于逐格计时。"""
-    for method, vendors in VENDOR_METHODS.items():
-        for vendor in vendors:
+def iter_probes(
+    code: str, ref_date: str, vendors: set[str] | None = None
+) -> Iterator[CellResult]:
+    """串行遍历 (method, vendor) 格子。vendors=None 跑全部;否则只跑选中的供应商。
+
+    串行是刻意的:避免并发触发限流、便于逐格计时。
+    """
+    for method, method_vendors in VENDOR_METHODS.items():
+        for vendor in method_vendors:
+            if vendors is not None and vendor not in vendors:
+                continue
             yield probe_cell(method, vendor, code, ref_date)
 
 
-def count_probes() -> int:
-    return sum(len(vendors) for vendors in VENDOR_METHODS.values())
+def count_probes(vendors: set[str] | None = None) -> int:
+    if vendors is None:
+        return sum(len(v) for v in VENDOR_METHODS.values())
+    return sum(1 for vs in VENDOR_METHODS.values() for v in vs if v in vendors)
+
+
+def build_meta() -> dict:
+    """供前端渲染:全部供应商(去重排序)+ 每个方法的分区与说明。纯读、无网络。"""
+    vendors = sorted({v for vs in VENDOR_METHODS.values() for v in vs})
+    methods = [
+        {"name": m, "group": METHOD_GROUP[m], "desc": METHOD_DESC[m]}
+        for m in METHOD_GROUP
+    ]
+    return {"vendors": vendors, "methods": methods}

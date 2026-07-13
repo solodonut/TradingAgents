@@ -148,3 +148,46 @@ def test_iter_probes_is_read_only(monkeypatch):
     before = dict(get_config())
     list(diagnostics.iter_probes("510300.SS", "2026-07-13"))
     assert dict(get_config()) == before
+
+
+def test_method_desc_covers_every_method():
+    from tradingagents.dataflows.diagnostics import METHOD_DESC, METHOD_GROUP
+
+    assert set(METHOD_DESC) == set(METHOD_GROUP)
+    assert all(METHOD_DESC[m].strip() for m in METHOD_GROUP)
+
+
+def test_count_probes_with_vendors_subset():
+    from tradingagents.dataflows.diagnostics import count_probes
+    from tradingagents.dataflows.interface import VENDOR_METHODS
+
+    only_tushare = sum(1 for vs in VENDOR_METHODS.values() if "tushare" in vs)
+    assert count_probes(vendors={"tushare"}) == only_tushare
+    assert count_probes(vendors=None) == count_probes()
+    assert count_probes(vendors=set()) == 0
+
+
+def test_iter_probes_filters_by_vendor(monkeypatch):
+    from tradingagents.dataflows.diagnostics import iter_probes
+    from tradingagents.dataflows.interface import VENDOR_METHODS
+
+    for vendors in VENDOR_METHODS.values():
+        for vendor in vendors:
+            monkeypatch.setitem(vendors, vendor, lambda *a, **k: "stub")
+
+    cells = list(iter_probes("510300.SS", "2026-07-13", vendors={"tushare"}))
+    assert cells, "至少应有若干 tushare 格子"
+    assert {c.vendor for c in cells} == {"tushare"}
+    assert list(iter_probes("510300.SS", "2026-07-13", vendors=set())) == []
+
+
+def test_build_meta_shape():
+    from tradingagents.dataflows.diagnostics import build_meta
+    from tradingagents.dataflows.interface import VENDOR_METHODS
+
+    meta = build_meta()
+    expected_vendors = sorted({v for vs in VENDOR_METHODS.values() for v in vs})
+    assert meta["vendors"] == expected_vendors
+    names = [m["name"] for m in meta["methods"]]
+    assert set(names) == set(VENDOR_METHODS)
+    assert all(m["desc"].strip() and m["group"] for m in meta["methods"])

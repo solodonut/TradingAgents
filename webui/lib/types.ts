@@ -231,3 +231,14 @@ export type DiagnosticEvent =
   | { event: "cell"; data: DiagnosticCell }
   | { event: "done"; data: DiagnosticSummary }
   | { event: "error"; data: { message: string } };
+
+export interface DiagnosticMethodMeta {
+  name: string;
+  group: string;
+  desc: string;
+}
+
+export interface DiagnosticMeta {
+  vendors: string[];
+  methods: DiagnosticMethodMeta[];
+}
