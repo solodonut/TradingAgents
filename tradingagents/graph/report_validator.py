@@ -24,7 +24,7 @@ from tradingagents.agents.schemas import CorrectedReport, CorrectionItem
 from tradingagents.agents.utils.agent_utils import get_instrument_context_from_state
 from tradingagents.agents.utils.structured import bind_structured
 from tradingagents.dataflows.market_data_validator import build_verified_market_snapshot
-from tradingagents.graph.evidence import extract_citation_ids
+from tradingagents.graph.evidence import extract_cited_evidence_ids
 
 logger = logging.getLogger(__name__)
 
@@ -122,19 +122,14 @@ def _render_validation_report(
 
 
 def _citation_warnings(state: dict) -> list[str]:
-    evidence_ids = {
-        item.get("id")
-        for item in state.get("evidence_items", []) or []
-        if isinstance(item, dict)
-    }
+    evidence_items = [
+        item for item in state.get("evidence_items", []) or [] if isinstance(item, dict)
+    ]
     warnings: list[str] = []
     for key, label in REPORT_FIELDS:
         text = state.get(key) or ""
-        cited = extract_citation_ids(text)
-        invalid = [cid for cid in cited if cid not in evidence_ids]
-        if invalid:
-            warnings.append(f"- {label}: 无效引用 " + ", ".join(f"[{cid}]" for cid in invalid))
-        if text and evidence_ids and not cited:
+        cited = extract_cited_evidence_ids(text, evidence_items)
+        if text and evidence_items and not cited:
             warnings.append(f"- {label}: 未发现来源引用。")
     return warnings
 

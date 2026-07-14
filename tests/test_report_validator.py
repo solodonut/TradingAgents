@@ -155,15 +155,15 @@ def test_silent_correction_recorded_in_report(monkeypatch):
 
 
 @pytest.mark.unit
-def test_report_validator_reports_invalid_citations(monkeypatch):
+def test_report_validator_ignores_unknown_citation_tokens(monkeypatch):
     monkeypatch.setattr(rv, "build_verified_market_snapshot", lambda s, d: "SNAPSHOT")
     llm, _ = _structured_llm(
-        invoke_return=CorrectedReport(corrected_text="证据存在 [S2]，非法引用 [S9]。", corrections=[])
+        invoke_return=CorrectedReport(corrected_text="证据存在 [S2]，未知 [S9]。", corrections=[])
     )
     node = rv.create_report_validator(llm, enabled=True)
     out = node(
         _state(
-            market_report="证据存在 [S2]，非法引用 [S9]。",
+            market_report="证据存在 [S2]，未知 [S9]。",
             evidence_items=[
                 {
                     "id": "S2",
@@ -181,5 +181,51 @@ def test_report_validator_reports_invalid_citations(monkeypatch):
         )
     )
 
-    assert "无效引用" in out["validation_report"]
-    assert "[S9]" in out["validation_report"]
+    # Unknown tokens no longer raise a per-token "invalid citation" warning.
+    assert "无效引用" not in out["validation_report"]
+
+
+@pytest.mark.unit
+def test_citation_warnings_accepts_label_citation():
+    from tradingagents.graph.evidence import EvidenceRegistry
+
+    registry = EvidenceRegistry()
+    registry.register(
+        kind="market_data",
+        source_name="AKShare",
+        title="get_stock_data: 600519",
+        vendor="akshare",
+        tool_name="get_stock_data",
+        query={"ticker": "600519"},
+    )
+    warnings = rv._citation_warnings(
+        {
+            "market_report": "近期走强 [历史行情（OHLCV）]。",
+            "evidence_items": registry.to_list(),
+        }
+    )
+
+    assert warnings == []
+
+
+@pytest.mark.unit
+def test_citation_warnings_flags_section_without_recognizable_citation():
+    from tradingagents.graph.evidence import EvidenceRegistry
+
+    registry = EvidenceRegistry()
+    registry.register(
+        kind="market_data",
+        source_name="AKShare",
+        title="get_stock_data: 600519",
+        vendor="akshare",
+        tool_name="get_stock_data",
+        query={"ticker": "600519"},
+    )
+    warnings = rv._citation_warnings(
+        {
+            "market_report": "近期走强，但没有任何来源。",
+            "evidence_items": registry.to_list(),
+        }
+    )
+
+    assert any("未发现来源引用" in w for w in warnings)

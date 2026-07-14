@@ -92,4 +92,7 @@ def register_unavailable_evidence(
 def prefix_with_evidence(text: str, citation_id: str | None, title: str) -> str:
     if not citation_id:
         return text
-    return f"## [{citation_id}] {title}\n\n{text}"
+    registry = get_current_evidence_registry()
+    label = registry.display_label(citation_id) if registry is not None else ""
+    label = label or title or citation_id
+    return f"## [{label}]\n\n{text}"

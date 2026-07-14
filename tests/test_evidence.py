@@ -3,6 +3,7 @@ import pytest
 from tradingagents.graph.evidence import (
     EvidenceRegistry,
     extract_citation_ids,
+    extract_cited_evidence_ids,
     render_source_table,
 )
 
@@ -238,9 +239,91 @@ def test_render_source_table_uses_only_known_ids_and_links_urls():
     table = render_source_table(registry.items, ["S2", "S404", "S1"], heading="引用来源")
 
     assert "### 引用来源" in table
-    assert "| [S2] | AKShare | get_stock_data: 600519 | 2026-06-29..2026-07-06 | - |" in table
+    # S2 is get_stock_data -> first column shows its readable display label.
+    assert "| [历史行情（OHLCV）] | AKShare | get_stock_data: 600519 | 2026-06-29..2026-07-06 | - |" in table
+    # S1 is get_news (no derived label) -> falls back to the [S#] id.
     assert "| [S1] | 财联社 | 半导体板块获政策支持 | 2026-07-01 | [打开](https://example.com/news/1) |" in table
     assert "S404" not in table
+
+
+def _resolver_items():
+    return [
+        {"id": "S1", "display_label": "历史行情（OHLCV）", "title": "get_stock_data: 600519"},
+        {"id": "S2", "display_label": "RSI", "title": "get_indicators: 600519 rsi"},
+    ]
+
+
+@pytest.mark.unit
+def test_extract_cited_evidence_ids_resolves_label_token():
+    assert extract_cited_evidence_ids("走强 [历史行情（OHLCV）]。", _resolver_items()) == ["S1"]
+
+
+@pytest.mark.unit
+def test_extract_cited_evidence_ids_resolves_title_token():
+    assert extract_cited_evidence_ids("见 [get_indicators: 600519 rsi]。", _resolver_items()) == ["S2"]
+
+
+@pytest.mark.unit
+def test_extract_cited_evidence_ids_resolves_legacy_sharp_id_token():
+    # Dual-mode: stored historical reports still cite [S#] directly.
+    assert extract_cited_evidence_ids("超买 [S2]。", _resolver_items()) == ["S2"]
+
+
+@pytest.mark.unit
+def test_extract_cited_evidence_ids_ignores_unknown_token():
+    assert extract_cited_evidence_ids("参见 [未知标签] 与 [S9]。", _resolver_items()) == []
+
+
+@pytest.mark.unit
+def test_extract_cited_evidence_ids_ignores_markdown_link_label():
+    assert extract_cited_evidence_ids("点这里 [详情](https://example.com)。", _resolver_items()) == []
+
+
+@pytest.mark.unit
+def test_extract_cited_evidence_ids_collision_yields_all_ids_in_order():
+    items = [
+        {"id": "S1", "display_label": "资产负债表", "title": "get_balance_sheet: 600519"},
+        {"id": "S2", "display_label": "资产负债表", "title": "get_balance_sheet: 000001"},
+    ]
+
+    assert extract_cited_evidence_ids("对比 [资产负债表]。", items) == ["S1", "S2"]
+
+
+@pytest.mark.unit
+def test_extract_cited_evidence_ids_preserves_first_seen_order_and_dedupes():
+    assert extract_cited_evidence_ids("[RSI] 然后 [历史行情（OHLCV）] 再 [RSI]。", _resolver_items()) == [
+        "S2",
+        "S1",
+    ]
+
+
+@pytest.mark.unit
+def test_render_source_table_first_column_falls_back_when_label_empty():
+    # A registered get_news item derives no display label -> first column keeps [S#].
+    registry = EvidenceRegistry()
+    registry.register(
+        kind="news",
+        source_name="财联社",
+        title="半导体板块获政策支持",
+        url="https://example.com/news/1",
+        published_at="2026-07-01",
+        vendor="akshare",
+        tool_name="get_news",
+        query={"ticker": "600519"},
+    )
+
+    table = render_source_table(registry.items, ["S1"], heading="引用来源")
+
+    assert "| [S1] | 财联社 | 半导体板块获政策支持 | 2026-07-01 | [打开](https://example.com/news/1) |" in table
+
+
+@pytest.mark.unit
+def test_render_source_table_first_column_escapes_pipe_in_label():
+    items = [{"id": "S1", "display_label": "a|b", "title": "t", "source_name": "src"}]
+
+    table = render_source_table(items, ["S1"], heading="引用来源")
+
+    assert "| [a\\|b] | src |" in table
 
 
 @pytest.mark.unit

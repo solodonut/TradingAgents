@@ -23,6 +23,42 @@ def extract_citation_ids(text: str) -> list[str]:
     return ids
 
 
+_BRACKET_RE = re.compile(r"\[([^\[\]]+)\]")
+
+
+def extract_cited_evidence_ids(
+    text: str, evidence_items: Iterable[Mapping[str, Any]]
+) -> list[str]:
+    """Resolve bracketed citation tokens to evidence ids.
+
+    Matches readable labels (``[历史行情（OHLCV）]``), titles, and legacy ``[S#]`` ids.
+    A label may be shared by several items, so each token can contribute more than
+    one id. Unknown tokens (arbitrary text, markdown-link labels) resolve to nothing.
+    Returns ids in first-seen order, deduped.
+    """
+    lookup: dict[str, list[str]] = {}
+    for item in evidence_items:
+        citation_id = _display(item.get("id"))
+        if not citation_id:
+            continue
+        for token in (citation_id, _display(item.get("title")), _display(item.get("display_label"))):
+            if not token:
+                continue
+            ids = lookup.setdefault(token, [])
+            if citation_id not in ids:
+                ids.append(citation_id)
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for match in _BRACKET_RE.finditer(text or ""):
+        token = match.group(1).strip()
+        for citation_id in lookup.get(token, ()):
+            if citation_id not in seen:
+                seen.add(citation_id)
+                result.append(citation_id)
+    return result
+
+
 def _display(value: Any) -> str:
     if value is None:
         return ""
@@ -76,18 +112,65 @@ def _dedupe_key(item: Mapping[str, Any]) -> tuple[Any, ...]:
     )
 
 
+_INDICATOR_LABELS = {
+    "macd": "MACD",
+    "macdh": "MACD 柱状图（macdh）",
+    "atr": "ATR",
+    "rsi": "RSI",
+    "vwma": "VWMA",
+    "boll": "布林带整体数据（boll）",
+    "boll_lb": "布林下轨（boll_lb）",
+    "boll_ub": "布林上轨（boll_ub）",
+}
+
+_MOVING_AVERAGE_RE = re.compile(r"^close_(\d+)_(ema|sma)$")
+
+_TOOL_LABELS = {
+    "get_stock_data": "历史行情（OHLCV）",
+    "get_verified_market_snapshot": "已验证市场快照",
+    "get_fundamentals": "综合基本面",
+    "get_balance_sheet": "资产负债表",
+    "get_cashflow": "现金流量表",
+    "get_income_statement": "利润表",
+}
+
+
+def _indicator_display_label(indicator: str) -> str:
+    ind = indicator.strip().lower()
+    if not ind:
+        return ""
+    match = _MOVING_AVERAGE_RE.match(ind)
+    if match:
+        return f"{match.group(1)} 日 {match.group(2).upper()}"
+    return _INDICATOR_LABELS.get(ind, "")
+
+
+def _derive_display_label(kind: str, tool_name: str, query: Mapping[str, Any]) -> str:
+    """Readable data/purpose label for inline citations, assigned at registration time."""
+    if kind == "data_unavailable":
+        return ""
+    if tool_name == "get_indicators":
+        indicator = query.get("indicator") if isinstance(query, Mapping) else None
+        return _indicator_display_label(_display(indicator))
+    return _TOOL_LABELS.get(tool_name, "")
+
+
 def _normalize_item(item: Mapping[str, Any], citation_id: str) -> dict[str, Any]:
+    kind = _display(item.get("kind")) or "vendor_dataset"
+    tool_name = _display(item.get("tool_name"))
+    query = deepcopy(item.get("query") or {})
     return {
         "id": citation_id,
-        "kind": _display(item.get("kind")) or "vendor_dataset",
+        "kind": kind,
         "source_name": _display(item.get("source_name")) or _display(item.get("vendor")) or "unknown",
-        "title": _display(item.get("title")) or _display(item.get("tool_name")) or "Untitled evidence",
+        "title": _display(item.get("title")) or tool_name or "Untitled evidence",
         "url": _display(item.get("url")),
         "published_at": _display(item.get("published_at")),
         "vendor": _display(item.get("vendor")),
-        "tool_name": _display(item.get("tool_name")),
-        "query": deepcopy(item.get("query") or {}),
+        "tool_name": tool_name,
+        "query": query,
         "excerpt": _display(item.get("excerpt")),
+        "display_label": _derive_display_label(kind, tool_name, query),
     }
 
 
@@ -157,6 +240,12 @@ class EvidenceRegistry:
     def by_id(self) -> dict[str, dict[str, Any]]:
         return {item["id"]: deepcopy(item) for item in self.items}
 
+    def display_label(self, citation_id: str) -> str:
+        for item in self.items:
+            if item.get("id") == citation_id:
+                return _display(item.get("display_label"))
+        return ""
+
 
 def render_source_table(
     evidence_items: Iterable[Mapping[str, Any]],
@@ -171,11 +260,13 @@ def render_source_table(
         if not item:
             continue
         link = _safe_link(item.get("url"))
+        label = _display(item.get("display_label")) or citation_id
+        label_cell = "[" + html.escape(label).replace("|", "\\|") + "]"
         rows.append(
             "| "
             + " | ".join(
                 [
-                    f"[{citation_id}]",
+                    label_cell,
                     _safe_cell(item.get("source_name")),
                     _safe_cell(item.get("title")),
                     _safe_cell(item.get("published_at")),

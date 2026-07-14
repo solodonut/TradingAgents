@@ -74,11 +74,12 @@ def get_language_instruction() -> str:
 def get_citation_instruction() -> str:
     return (
         "\n\nCitation rules:\n"
-        "- Add one or more existing [S#] citation ids after every key factual claim, "
-        "data point, news event, sentiment observation, or source-backed conclusion.\n"
-        "- Use only citation ids that appear in tool outputs or upstream reports.\n"
-        "- Do not invent citation ids or links.\n"
-        "- If no citation id supports a claim, write that no citable source is available.\n"
+        "- After every key factual claim, data point, news event, sentiment observation, "
+        "or source-backed conclusion, copy the bracketed source label exactly as it appears "
+        "at the top of the relevant tool output (e.g. [历史行情（OHLCV）], [资产负债表]).\n"
+        "- Use only labels that appear in tool outputs or upstream reports.\n"
+        "- Do not invent labels or links.\n"
+        "- If no source supports a claim, write that no citable source is available.\n"
     )
 
 

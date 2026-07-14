@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from tradingagents.graph.evidence import extract_citation_ids, render_source_table
+from tradingagents.graph.evidence import extract_cited_evidence_ids, render_source_table
 
 _REPORT_ORDER = [
     ("market_report", "市场分析"),
@@ -31,7 +31,7 @@ def build_markdown_report(run) -> str:
         content = result.get(key)
         if content:
             parts.append(f"\n## {section_title}\n\n{content}\n")
-            citation_ids = extract_citation_ids(content)
+            citation_ids = extract_cited_evidence_ids(content, evidence_items)
             for citation_id in citation_ids:
                 if citation_id not in seen_global:
                     seen_global.add(citation_id)

@@ -33,7 +33,7 @@ def test_context_registration_returns_snapshot_and_prefixes_text():
         )
         assert citation_id == "S1"
         assert prefix_with_evidence("payload", citation_id, "OHLCV 数据集") == (
-            "## [S1] OHLCV 数据集\n\npayload"
+            "## [历史行情（OHLCV）]\n\npayload"
         )
         assert current_evidence_items()[0]["id"] == "S1"
     finally:
@@ -208,8 +208,8 @@ def test_citation_instruction_mentions_no_fake_ids():
 
     instruction = get_citation_instruction()
 
-    assert "[S#]" in instruction
-    assert "Do not invent citation ids" in instruction
+    assert "copy the bracketed source label" in instruction
+    assert "Do not invent labels" in instruction
 
 
 @pytest.mark.unit
@@ -261,7 +261,7 @@ def test_stock_tool_registers_dataset_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_stock_data: 600519")
+    assert result.startswith("## [历史行情（OHLCV）]")
     assert items[0]["tool_name"] == "get_stock_data"
     assert items[0]["published_at"] == "2026-06-29..2026-07-06"
 
@@ -287,7 +287,7 @@ def test_news_tool_registers_unavailable_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_news unavailable")
+    assert result.startswith("## [get_news unavailable]")
     assert items[0]["kind"] == "data_unavailable"
 
 
@@ -312,7 +312,7 @@ def test_macro_tool_registers_dataset_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_macro_indicators: cpi")
+    assert result.startswith("## [get_macro_indicators: cpi]")
     assert items[0]["kind"] == "macro_data"
     assert items[0]["query"]["look_back_days"] == 365
 
@@ -338,7 +338,7 @@ def test_macro_tool_registers_unavailable_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_macro_indicators unavailable")
+    assert result.startswith("## [get_macro_indicators unavailable]")
     assert items[0]["kind"] == "data_unavailable"
 
 
@@ -363,7 +363,7 @@ def test_prediction_markets_tool_registers_dataset_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_prediction_markets: Fed rate cut")
+    assert result.startswith("## [get_prediction_markets: Fed rate cut]")
     assert items[0]["kind"] == "prediction_markets"
     assert items[0]["query"]["limit"] == 3
 
@@ -389,7 +389,7 @@ def test_prediction_markets_tool_registers_unavailable_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_prediction_markets unavailable")
+    assert result.startswith("## [get_prediction_markets unavailable]")
     assert items[0]["kind"] == "data_unavailable"
 
 
@@ -421,8 +421,8 @@ def test_indicators_tool_registers_multiple_dataset_evidence(monkeypatch):
     assert items[1]["id"] == "S2"
     assert items[0]["tool_name"] == "get_indicators"
     assert items[1]["tool_name"] == "get_indicators"
-    assert "## [S1] get_indicators: 600519 rsi" in result
-    assert "## [S2] get_indicators: 600519 macd" in result
+    assert "## [RSI]" in result
+    assert "## [MACD]" in result
 
 
 @pytest.mark.unit
@@ -448,7 +448,7 @@ def test_indicators_tool_preserves_invalid_indicator_behavior(monkeypatch):
     assert len(items) == 1
     assert items[0]["tool_name"] == "get_indicators"
     assert items[0]["query"]["indicator"] == "rsi"
-    assert "## [S1] get_indicators: 600519 rsi" in result
+    assert "## [RSI]" in result
     assert "bad indicator" in result
 
 
@@ -469,7 +469,7 @@ def test_verified_snapshot_registers_dataset_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_verified_market_snapshot: 600519")
+    assert result.startswith("## [已验证市场快照]")
     assert items[0]["tool_name"] == "get_verified_market_snapshot"
     assert items[0]["query"]["look_back_days"] == 15
 
@@ -494,6 +494,105 @@ def test_verified_snapshot_registers_unavailable_evidence(monkeypatch):
     finally:
         clear_current_evidence_registry()
 
-    assert result.startswith("## [S1] get_verified_market_snapshot unavailable")
+    assert result.startswith("## [get_verified_market_snapshot unavailable]")
     assert items[0]["kind"] == "data_unavailable"
     assert items[0]["query"]["look_back_days"] == 15
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("indicator", "label"),
+    [
+        ("close_10_ema", "10 日 EMA"),
+        ("close_50_sma", "50 日 SMA"),
+        ("close_200_sma", "200 日 SMA"),
+        ("macdh", "MACD 柱状图（macdh）"),
+        ("boll", "布林带整体数据（boll）"),
+        ("boll_lb", "布林下轨（boll_lb）"),
+        ("boll_ub", "布林上轨（boll_ub）"),
+        ("atr", "ATR"),
+        ("vwma", "VWMA"),
+    ],
+)
+def test_indicator_label_renders_named_metric(indicator, label):
+    registry = EvidenceRegistry()
+    set_current_evidence_registry(registry)
+    try:
+        citation_id = register_dataset_evidence(
+            kind="market_data",
+            source_name="configured technical indicator vendor",
+            title=f"get_indicators: 600519 {indicator}",
+            vendor="configured vendors",
+            tool_name="get_indicators",
+            query={"ticker": "600519", "indicator": indicator},
+        )
+        prefixed = prefix_with_evidence("payload", citation_id, "unused title")
+    finally:
+        clear_current_evidence_registry()
+
+    assert prefixed == f"## [{label}]\n\npayload"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("tool_name", "label"),
+    [
+        ("get_balance_sheet", "资产负债表"),
+        ("get_cashflow", "现金流量表"),
+        ("get_income_statement", "利润表"),
+        ("get_fundamentals", "综合基本面"),
+    ],
+)
+def test_fundamental_tool_labels(tool_name, label):
+    registry = EvidenceRegistry()
+    set_current_evidence_registry(registry)
+    try:
+        citation_id = register_dataset_evidence(
+            kind="fundamentals",
+            source_name="configured fundamentals vendor",
+            title=f"{tool_name}: 600519",
+            vendor="configured vendors",
+            tool_name=tool_name,
+            query={"ticker": "600519"},
+        )
+        prefixed = prefix_with_evidence("payload", citation_id, f"{tool_name}: 600519")
+    finally:
+        clear_current_evidence_registry()
+
+    assert prefixed == f"## [{label}]\n\npayload"
+
+
+@pytest.mark.unit
+def test_unavailable_ohlcv_falls_back_to_title():
+    registry = EvidenceRegistry()
+    set_current_evidence_registry(registry)
+    try:
+        citation_id = register_unavailable_evidence(
+            tool_name="get_stock_data",
+            vendor="configured vendors",
+            query={"ticker": "600519"},
+            reason="NO_DATA_AVAILABLE: blocked",
+        )
+        prefixed = prefix_with_evidence("payload", citation_id, "get_stock_data unavailable")
+    finally:
+        clear_current_evidence_registry()
+
+    assert prefixed == "## [get_stock_data unavailable]\n\npayload"
+
+
+@pytest.mark.unit
+def test_display_label_falls_back_to_citation_id_when_title_empty():
+    registry = EvidenceRegistry()
+    set_current_evidence_registry(registry)
+    try:
+        citation_id = register_unavailable_evidence(
+            tool_name="get_news",
+            vendor="configured vendors",
+            query={"ticker": "600519"},
+            reason="DATA_SOURCE_UNAVAILABLE: blocked",
+        )
+        prefixed = prefix_with_evidence("payload", citation_id, "")
+    finally:
+        clear_current_evidence_registry()
+
+    assert prefixed == f"## [{citation_id}]\n\npayload"
