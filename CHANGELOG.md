@@ -10,6 +10,21 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **`etf_static_profile` ETF 静态档:命中的 ETF 跳过 `fund_basic`/`fund_portfolio` 联网。**
+  新增 `DEFAULT_CONFIG["etf_static_profile"]`(`ts_code → {quarter, theme_terms, holdings}`),
+  `tushare_etf_news.get_etf_news` 命中时直接用静态主题词 + 前 5 大重仓,跳过两次元数据联网调用;
+  未命中的 ETF 保持原 live 路径。动机:(1) 省掉每次跑重拉基金基础信息/持仓;(2) 绕开代理偶发
+  超时把空结果写进 `cached_call`、毒化后续所有 run 的问题(实测 510330 主题词曾被毒成空)。
+  `theme_terms` 只留干净板块词(去掉 live 路混入的 `被动指数型`/`股票型` 噪声与基金全名),指数
+  跟踪目标稳定无过期风险;`holdings` 为季度快照会漂移,由 `quarter` 字段标注、重跑刷新,持仓个股
+  新闻仍按 symbol 实时联网。coverage note 命中静态档时如实标注 "static config snapshot"。预置
+  用户自选的 8 只 ETF(沪深300/中证A500/创业板/电网设备/航天航空/半导体/人工智能/黄金)。
+- **个股快讯关键词过滤支持 `ticker_aliases` 口语简称扩展。** tushare 的 `news()`/`major_news()`
+  无服务端关键词搜索,`tushare_news.get_news` 一直是按窗口拉全量快讯、在本地对标题+正文做
+  `contains`,默认关键词为股票中文简称 + 代码(如 "贵州茅台" / "600519")。新增
+  `DEFAULT_CONFIG["ticker_aliases"]` 静态映射(`ts_code → [别名]`),把口语简称(如 "茅台")
+  并入关键词并保序去重,捞回快讯里只写简称、不写全称的条目。表由 AI 离线生成、运行时只读不调
+  LLM;只收无歧义简称("宁德"=城市名、"平安"=常用词等一律不收)以免误捞稀释个股信号。
 - **ETF 诊断页支持多选供应商 + 记住选择 + 功能说明。** 诊断页新增供应商多选勾选框(含全选 /
   清空),未选中的供应商由后端直接跳过、不发请求(省时、避免限流,进度总数只计选中格子);选择
   写入 `localStorage` 并在下次打开时与当前可用供应商取交集恢复。每个数据功能显示一句中文说明,
@@ -51,6 +66,11 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **航天航空类 ETF 拿不到主题新闻(词序漏匹配)。** `tushare_etf_news._THEME_PATTERNS`
+  用子串匹配基金名派生主题词,原有 `航空航天` 只认这一种词序,像「天弘国证**航天航空**行业ETF」
+  (159241)这类反序命名的基金一个主题词都命不中、只能退回全名搜索。改为拆成 `航空` + `航天`
+  两个 2 字板块词(与表内 `银行`/`军工`/`电网` 等同级),两种词序都命中,含「航空航天」的名字
+  也仍覆盖(全名同时含两个子串),零新增歧义。
 - **ETF「主要持仓新闻」全部「未发现相关新闻」、持仓名称全是「-」。** 两个叠加缺陷:
   (1) `tushare_etf_news._stock_symbol` 给沪市持仓生成 tushare 惯例的 `.SH` 后缀,但下游
   `resolve_ticker_name`/`get_news`/`is_a_share` 只认 yahoo/akshare 的 `.SS` 形式,导致沪市持仓

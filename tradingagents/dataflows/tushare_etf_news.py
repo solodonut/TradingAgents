@@ -43,7 +43,10 @@ _THEME_PATTERNS = (
     "人工智能",
     "机器人",
     "军工",
-    "航空航天",
+    # 拆成两个 2 字词而非 "航空航天":_derive_theme_terms 是子串匹配,拆开后
+    # "国证航天航空" / "航空航天" 两种词序都能命中(合并成一个词只认一种序)。
+    "航空",
+    "航天",
     "黄金",
     "红利",
     "医药",
@@ -317,16 +320,26 @@ def get_etf_news(
     missing: list[str] = []
     seen_titles: set[str] = set()
 
-    basic = _fetch_fund_basic(ts_code)
-    fund_name, raw_terms = _fund_metadata(basic)
-    theme_terms = _derive_theme_terms(fund_name, raw_terms)
+    static = config.get("etf_static_profile", {}).get(ts_code)
+    if static:
+        # 静态档:跳过 fund_basic/fund_portfolio 两次联网(也绕开代理超时毒缓存)。
+        # 主题词稳定;持仓是 quarter 标注的快照,季度漂移,靠重跑派生逻辑刷新。
+        theme_terms = list(static.get("theme_terms", []))
+        holdings = [
+            Holding(symbol=s, name=n, weight=w, quarter=static.get("quarter"))
+            for s, n, w in static.get("holdings", [])
+        ]
+    else:
+        basic = _fetch_fund_basic(ts_code)
+        fund_name, raw_terms = _fund_metadata(basic)
+        theme_terms = _derive_theme_terms(fund_name, raw_terms)
 
-    try:
-        holdings = _parse_tushare_holdings(_fetch_fund_portfolio(ts_code))
-    except Exception:
-        holdings = []
-    if not holdings:
-        holdings = _fetch_akshare_holdings(symbol, end_date)
+        try:
+            holdings = _parse_tushare_holdings(_fetch_fund_portfolio(ts_code))
+        except Exception:
+            holdings = []
+        if not holdings:
+            holdings = _fetch_akshare_holdings(symbol, end_date)
 
     try:
         fund_articles = _parse_news_articles(
@@ -374,7 +387,10 @@ def get_etf_news(
     quarters = [holding.quarter for holding in holdings if holding.quarter]
     quarter_note = max(quarters) if quarters else "unknown"
     body += "\n## Coverage Notes\n"
-    body += f"- Holdings source: Tushare fund_portfolio, latest disclosed quarter ({quarter_note}); AKShare fallback only when Tushare holdings are unavailable.\n"
+    if static:
+        body += f"- Holdings source: static config snapshot, disclosed quarter ({quarter_note}).\n"
+    else:
+        body += f"- Holdings source: Tushare fund_portfolio, latest disclosed quarter ({quarter_note}); AKShare fallback only when Tushare holdings are unavailable.\n"
     body += "- News source: Tushare first.\n"
     body += f"- Theme terms: {', '.join(theme_terms) if theme_terms else 'none'}.\n"
     body += f"- Missing sections: {missing_text}.\n"

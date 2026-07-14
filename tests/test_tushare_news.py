@@ -55,6 +55,28 @@ def test_get_news_merges_announcements_and_flash(monkeypatch):
 
 
 @pytest.mark.unit
+def test_get_news_alias_expands_keywords(monkeypatch):
+    """config 里的 ticker_aliases 应并入关键词,捞到只写口语简称、不写全称的快讯。"""
+    set_config({"ticker_aliases": {"600519.SH": ["茅台"]}})
+    news = pd.DataFrame(
+        [
+            # 全称"贵州茅台"和代码都不出现,仅口语简称"茅台"命中
+            {"datetime": "2026-06-12 09:00:00", "title": "茅台大涨", "content": "白酒龙头走强"},
+            {"datetime": "2026-06-12 09:05:00", "title": "无关新闻", "content": "别的公司"},
+        ]
+    )
+    monkeypatch.setattr(
+        tushare_news, "get_tushare_client", lambda: _fake_client(pd.DataFrame(), news)
+    )
+    monkeypatch.setattr(tushare_news, "resolve_ticker_name", lambda code: "贵州茅台")
+
+    out = tushare_news.get_news("600519.SH", "2026-06-01", "2026-06-30")
+
+    assert "茅台大涨" in out          # 靠 alias "茅台" 命中
+    assert "无关新闻" not in out      # 未命中的快讯仍被过滤
+
+
+@pytest.mark.unit
 def test_get_news_name_lookup_failure_uses_announcements_only(monkeypatch):
     anns = pd.DataFrame([{"ann_date": "20260610", "title": "公告A", "url": "http://x/a.pdf"}])
     news = pd.DataFrame([{"datetime": "2026-06-12 09:00:00", "title": "某新闻", "content": "内容"}])

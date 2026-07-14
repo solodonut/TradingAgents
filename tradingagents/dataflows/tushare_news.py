@@ -140,7 +140,9 @@ def get_news(
 
     name = resolve_ticker_name(ticker)
     code_only = ts_code.split(".")[0]
-    keywords = [k for k in (name, code_only) if k]
+    aliases = get_config().get("ticker_aliases", {}).get(ts_code, [])
+    # dict.fromkeys 保序去重:alias 与 name/code 重复时不重复喂 contains。
+    keywords = list(dict.fromkeys(k for k in (name, code_only, *aliases) if k))
     if keywords:
         try:
             flash_rows = _render_flash(

@@ -225,6 +225,51 @@ def test_get_etf_news_generic_flash_titles_not_collapsed_across_holdings(monkeyp
 
 
 @pytest.mark.unit
+def test_get_etf_news_static_profile_skips_metadata_fetch(monkeypatch):
+    """etf_static_profile 命中时:用静态主题词+持仓,绝不调 fund_basic/fund_portfolio。"""
+    from tradingagents.dataflows import tushare_etf_news
+
+    set_config({
+        "etf_static_profile": {
+            "510330.SH": {
+                "quarter": "2026Q1",
+                "theme_terms": ["沪深300"],
+                "holdings": [
+                    ("300750.SZ", "宁德时代", 4.34),
+                    ("600519.SS", "贵州茅台", 3.71),
+                ],
+            }
+        }
+    })
+
+    def _boom(*a, **k):
+        raise AssertionError("static profile 命中时不应联网拉元数据")
+
+    monkeypatch.setattr(tushare_etf_news, "_fetch_fund_basic", _boom)
+    monkeypatch.setattr(tushare_etf_news, "_fetch_fund_portfolio", _boom)
+    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", _boom)
+    monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame([
+        {"datetime": "2026-07-06 09:00:00", "title": "沪深300走强", "content": "沪深300指数上涨"},
+    ]))
+    monkeypatch.setattr(
+        tushare_etf_news.tushare_news,
+        "get_news",
+        lambda symbol, *a: f"## {symbol} News\n\n### {symbol} 新闻 (source: 快讯)\n内容\n\n",
+    )
+
+    out = tushare_etf_news.get_etf_news("510330", "2026-07-01", "2026-07-07")
+
+    # 静态主题词命中,持仓来自静态表(名称已带,无需 resolve)。
+    assert "沪深300走强" in out
+    assert "300750.SS 宁德时代" not in out          # symbol 归一化后应是 .SZ
+    assert "300750.SZ 宁德时代" in out
+    assert "600519.SS 贵州茅台" in out
+    # coverage note 如实标注静态来源,而非 Tushare fund_portfolio。
+    assert "static config snapshot, disclosed quarter (2026Q1)" in out
+    assert "Theme terms: 沪深300" in out
+
+
+@pytest.mark.unit
 def test_route_get_etf_news_hits_tushare(monkeypatch):
     from tradingagents.dataflows import tushare_etf_news
 
