@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -296,6 +296,83 @@ def _run_freshness_probe(spec: dict, api_key: str | None) -> tuple[ServiceStatus
     return status, message, latency_ms
 
 
+_AMAZINGDATA_REF_CODE = "000001.SZ"  # 平安银行,与 Tushare freshness 探测同参考标的
+
+
+def _lookback_compact(days: int) -> str:
+    dt = datetime.now(ZoneInfo("Asia/Shanghai")) - timedelta(days=days)
+    return dt.strftime("%Y%m%d")
+
+
+def _amazingdata_latest_date(payload: object) -> str | None:
+    """从 /kline 响应({data: {code: [{kline_time: YYYYMMDD, ...}]}})取最新交易日。
+
+    kline_time 是整型 YYYYMMDD(如 20260710),须先转字符串再交给 _normalize_date
+    ——否则会被当成 Unix 时间戳误解析。
+    """
+    data = payload.get("data") if isinstance(payload, dict) else None
+    records: object = None
+    if isinstance(data, dict):
+        records = data.get(_AMAZINGDATA_REF_CODE)
+        if records is None and len(data) == 1:
+            records = next(iter(data.values()))
+    elif isinstance(data, list):
+        records = data
+    if not isinstance(records, list):
+        return None
+
+    dates: list[str] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        raw = record.get("kline_time")
+        normalized = _normalize_date(str(raw)) if raw is not None else None
+        if normalized:
+            dates.append(normalized)
+    return max(dates) if dates else None
+
+
+def _run_amazingdata_probe() -> tuple[ServiceStatus, str, int]:
+    from tradingagents.dataflows import ad_service_client
+
+    start = time.monotonic()
+    if not ad_service_client.service_available():
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return (
+            "error",
+            "Local service unreachable or not logged in (check AD_API_PORT/AD_API_BASE)",
+            latency_ms,
+        )
+
+    try:
+        payload = ad_service_client.call(
+            "/kline",
+            method="POST",
+            json={
+                "code_list": [_AMAZINGDATA_REF_CODE],
+                "begin_date": int(_lookback_compact(30)),
+                "end_date": int(_today_compact()),
+                "period": "day",
+                "adjust": "none",  # 不复权:免去后复权因子拉取(首次约 38s)
+            },
+            timeout=_REQUEST_TIMEOUT,
+        )
+    except Exception as exc:  # noqa: BLE001 - freshness 探测失败降级为 warning,不误报 error
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return (
+            "warning",
+            f"Reachable, but latest data date is unavailable ({type(exc).__name__})",
+            latency_ms,
+        )
+
+    latency_ms = int((time.monotonic() - start) * 1000)
+    latest_date = _amazingdata_latest_date(payload)
+    if not latest_date:
+        return "warning", "Reachable, but latest data date is unavailable", latency_ms
+    status, message = _freshness_status(latest_date)
+    return status, message, latency_ms
+
+
 def _probe_llm_services(config: dict) -> Iterator[dict]:
     yield _event(
         service_id="llm:provider",
@@ -340,6 +417,12 @@ def _probe_llm_services(config: dict) -> Iterator[dict]:
 
 
 _DATA_SERVICES = {
+    "amazingdata": {
+        # 本地常驻 daemon(header 鉴权 X-API-Token + 上游登录态 logged_in),
+        # 不走 url+params 的远程 API 探测模式;用专门分支复用其 /health 探活。
+        "name": "AmazingData 本地服务",
+        "probe": "amazingdata",
+    },
     "akshare": {
         "name": "AKShare",
         "url": "https://push2.eastmoney.com/api/qt/stock/get",
@@ -460,6 +543,18 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
                 kind="data",
                 status="disabled",
                 message="Disabled by current configuration",
+            )
+            continue
+
+        if spec.get("probe") == "amazingdata":
+            status, message, latency_ms = _run_amazingdata_probe()
+            yield _event(
+                service_id=f"data:{service_id}",
+                name=name,
+                kind="data",
+                status=status,
+                message=message,
+                latency_ms=latency_ms,
             )
             continue
 

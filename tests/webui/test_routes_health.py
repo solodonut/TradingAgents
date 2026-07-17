@@ -219,6 +219,7 @@ def test_data_probe_marks_unconfigured_services_disabled(monkeypatch):
 def test_data_probe_splits_akshare_and_eastmoney(monkeypatch):
     from api.service_health import _probe_data_services
 
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
     monkeypatch.setattr(
         "api.service_health._http_probe",
         lambda url, params=None, headers=None: (True, "Reachable", 9),
@@ -495,6 +496,129 @@ def test_data_probe_reports_error_when_freshness_payload_has_no_date(monkeypatch
     akshare = next(item for item in statuses if item["id"] == "data:akshare")
     assert akshare["status"] == "error"
     assert akshare["message"] == "Reachable, but freshness response had no usable date"
+
+
+def test_data_probe_reports_amazingdata_ok_when_fresh(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.service_available",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.call",
+        lambda *args, **kwargs: {
+            "data": {"000001.SZ": [{"kline_time": 20260708}, {"kline_time": 20260709}]}
+        },
+    )
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "amazingdata"}})
+    )
+
+    ad = next(item for item in statuses if item["id"] == "data:amazingdata")
+    assert ad["status"] == "ok"
+    assert "latest daily data is 2026-07-09" in ad["message"]
+    assert ad["latency_ms"] is not None
+
+
+def test_data_probe_reports_amazingdata_warning_when_stale(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr("api.service_health._today_compact", lambda: "20260709")
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.service_available",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.call",
+        lambda *args, **kwargs: {"data": {"000001.SZ": [{"kline_time": 20260708}]}},
+    )
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "amazingdata"}})
+    )
+
+    ad = next(item for item in statuses if item["id"] == "data:amazingdata")
+    assert ad["status"] == "warning"
+    assert "latest daily data is 2026-07-08; expected 2026-07-09" in ad["message"]
+
+
+def test_data_probe_reports_amazingdata_warning_when_no_date(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.service_available",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.call",
+        lambda *args, **kwargs: {"data": {"000001.SZ": []}},
+    )
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "amazingdata"}})
+    )
+
+    ad = next(item for item in statuses if item["id"] == "data:amazingdata")
+    assert ad["status"] == "warning"
+    assert "latest data date is unavailable" in ad["message"]
+
+
+def test_data_probe_reports_amazingdata_warning_when_kline_fails(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("HTTP 403: Connect failed")
+
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.service_available",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr("tradingagents.dataflows.ad_service_client.call", boom)
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "amazingdata"}})
+    )
+
+    ad = next(item for item in statuses if item["id"] == "data:amazingdata")
+    assert ad["status"] == "warning"
+    assert "latest data date is unavailable" in ad["message"]
+
+
+def test_data_probe_reports_amazingdata_error_when_unavailable(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.service_available",
+        lambda *args, **kwargs: False,
+    )
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "amazingdata"}})
+    )
+
+    ad = next(item for item in statuses if item["id"] == "data:amazingdata")
+    assert ad["status"] == "error"
+
+
+def test_data_probe_marks_amazingdata_disabled_without_probe(monkeypatch):
+    from api.service_health import _probe_data_services
+
+    def explode(*args, **kwargs):
+        raise AssertionError("service_available must not run for a disabled vendor")
+
+    monkeypatch.setattr(
+        "tradingagents.dataflows.ad_service_client.service_available", explode
+    )
+
+    statuses = list(
+        _probe_data_services({"data_vendors": {"core_stock_apis": "akshare"}})
+    )
+
+    ad = next(item for item in statuses if item["id"] == "data:amazingdata")
+    assert ad["status"] == "disabled"
 
 
 def test_freshness_status_reports_ok_for_today(monkeypatch):
