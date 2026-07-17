@@ -27,6 +27,21 @@ from .alpha_vantage import (
     get_news as get_alpha_vantage_news,
     get_stock as get_alpha_vantage_stock,
 )
+from .amazingdata_capital import (
+    get_dragon_tiger as get_amazingdata_dragon_tiger,
+    get_margin_trading as get_amazingdata_margin_trading,
+    get_profit_forecast as get_amazingdata_profit_forecast,
+    get_shareholders as get_amazingdata_shareholders,
+)
+from .amazingdata_etf import get_etf_intraday as get_amazingdata_etf_intraday
+from .amazingdata_fundamentals import (
+    get_balance_sheet as get_amazingdata_balance_sheet,
+    get_cashflow as get_amazingdata_cashflow,
+    get_fundamentals as get_amazingdata_fundamentals,
+    get_income_statement as get_amazingdata_income_statement,
+)
+from .amazingdata_indicator import get_indicators as get_amazingdata_indicators
+from .amazingdata_stock import get_stock_data as get_amazingdata_stock
 from .config import get_config
 from .eastmoney_news import get_news as get_eastmoney_news
 from .errors import (
@@ -132,6 +147,15 @@ TOOLS_CATEGORIES = {
             "get_etf_profile",
             "get_etf_intraday",
         ]
+    },
+    "capital_flow_data": {
+        "description": "A-share capital-flow / event signals: dragon-tiger, margin trading, shareholder count, profit forecast",
+        "tools": [
+            "get_dragon_tiger",
+            "get_margin_trading",
+            "get_shareholders",
+            "get_profit_forecast",
+        ]
     }
 }
 
@@ -140,6 +164,7 @@ VENDOR_LIST = [
     "fred",
     "polymarket",
     "alpha_vantage",
+    "amazingdata",
     "tushare",
     "akshare",
     "eastmoney",
@@ -156,6 +181,7 @@ def _tushare_not_ready(*args, **kwargs):
 VENDOR_METHODS = {
     # core_stock_apis
     "get_stock_data": {
+        "amazingdata": get_amazingdata_stock,
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
         "tushare": get_tushare_stock,
@@ -163,6 +189,7 @@ VENDOR_METHODS = {
     },
     # technical_indicators
     "get_indicators": {
+        "amazingdata": get_amazingdata_indicators,
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
         "tushare": get_tushare_indicators,
@@ -170,24 +197,28 @@ VENDOR_METHODS = {
     },
     # fundamental_data
     "get_fundamentals": {
+        "amazingdata": get_amazingdata_fundamentals,
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
         "tushare": get_tushare_fundamentals,
         "akshare": get_akshare_fundamentals,
     },
     "get_balance_sheet": {
+        "amazingdata": get_amazingdata_balance_sheet,
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
         "tushare": get_tushare_balance_sheet,
         "akshare": get_akshare_balance_sheet,
     },
     "get_cashflow": {
+        "amazingdata": get_amazingdata_cashflow,
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
         "tushare": get_tushare_cashflow,
         "akshare": get_akshare_cashflow,
     },
     "get_income_statement": {
+        "amazingdata": get_amazingdata_income_statement,
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
         "tushare": get_tushare_income_statement,
@@ -230,7 +261,21 @@ VENDOR_METHODS = {
         "longbridge": get_longbridge_etf_profile,
     },
     "get_etf_intraday": {
+        "amazingdata": get_amazingdata_etf_intraday,
         "tushare": get_tushare_etf_intraday,
+    },
+    # capital_flow_data (AmazingData 新增维度)
+    "get_dragon_tiger": {
+        "amazingdata": get_amazingdata_dragon_tiger,
+    },
+    "get_margin_trading": {
+        "amazingdata": get_amazingdata_margin_trading,
+    },
+    "get_shareholders": {
+        "amazingdata": get_amazingdata_shareholders,
+    },
+    "get_profit_forecast": {
+        "amazingdata": get_amazingdata_profit_forecast,
     },
 }
 

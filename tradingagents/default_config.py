@@ -261,9 +261,9 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # routed to vendors you didn't choose. For ordered fallback, list several,
     # e.g. "yfinance,alpha_vantage". "default" uses all available vendors.
     "data_vendors": {
-        "core_stock_apis": "tushare,akshare",        # Options: alpha_vantage, yfinance, tushare, akshare
-        "technical_indicators": "tushare,akshare",   # Options: alpha_vantage, yfinance, tushare, akshare
-        "fundamental_data": "tushare,akshare",       # Options: alpha_vantage, yfinance, tushare, akshare
+        "core_stock_apis": "amazingdata,tushare,akshare",      # Options: amazingdata, alpha_vantage, yfinance, tushare, akshare
+        "technical_indicators": "amazingdata,tushare,akshare", # Options: amazingdata, alpha_vantage, yfinance, tushare, akshare
+        "fundamental_data": "amazingdata,tushare,akshare",     # Options: amazingdata, alpha_vantage, yfinance, tushare, akshare
         "news_data": "akshare,longbridge",           # Options: alpha_vantage, yfinance, longbridge, akshare
         "macro_data": "disabled",            # Options: fred, disabled
         "prediction_markets": "disabled",    # Options: polymarket, disabled
@@ -282,7 +282,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "get_etf_news": "tushare",
         "get_global_news": "tushare",
         "get_etf_profile": "akshare,tushare,tdx,longbridge",
-        "get_etf_intraday": "tushare",
+        "get_etf_intraday": "amazingdata,tushare",
+        # A股资金面/事件面(仅 AmazingData 覆盖);服务离线时路由回退为 NO_DATA。
+        "get_dragon_tiger": "amazingdata",
+        "get_margin_trading": "amazingdata",
+        "get_shareholders": "amazingdata",
+        "get_profit_forecast": "amazingdata",
     },
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all

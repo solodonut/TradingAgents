@@ -10,6 +10,21 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **AmazingData(银河证券)接入为 A股/ETF 数据 vendor 链首,并新增资金面/事件面维度。**
+  新增 `dataflows/ad_service_client.py`(常驻服务 HTTP 客户端,仅标准库,绕过 `HTTP_PROXY`
+  直连本地服务)+ `dataflows/amazingdata_utils.py`(探测降级 + HTTP 错误分类 + 落盘缓存 +
+  复用 `to_ts_code` 代码规范化)桥接层。**替换层**:`amazingdata_stock`(日线,股票前复权/
+  ETF 不复权)、`amazingdata_indicator`(复用 stockstats 本地计算,指标文案与 AKShare 一致)、
+  `amazingdata_fundamentals`(三大报表精选核心科目 + 中文标签 + 合并报表优选 + look-ahead)、
+  `amazingdata_etf`(ETF 分钟线 intraday)接入 `interface.py` 的 `get_stock_data`/
+  `get_indicators`/三表/`get_fundamentals`/`get_etf_intraday`,置于 vendor 链首,tushare/akshare
+  保留 fallback。**新增层**:`amazingdata_capital` + `capital_flow_tools` 提供 `get_dragon_tiger`
+  (龙虎榜)、`get_margin_trading`(融资融券)、`get_shareholders`(股东户数)、`get_profit_forecast`
+  (业绩预告)四个工具,挂到 fundamentals analyst(新增 `TOOLS_CATEGORIES["capital_flow_data"]`
+  类别)。采用**链首 + 探测降级**:服务在线用 AmazingData,离线/后端断连(如 "Connect failed")
+  自动回退 tushare/akshare,不 crash 多 agent run。凭证经 `.env` 的 `AD_API_TOKEN`/`AD_API_PORT`/
+  `AD_API_BASE`(指向本地常驻服务,非直连银河)。新闻/宏观/情绪/海外保持现有源不变;ETF profile
+  仍走原链(AmazingData 的份额/IOPV 是现有链的子集,未接入)。
 - **`etf_static_profile` ETF 静态档:命中的 ETF 跳过 `fund_basic`/`fund_portfolio` 联网。**
   新增 `DEFAULT_CONFIG["etf_static_profile"]`(`ts_code → {quarter, theme_terms, holdings}`),
   `tushare_etf_news.get_etf_news` 命中时直接用静态主题词 + 前 5 大重仓,跳过两次元数据联网调用;

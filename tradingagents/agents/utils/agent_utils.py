@@ -7,6 +7,12 @@ import yfinance as yf
 from langchain_core.messages import HumanMessage, RemoveMessage
 
 # Import tools from separate utility files
+from tradingagents.agents.utils.capital_flow_tools import (
+    get_dragon_tiger,
+    get_margin_trading,
+    get_profit_forecast,
+    get_shareholders,
+)
 from tradingagents.agents.utils.core_stock_tools import get_stock_data
 from tradingagents.agents.utils.etf_data_tools import get_etf_profile
 from tradingagents.agents.utils.fundamental_data_tools import (
@@ -35,6 +41,10 @@ __all__ = [
     "get_balance_sheet",
     "get_cashflow",
     "get_income_statement",
+    "get_dragon_tiger",
+    "get_margin_trading",
+    "get_shareholders",
+    "get_profit_forecast",
     "get_news",
     "get_etf_news",
     "get_global_news",

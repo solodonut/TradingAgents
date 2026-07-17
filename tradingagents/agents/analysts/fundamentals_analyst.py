@@ -4,10 +4,14 @@ from tradingagents.agents.utils.agent_utils import (
     get_balance_sheet,
     get_cashflow,
     get_citation_instruction,
+    get_dragon_tiger,
     get_fundamentals,
     get_income_statement,
     get_instrument_context_from_state,
     get_language_instruction,
+    get_margin_trading,
+    get_profit_forecast,
+    get_shareholders,
     with_evidence_items,
 )
 
@@ -22,12 +26,17 @@ def create_fundamentals_analyst(llm):
             get_balance_sheet,
             get_cashflow,
             get_income_statement,
+            get_dragon_tiger,
+            get_margin_trading,
+            get_shareholders,
+            get_profit_forecast,
         ]
 
         system_message = (
             "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
             + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
             + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements."
+            + " For mainland China A-shares only, you may ALSO consult capital-flow / event tools to gauge fund and event dynamics: `get_dragon_tiger` (龙虎榜, institutional/hot-money seat activity), `get_margin_trading` (融资融券, leverage buildup/short interest), `get_shareholders` (股东户数, chip concentration), and `get_profit_forecast` (业绩预告, pre-earnings guidance). These do not apply to ETFs/funds or non-A-share tickers — skip them there."
             + get_language_instruction()
             + get_citation_instruction()
         )
