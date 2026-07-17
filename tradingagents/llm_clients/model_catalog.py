@@ -83,12 +83,14 @@ _MINIMAX_MODELS: dict[str, list[ModelOption]] = {
 _ICA_MODELS: dict[str, list[ModelOption]] = {
     "quick": [
         ("Claude 4.5 Haiku - Fast, cheap quick-thinking", "claude-haiku-4-5"),
+        ("Claude 5 Sonnet - Balanced", "claude-sonnet-5"),
         ("Claude 4.6 Sonnet - Balanced", "claude-sonnet-4-6"),
         ("Custom model ID", "custom"),
     ],
     "deep": [
         ("Claude 4.8 Opus - Latest flagship, deep reasoning", "claude-opus-4-8"),
         ("Claude 4.7 Opus - Previous flagship", "claude-opus-4-7"),
+        ("Claude 5 Sonnet - Balanced reasoning", "claude-sonnet-5"),
         ("Claude 4.6 Sonnet - Balanced reasoning", "claude-sonnet-4-6"),
         ("Custom model ID", "custom"),
     ],
