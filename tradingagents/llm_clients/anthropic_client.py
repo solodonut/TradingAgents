@@ -74,11 +74,7 @@ class IbmIcaAnthropicClient(AnthropicClient):
     """Claude-only IBM ICA client using the Anthropic Messages API."""
 
     def __init__(self, model: str, base_url: str | None = None, **kwargs):
-        resolved_base_url = (
-            base_url
-            or os.environ.get("IBM_ICA_BASE_URL")
-            or _IBM_ICA_DEFAULT_BASE_URL
-        )
+        resolved_base_url = base_url or _IBM_ICA_DEFAULT_BASE_URL
         api_key = kwargs.get("api_key") or os.environ.get("IBM_ICA_API_KEY")
         if not api_key:
             raise ValueError(

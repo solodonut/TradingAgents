@@ -52,17 +52,8 @@ def test_ibm_ica_sends_anthropic_messages_request(monkeypatch):
 
 
 @pytest.mark.unit
-def test_ibm_ica_base_url_env_override(monkeypatch):
-    monkeypatch.setenv("IBM_ICA_API_KEY", "test-ica-key")
-    monkeypatch.setenv("IBM_ICA_BASE_URL", "https://tenant.example/ica")
-    llm = create_llm_client("ibm_ica", "claude-haiku-4-5").get_llm()
-    assert str(llm.anthropic_api_url) == "https://tenant.example/ica"
-
-
-@pytest.mark.unit
 def test_ibm_ica_explicit_base_url_wins(monkeypatch):
     monkeypatch.setenv("IBM_ICA_API_KEY", "test-ica-key")
-    monkeypatch.setenv("IBM_ICA_BASE_URL", "https://env.example/ica")
     llm = create_llm_client(
         "ibm_ica",
         "claude-haiku-4-5",
