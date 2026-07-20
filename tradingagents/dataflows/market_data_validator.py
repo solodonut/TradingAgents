@@ -10,12 +10,22 @@ claim. Deterministic, no LLM involved.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 
 import pandas as pd
 from stockstats import wrap
 
+from tradingagents.dataflows.akshare_indicator import _load_akshare_ohlcv
+from tradingagents.dataflows.akshare_utils import is_a_share
+from tradingagents.dataflows.amazingdata_indicator import (
+    _load_ohlcv as _load_amazingdata_ohlcv,
+)
+from tradingagents.dataflows.errors import NoMarketDataError
 from tradingagents.dataflows.stockstats_utils import load_ohlcv
+from tradingagents.dataflows.tushare_indicator import _load_tushare_ohlcv
+
+logger = logging.getLogger(__name__)
 
 # A fixed, common indicator set so the snapshot is the same shape every run.
 DEFAULT_SNAPSHOT_INDICATORS: tuple[str, ...] = (
@@ -25,14 +35,51 @@ DEFAULT_SNAPSHOT_INDICATORS: tuple[str, ...] = (
 )
 
 
-def _verified_rows(symbol: str, curr_date: str) -> pd.DataFrame:
+class SnapshotVendorChainError(RuntimeError):
+    """Every mainland snapshot vendor failed to return usable OHLCV."""
+
+
+def _load_mainland_ohlcv(symbol: str, curr_date: str) -> tuple[pd.DataFrame, str]:
+    """Load mainland OHLCV in the fixed verification-source order."""
+    loaders = (
+        ("AmazingData", _load_amazingdata_ohlcv),
+        ("Tushare", _load_tushare_ohlcv),
+        ("AKShare", _load_akshare_ohlcv),
+    )
+    failures = []
+    for source, loader in loaders:
+        try:
+            data = loader(symbol, curr_date)
+            if data is None or data.empty:
+                raise NoMarketDataError(symbol, symbol, f"{source} returned no rows")
+            return data, source
+        except Exception as exc:  # noqa: BLE001 - one vendor failure must fall through
+            logger.warning(
+                "Verified snapshot source %s failed for %s: %s",
+                source,
+                symbol,
+                exc,
+            )
+            failures.append(f"{source}={type(exc).__name__}: {exc}")
+
+    raise SnapshotVendorChainError(
+        "All verified snapshot sources failed in order "
+        f"AmazingData -> Tushare -> AKShare ({'; '.join(failures)})"
+    )
+
+
+def _verified_rows(symbol: str, curr_date: str) -> tuple[pd.DataFrame, str]:
     """OHLCV on or before curr_date, date-sorted. Raises if nothing usable.
 
-    ``load_ohlcv`` already normalizes the Date column and filters out
-    look-ahead rows, but we re-apply the cutoff defensively — this is a
-    verification path, so it must not trust its input to be pre-filtered.
+    Mainland instruments use the fixed AmazingData -> Tushare -> AKShare
+    verification chain. Other markets keep the existing Yahoo-backed loader.
+    Every loader already filters look-ahead rows, but we re-apply the cutoff
+    defensively because this verification path must not trust its input.
     """
-    data = load_ohlcv(symbol, curr_date)
+    if is_a_share(symbol):
+        data, source = _load_mainland_ohlcv(symbol, curr_date)
+    else:
+        data, source = load_ohlcv(symbol, curr_date), "Yahoo Finance"
     if data is None or data.empty:
         raise ValueError(f"No OHLCV data available for {symbol}.")
 
@@ -42,7 +89,7 @@ def _verified_rows(symbol: str, curr_date: str) -> pd.DataFrame:
     df = df[df["Date"] <= pd.to_datetime(curr_date)].sort_values("Date")
     if df.empty:
         raise ValueError(f"No OHLCV rows on or before {curr_date} for {symbol}.")
-    return df
+    return df, source
 
 
 def _fmt(value) -> str:
@@ -69,7 +116,7 @@ def build_verified_market_snapshot(
     # `df` keeps the original capitalized OHLCV columns (Open/High/Low/Close/
     # Volume); stockstats `wrap()` lowercases columns and adds indicator
     # columns, so read raw prices from `df` and indicators from `stock_df`.
-    df = _verified_rows(symbol, curr_date)
+    df, source = _verified_rows(symbol, curr_date)
     stock_df = wrap(df.copy())
 
     selected = tuple(indicators or DEFAULT_SNAPSHOT_INDICATORS)
@@ -91,6 +138,7 @@ def build_verified_market_snapshot(
         "",
         f"- Requested analysis date: {curr_date}",
         f"- Latest trading row used: {latest_date}",
+        f"- Data source used: {source}",
         "- Rows after the requested analysis date are excluded before verification.",
         "",
         "### Latest verified OHLCV row",

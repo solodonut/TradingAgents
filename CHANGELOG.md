@@ -55,6 +55,10 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Changed
 
+- **A股/ETF 已验证市场快照改为 `AmazingData → Tushare → AKShare` 固定回退链。**
+  `get_verified_market_snapshot` 复用三源现有的 5 年 OHLCV loader，任一源离线、未配置、
+  网络失败或无可用数据时自动尝试下一源；快照正文新增实际命中源，三源全部失败时仍返回
+  `MARKET_SNAPSHOT_UNAVAILABLE`，不终止分析。非大陆标的继续使用原 Yahoo Finance 路径。
 - **可读标签引用闭环:agent 引用标签、来源表解析标签、校验器识别标签。** 承接上一条改动:
   `get_citation_instruction()` 现在要求 agent 在每条关键结论后原样复制工具输出顶部的方括号
   标签(如 `[历史行情（OHLCV）]`),不再提示 `[S#]`;新增 `extract_cited_evidence_ids()` 将

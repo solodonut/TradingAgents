@@ -23,6 +23,74 @@ def _sample_ohlcv() -> pd.DataFrame:
 
 @pytest.mark.unit
 class TestVerifiedSnapshot:
+    def test_mainland_snapshot_falls_back_amazingdata_tushare_akshare(
+        self, monkeypatch
+    ):
+        calls = []
+
+        def _fail(source, exc):
+            def _loader(symbol, curr_date):
+                calls.append(source)
+                raise exc
+
+            return _loader
+
+        def _akshare(symbol, curr_date):
+            calls.append("AKShare")
+            return _sample_ohlcv()
+
+        monkeypatch.setattr(
+            validator,
+            "_load_amazingdata_ohlcv",
+            _fail("AmazingData", ConnectionError("AmazingData unavailable")),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            validator,
+            "_load_tushare_ohlcv",
+            _fail("Tushare", ConnectionError("Tushare unavailable")),
+            raising=False,
+        )
+        monkeypatch.setattr(validator, "_load_akshare_ohlcv", _akshare, raising=False)
+        monkeypatch.setattr(
+            validator,
+            "load_ohlcv",
+            lambda *_: pytest.fail("mainland snapshot must use the explicit vendor chain"),
+        )
+
+        snap = validator.build_verified_market_snapshot("159248", "2026-05-20")
+
+        assert calls == ["AmazingData", "Tushare", "AKShare"]
+        assert "Data source used: AKShare" in snap
+
+    def test_mainland_snapshot_stops_after_tushare_success(self, monkeypatch):
+        calls = []
+
+        def _amazingdata(symbol, curr_date):
+            calls.append("AmazingData")
+            raise ConnectionError("AmazingData unavailable")
+
+        def _tushare(symbol, curr_date):
+            calls.append("Tushare")
+            return _sample_ohlcv()
+
+        def _akshare(symbol, curr_date):
+            calls.append("AKShare")
+            pytest.fail("AKShare must not run after Tushare succeeds")
+
+        monkeypatch.setattr(
+            validator, "_load_amazingdata_ohlcv", _amazingdata, raising=False
+        )
+        monkeypatch.setattr(
+            validator, "_load_tushare_ohlcv", _tushare, raising=False
+        )
+        monkeypatch.setattr(validator, "_load_akshare_ohlcv", _akshare, raising=False)
+
+        snap = validator.build_verified_market_snapshot("159248", "2026-05-20")
+
+        assert calls == ["AmazingData", "Tushare"]
+        assert "Data source used: Tushare" in snap
+
     def test_excludes_future_rows(self, monkeypatch):
         data = pd.concat([
             _sample_ohlcv(),
@@ -76,7 +144,7 @@ class TestTool:
         assert "Verified market data snapshot for COF" in out
 
     def test_tool_returns_sentinel_on_network_error(self, monkeypatch):
-        """A transient AKShare/East Money disconnect must not crash the run.
+        """Network failure across the snapshot chain must not crash the run.
 
         Without the tool-boundary catch this raises ConnectionError, which
         propagates through the LangGraph ToolNode and aborts the whole run via
@@ -91,7 +159,9 @@ class TestTool:
         def _boom(symbol, curr_date):
             raise requests.exceptions.ConnectionError("Remote end closed connection")
 
-        monkeypatch.setattr(validator, "load_ohlcv", _boom)
+        monkeypatch.setattr(validator, "_load_amazingdata_ohlcv", _boom)
+        monkeypatch.setattr(validator, "_load_tushare_ohlcv", _boom)
+        monkeypatch.setattr(validator, "_load_akshare_ohlcv", _boom)
         out = get_verified_market_snapshot.invoke(
             {"symbol": "159241", "curr_date": "2026-06-25"}
         )
