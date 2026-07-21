@@ -20,9 +20,14 @@ RATINGS_5_TIER: tuple[str, ...] = (
 
 _RATING_SET = {r.lower() for r in RATINGS_5_TIER}
 
-# Matches "Rating: X" / "rating - X" / "Rating: **X**" — tolerates markdown
-# bold wrappers and either a colon or hyphen separator.
-_RATING_LABEL_RE = re.compile(r"rating.*?[:\-][\s*]*(\w+)", re.IGNORECASE)
+# Matches "Rating: X" / "rating - X" / "Rating: **X**" / "评级:X" / "评级:**X**" —
+# tolerates markdown bold wrappers, the English or Chinese label, and a half- or
+# full-width colon/hyphen separator. DeepSeek free-text fallback emits the Chinese
+# label with a full-width colon (评级:X), which the ASCII-only pattern silently
+# missed, defaulting to Hold.
+_RATING_LABEL_RE = re.compile(
+    r"(?:rating|评级).*?[:\-：－][\s*]*(\w+)", re.IGNORECASE
+)
 
 
 def parse_rating(text: str, default: str = "Hold") -> str:

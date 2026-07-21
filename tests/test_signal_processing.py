@@ -60,6 +60,21 @@ class TestParseRating:
         for r in RATINGS_5_TIER:
             assert parse_rating(f"Rating: {r}") == r
 
+    def test_chinese_label_fullwidth_colon(self):
+        # Regression: DeepSeek free-text fallback emits 中文标签 + 全角冒号
+        # (评级：Underweight). The ASCII-only pattern silently defaulted to Hold.
+        assert parse_rating("评级：Underweight\n减少仓位。") == "Underweight"
+
+    def test_chinese_label_halfwidth_colon(self):
+        assert parse_rating("评级: Buy\n理由如下。") == "Buy"
+
+    def test_chinese_label_with_markdown_bold_fullwidth(self):
+        assert parse_rating("**评级**：Sell\n立即离场。") == "Sell"
+
+    def test_chinese_label_all_five_tiers_fullwidth(self):
+        for r in RATINGS_5_TIER:
+            assert parse_rating(f"评级：{r}") == r
+
 
 # ---------------------------------------------------------------------------
 # SignalProcessor: thin adapter over the heuristic
