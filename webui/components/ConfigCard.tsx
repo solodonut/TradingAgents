@@ -1,11 +1,36 @@
 "use client";
 import Link from "next/link";
 import { Cpu, GripVertical, LoaderCircle, Play, Plus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getWatchlist, lookupTicker, saveWatchlist } from "@/lib/api";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
 type TickerItem = { ticker: string; name: string; type?: "etf" | "stock" };
+
+const DEEP_LLM_STORAGE_KEY = "ta:deep_think_llm";
+const QUICK_LLM_STORAGE_KEY = "ta:quick_think_llm";
+const MODEL_STORAGE_EVENT = "ta:model-storage";
+
+type ModelStorageKey = typeof DEEP_LLM_STORAGE_KEY | typeof QUICK_LLM_STORAGE_KEY;
+
+function getStoredModel(key: ModelStorageKey) {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(key);
+}
+
+function subscribeModelStorage(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(MODEL_STORAGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(MODEL_STORAGE_EVENT, onStoreChange);
+  };
+}
+
+function setStoredModel(key: ModelStorageKey, value: string) {
+  localStorage.setItem(key, value);
+  window.dispatchEvent(new Event(MODEL_STORAGE_EVENT));
+}
 
 export function ConfigCard({
   options,
@@ -45,20 +70,24 @@ export function ConfigCard({
   ]);
   const [depth, setDepth] = useState<1 | 3 | 5>(3);
   const [language, setLanguage] = useState("Chinese");
-  const [deepLlm, setDeepLlm] = useState(options.configured_deep_llm ?? "");
-  const [quickLlm, setQuickLlm] = useState(options.configured_quick_llm ?? "");
+  const savedDeepLlm = useSyncExternalStore(
+    subscribeModelStorage,
+    () => getStoredModel(DEEP_LLM_STORAGE_KEY),
+    () => null,
+  );
+  const savedQuickLlm = useSyncExternalStore(
+    subscribeModelStorage,
+    () => getStoredModel(QUICK_LLM_STORAGE_KEY),
+    () => null,
+  );
+  const deepLlm = savedDeepLlm && options.model_options.deep.some(([, id]) => id === savedDeepLlm)
+    ? savedDeepLlm
+    : (options.configured_deep_llm ?? "");
+  const quickLlm = savedQuickLlm && options.model_options.quick.some(([, id]) => id === savedQuickLlm)
+    ? savedQuickLlm
+    : (options.configured_quick_llm ?? "");
   const [modelsOpen, setModelsOpen] = useState(false);
   const modelsRef = useRef<HTMLDivElement>(null);
-
-  // 挂载后从 localStorage 回填用户上次的选择（仅当仍是当前 provider 的有效选项）
-  useEffect(() => {
-    const validDeep = new Set(options.model_options.deep.map(([, id]) => id));
-    const validQuick = new Set(options.model_options.quick.map(([, id]) => id));
-    const savedDeep = localStorage.getItem("ta:deep_think_llm");
-    const savedQuick = localStorage.getItem("ta:quick_think_llm");
-    if (savedDeep && validDeep.has(savedDeep)) setDeepLlm(savedDeep);
-    if (savedQuick && validQuick.has(savedQuick)) setQuickLlm(savedQuick);
-  }, [options]);
 
   // 弹出卡片：点击外部或按 Esc 关闭
   useEffect(() => {
@@ -256,8 +285,7 @@ export function ConfigCard({
               <select
                 value={deepLlm}
                 onChange={(e) => {
-                  setDeepLlm(e.target.value);
-                  localStorage.setItem("ta:deep_think_llm", e.target.value);
+                  setStoredModel(DEEP_LLM_STORAGE_KEY, e.target.value);
                 }}
                 className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
               >
@@ -273,8 +301,7 @@ export function ConfigCard({
               <select
                 value={quickLlm}
                 onChange={(e) => {
-                  setQuickLlm(e.target.value);
-                  localStorage.setItem("ta:quick_think_llm", e.target.value);
+                  setStoredModel(QUICK_LLM_STORAGE_KEY, e.target.value);
                 }}
                 className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
               >

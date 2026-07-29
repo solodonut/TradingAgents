@@ -60,7 +60,7 @@ export function QueuePanel({
       <ul className="mt-2 space-y-1.5">
         {queue.running && (
           <li className="thinking-panel flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5">
-            <span className="truncate font-mono text-sm text-foreground">
+            <span className="truncate font-mono text-xs text-foreground">
               {queue.running.ticker}
             </span>
             <span className="flex items-center gap-2">
@@ -85,7 +85,7 @@ export function QueuePanel({
             key={item.run_id}
             className="glass-control flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5"
           >
-            <span className="truncate font-mono text-sm text-muted-foreground">
+            <span className="truncate font-mono text-xs text-muted-foreground">
               <span className="mr-1.5 text-[0.62rem] text-muted-foreground/70">
                 {index + 1}
               </span>

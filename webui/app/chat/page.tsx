@@ -210,7 +210,6 @@ export default function ChatPage() {
   const sendMessage = async (rawQuestion: string) => {
     const question = rawQuestion.trim();
     if (!sessionId || !question || streaming) return;
-    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     const userMsg: ChatMessageT = {
       message_id: `local-${now}`,
