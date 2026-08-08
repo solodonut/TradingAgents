@@ -267,3 +267,103 @@ Agent (LangGraph 节点)
 4. 在 `agents/utils/` 下新增一个 `@tool` 封装(编排参数 + 登记 provenance +
    识别哨兵前缀),供 agent 调用。
 5. 在 `default_config.py` 的 `data_vendors` / `tool_vendors` 里给出默认路由。
+
+---
+
+## 8. ETF 概况字段级来源
+
+`get_etf_profile` 默认链 `akshare,tushare,tdx,longbridge` 是**首个成功即停**:
+第一个能返回可用画像的 vendor 就结束整条链。AKShare 排首是因为它对 `159241` /
+`510300` 这类境内 ETF 的画像覆盖最广(实时 IOPV、折溢价、市值、最新份额、含中文名
+的重仓)。AKShare 不可达或无数据时,依次回退 Tushare → 可选 TDX → 可选 Longbridge。
+
+各 vendor 的字段能力差异很大,未来更丰富的实现可能改为**逐字段 merge**;当前仍是
+first-success。字段级偏好参考:
+
+| 字段 | 首选来源 | 回退 | 备注 |
+| --- | --- | --- | --- |
+| ETF 名称/全称/交易所 | Tushare `fund_basic` | AKShare、Longbridge 静态、通达信 MCP | Tushare 返回结构化 `ts_code`、名称、交易所/上市字段。 |
+| 跟踪指数 | Tushare `fund_basic` benchmark | AKShare/新闻文本 | Tushare 是当前最干净的指数基准元数据源。 |
+| 管理人/托管人/费率 | Tushare `fund_basic` | AKShare | 静态参考数据。 |
+| 最新价 | 通达信 MCP | AKShare、Tushare 付费 ETF 实时/日线 | 测试中通达信 MCP 能返回当前 ETF 价格字段。 |
+| 涨跌/涨跌幅 | 通达信 MCP | AKShare、Tushare 付费实时/日线 | 快照字段。 |
+| 成交量/成交额 | 通达信 MCP | AKShare、Tushare 付费实时/日线 | 快照字段。 |
+| 换手率/市值 | 通达信 MCP | AKShare | 通达信 MCP 返回换手与市值字段。 |
+| NAV / 最新净值 | Tushare `fund_nav`、通达信 MCP | AKShare | Tushare 对配置 token 返回 T+1 净值。 |
+| 累计净值 | 通达信 MCP | AKShare | 测试中通达信 MCP 返回。 |
+| 折溢价率 | 通达信 MCP | AKShare | 通达信 MCP 返回 `溢价率(%)`;AKShare 为回退。 |
+| 基金规模 | 通达信 MCP | AKShare、Tushare(可得时) | 快照/派生字段。 |
+| 基金份额 | AKShare | 通达信 MCP、Tushare(可得时) | 快照/派生字段。 |
+| 申赎状态 | 通达信 MCP | AKShare | 通达信 MCP 返回 `申赎状态`。 |
+| IOPV | AKShare | Tushare ETF 实时参考(付费权限) | 测试中通达信 MCP 未返回 IOPV。 |
+| 重仓/前十成分 | 名称用 AKShare,稳定披露用 Tushare `fund_portfolio` | 通达信 MCP 部分 | Tushare 返回代码/比例/市值;AKShare 在当前画像输出里返回名称。 |
+| 申赎篮子 | Tushare 付费 ETF 权限(可得时) | AKShare/交易所手工数据 | 当前凭证未确认。 |
+
+### 通达信 MCP 配置
+
+本地 Codex MCP 配置(API key 已脱敏):
+
+```toml
+[mcp_servers.tdx]
+enabled = true
+transport = "streamable_http"
+url = "https://mcp.tdx.com.cn:3001/mcp"
+http_headers = { "tdx-api-key" = "*****" }
+```
+
+暴露的工具为 `mcp__tdx.tdx_wenda_quotes`——一个**自然语言查询**端点,不是固定 schema
+的 REST API。它能返回有用的 ETF 快照表,但表头随问题变化,code vendor 应问窄问题并对
+返回的中文表头做防御式映射。示例查询:
+
+```text
+question = "510300 最新价 涨跌幅 成交额 换手率 净值 溢价率 基金规模 基金份额"
+range = "JJ"
+```
+
+返回字段包含:最新净值、净值日期、累计净值、申赎状态、涨跌幅、成交量、成交额、
+市值、溢价率、价格、基金规模、基金份额。
+
+---
+
+## 9. 新闻源选型
+
+`get_news`(默认 `tushare,akshare,eastmoney`)当前支持的 vendor 角色:
+
+| 来源 | 建议角色 | 覆盖 | 备注 |
+| --- | --- | --- | --- |
+| Longbridge CLI `news` | 稳定的个股新闻 | 最新标的新闻(标题/摘要/URL) | 可选运行时依赖;CLI 缺失或未认证则跳过。 |
+| Tushare `news` / `major_news` | 未来的付费结构化新闻 | 短讯、长文、多媒体源 | 当前 token 测试无 `news` 权限,暂未登记到 `get_news`。 |
+| Tushare `anns_d` | 结构化公告 | 上市公司公告(带 PDF URL) | 适合 A 股事实性事件。 |
+| Tushare `idx_anns` | ETF/指数相关公告 | 指数公司公告 | 对 ETF 跟踪指数变更有用。 |
+| WebSearch | 低成本补充源 | 近期新闻、基金公司/交易所页面、媒体报道 | 必须保留源 URL 与日期过滤;适合近期分析而非严格历史回测。 |
+| AKShare / East Money | 中文回退 | 东方财富个股新闻 | 免费本地化;上游抓取可能不稳定。 |
+| 通达信 MCP | 当前不建议用于 `get_news` | 查询返回空行或仅报价行 | `tdx_wenda_quotes` 未返回结构化新闻/公告标题正文。 |
+
+若某 vendor 返回 `Error fetching news...` 字符串(而非抛错),路由会把它当作 vendor
+失败并继续链路。
+
+---
+
+## 10. MCP 工具与环境权限
+
+Codex 会话中与行情数据相关的 MCP 命名空间:
+
+| 命名空间 | 角色 | 相关工具 |
+| --- | --- | --- |
+| `mcp__tdx` | 通达信问小达 MCP | `tdx_wenda_quotes`——ETF 快照字段与行情/财务自然语言查询。 |
+| `mcp__tushareMcp` | Tushare MCP | `etf_basic`、`fund_portfolio`、`news`、`major_news`、`anns_d`、`idx_anns` 等大量 A 股/基金端点。 |
+| `mcp__longbridge` | 长桥 OpenAPI MCP | `quote`、`news`、`news_search`、`constituent`、`invest_relation`;代码运行时用可选 `longbridge` CLI 适配器,MCP 在 Codex 分析时可用。 |
+
+各数据源所需配置与当前状态:
+
+| 来源 | 所需配置 | 当前状态 |
+| --- | --- | --- |
+| AKShare | Python 包 + 直连境内公共源 | 已实现;上游不稳,有代理绕过与重试。 |
+| Tushare | `TUSHARE_TOKEN` + 端点级付费权限 | 已实现行情/指标/基本面/ETF 画像回退;测试中新闻权限不可用。 |
+| 通达信 MCP | `tdx` MCP server + `tdx-api-key` header | Codex 会话可用;代码侧为 ETF 画像回退的「配置即跳过」占位适配器。 |
+| WebSearch | 搜索 provider + 源抽取 | 未实现为 code vendor;适合作 `get_news` 补充。 |
+| Longbridge | Longbridge OpenAPI 认证 / PATH 上的 `longbridge` CLI | MCP 可用;可选 CLI 适配器已实现于 `get_news` 与 ETF 画像回退。 |
+| Alpha Vantage | `ALPHA_VANTAGE_API_KEY` | 已实现美股/全球风格端点。 |
+| yfinance | Python 包/网络 | 已实现;国内 only 模式不优先。 |
+| FRED | FRED API key | 已实现,默认关闭。 |
+| Polymarket | 网络/API | 已实现,默认关闭。 |
