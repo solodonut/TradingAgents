@@ -227,7 +227,10 @@ Agent (LangGraph 节点)
 
 ## 5. Vendor 清单
 
-`VENDOR_LIST`(见 [interface.py:162](../tradingagents/dataflows/interface.py#L162)):
+`VENDOR_LIST`(见 [interface.py:162](../tradingagents/dataflows/interface.py#L162))。
+下表是速查;**真实上游、凭证、费用、上游集中度风险,以及路由层外的直连数据源**见
+[data-sources.md](./data-sources.md)。每个「方法 × vendor」组合的**实测结果**
+(能不能用、多快、返回多少)见该文第 4 节的能力矩阵。
 
 | Vendor | 覆盖 | 备注 |
 |---|---|---|
@@ -238,7 +241,7 @@ Agent (LangGraph 节点)
 | `akshare` | A 股行情/指标/基本面/新闻/ETF | 免费,A 股自动路由首选 |
 | `eastmoney` | A 股/ETF 新闻 | 东方财富 |
 | `longbridge` | 新闻/ETF 概况 | 长桥 |
-| `tdx` | ETF 概况 | 通达信 |
+| `tdx` | ETF 概况 | 通达信;**占位适配器,运行时恒被跳过**(仅 MCP 可用) |
 | `fred` | 美国宏观 | 需 key,默认关闭 |
 | `polymarket` | 预测市场 | 默认关闭 |
 
