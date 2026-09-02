@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+import threading
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from typing import Any
@@ -219,19 +220,24 @@ class EvidenceRegistry:
             assigned_ids.add(citation_id)
 
         self._next = next_generated
+        # Parallel analysts share one registry through the contextvar, so the
+        # read-modify-write below must be atomic or two different sources get
+        # handed the same S# and every citation to one of them points at the other.
+        self._lock = threading.Lock()
 
     def register(self, **item: Any) -> str:
         provisional = _normalize_item(item, "S0")
         key = _dedupe_key(provisional)
-        existing = self._keys.get(key)
-        if existing:
-            return existing
+        with self._lock:
+            existing = self._keys.get(key)
+            if existing:
+                return existing
 
-        citation_id = f"S{self._next}"
-        self._next += 1
-        normalized = _normalize_item(item, citation_id)
-        self.items.append(normalized)
-        self._keys[_dedupe_key(normalized)] = citation_id
+            citation_id = f"S{self._next}"
+            self._next += 1
+            normalized = _normalize_item(item, citation_id)
+            self.items.append(normalized)
+            self._keys[_dedupe_key(normalized)] = citation_id
         return citation_id
 
     def to_list(self) -> list[dict[str, Any]]:

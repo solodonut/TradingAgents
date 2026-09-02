@@ -28,7 +28,9 @@ def _china_only_tools():
     return tools
 
 
-def create_news_analyst(llm):
+def create_news_analyst(llm, messages_key: str = "news_messages"):
+    """``messages_key`` is this analyst's private ReAct channel (see AgentState)."""
+
     def news_analyst_node(state):
         current_date = state["trade_date"]
         asset_type = state.get("asset_type", "stock")
@@ -79,7 +81,7 @@ def create_news_analyst(llm):
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(state[messages_key])
 
         report = ""
 
@@ -87,7 +89,7 @@ def create_news_analyst(llm):
             report = result.content
 
         return with_evidence_items({
-            "messages": [result],
+            messages_key: [result],
             "news_report": report,
         })
 

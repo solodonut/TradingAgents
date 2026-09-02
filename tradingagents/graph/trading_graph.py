@@ -50,6 +50,7 @@ from tradingagents.obs import (
     set_current_run_logger,
 )
 
+from .analyst_execution import ANALYST_NODE_SPECS, iter_state_messages
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
 from .propagation import Propagator
@@ -221,6 +222,8 @@ class TradingAgentsGraph:
                 get_prediction_markets,
             ]
 
+        # Each ToolNode reads and writes its analyst's private message channel so
+        # concurrent analysts never execute one another's tool calls.
         return {
             "market": ToolNode(
                 [
@@ -234,6 +237,7 @@ class TradingAgentsGraph:
                     get_verified_market_snapshot,
                 ],
                 handle_tool_errors=_handle_vendor_tool_error,
+                messages_key=ANALYST_NODE_SPECS["market"].messages_key,
             ),
             "social": ToolNode(
                 [
@@ -241,10 +245,12 @@ class TradingAgentsGraph:
                     get_news,
                 ],
                 handle_tool_errors=_handle_vendor_tool_error,
+                messages_key=ANALYST_NODE_SPECS["social"].messages_key,
             ),
             "news": ToolNode(
                 news_tools,
                 handle_tool_errors=_handle_vendor_tool_error,
+                messages_key=ANALYST_NODE_SPECS["news"].messages_key,
             ),
             "fundamentals": ToolNode(
                 [
@@ -260,6 +266,7 @@ class TradingAgentsGraph:
                     get_profit_forecast,
                 ],
                 handle_tool_errors=_handle_vendor_tool_error,
+                messages_key=ANALYST_NODE_SPECS["fundamentals"].messages_key,
             ),
         }
 
@@ -480,10 +487,10 @@ class TradingAgentsGraph:
             if self.debug:
                 trace = []
                 for chunk in self.graph.stream(init_agent_state, **args):
-                    if len(chunk["messages"]) == 0:
-                        pass
-                    else:
-                        chunk["messages"][-1].pretty_print()
+                    # Analysts write private message channels, so scan all of them.
+                    messages = list(iter_state_messages(chunk))
+                    if messages:
+                        messages[-1].pretty_print()
                         trace.append(chunk)
                 # Streamed chunks are per-node deltas. Merge them so the returned
                 # state matches what graph.invoke() yields in the non-debug path.

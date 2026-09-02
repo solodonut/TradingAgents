@@ -8,6 +8,7 @@ import traceback
 
 from api.store import Store
 from api.telemetry import RunTelemetry
+from tradingagents.graph.analyst_execution import iter_state_messages
 from tradingagents.graph.evidence import EvidenceRegistry
 from tradingagents.graph.provenance import (
     use_evidence_registry,
@@ -148,11 +149,9 @@ def _rounds_config(graph) -> dict:
 
 def _tool_status_events(chunk: dict, seen: set[str]) -> list[dict]:
     events: list[dict] = []
-    messages = chunk.get("messages")
-    if not isinstance(messages, list):
-        return events
-
-    for index, message in enumerate(messages):
+    # Analyst tool calls live in each analyst's private message channel, so the
+    # shared "messages" channel alone would make the analyst phase look silent.
+    for index, message in enumerate(iter_state_messages(chunk)):
         tool_call_id = getattr(message, "tool_call_id", None)
         if tool_call_id:
             name = str(getattr(message, "name", None) or "tool")

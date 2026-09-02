@@ -6,6 +6,7 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
+from tradingagents.graph.analyst_execution import ANALYST_MESSAGE_KEYS
 
 
 class Propagator:
@@ -33,6 +34,8 @@ class Propagator:
         """
         return {
             "messages": [("human", company_name)],
+            # Seed every analyst's private channel with the same opening turn.
+            **{key: [("human", company_name)] for key in ANALYST_MESSAGE_KEYS},
             "company_of_interest": company_name,
             "asset_type": asset_type,
             "instrument_context": instrument_context,

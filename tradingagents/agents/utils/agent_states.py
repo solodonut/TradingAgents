@@ -1,7 +1,32 @@
-from typing import Annotated
+from collections.abc import Sequence
+from typing import Annotated, Any
 
+from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
+from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
+
+
+def merge_evidence_items(
+    left: Sequence[dict[str, Any]] | None,
+    right: Sequence[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Union evidence items by citation id, keeping first-seen order.
+
+    Needed because analysts can run in the same LangGraph super-step (see
+    ``analyst_concurrency_limit``) and each one writes a full snapshot of the
+    shared ``EvidenceRegistry``. Without a reducer this channel is LastValue
+    and two concurrent writes raise ``InvalidUpdateError``. Ids are unique per
+    source (``EvidenceRegistry.register`` is locked), so a union by id merges
+    the overlapping snapshots without dropping or duplicating a source.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for items in (left or (), right or ()):
+        for item in items:
+            key = str(item.get("id"))
+            if key not in merged:
+                merged[key] = item
+    return list(merged.values())
 
 
 # Researcher team state
@@ -49,10 +74,19 @@ class AgentState(MessagesState):
     asset_type: Annotated[str, "Asset type under analysis such as stock or crypto"]
     instrument_context: Annotated[str, "Deterministic ticker identity resolved at run start"]
     trade_date: Annotated[str, "What date we are trading at"]
-    evidence_items: Annotated[
-        list[dict], "Run-level evidence registry items used for source citations"
-    ]
+    evidence_items: Annotated[list[dict], merge_evidence_items]
     prefetched: Annotated[dict | None, "Pre-fetched ETF snapshot summary for context injection"]
+
+    # Per-analyst private ReAct scratchpads. Analysts share the inherited
+    # ``messages`` channel only when they run one at a time; with
+    # ``analyst_concurrency_limit`` > 1 their tool-call turns would interleave
+    # in a single list, so the router reads the wrong last message and ToolNode
+    # executes another analyst's call. Channel names must stay in sync with
+    # ``AnalystNodeSpec.messages_key`` in graph/analyst_execution.py.
+    market_messages: Annotated[list[AnyMessage], add_messages]
+    social_messages: Annotated[list[AnyMessage], add_messages]
+    news_messages: Annotated[list[AnyMessage], add_messages]
+    fundamentals_messages: Annotated[list[AnyMessage], add_messages]
 
     sender: Annotated[str, "Agent that sent this message"]
 

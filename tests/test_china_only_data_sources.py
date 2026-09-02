@@ -54,7 +54,7 @@ def test_news_analyst_hides_overseas_macro_and_prediction_tools_in_china_mode():
             "company_of_interest": "159241.SZ",
             "trade_date": "2026-06-17",
             "asset_type": "stock",
-            "messages": [HumanMessage(content="analyze")],
+            "news_messages": [HumanMessage(content="analyze")],
         }
     )
 
@@ -76,7 +76,7 @@ def test_sentiment_analyst_skips_stocktwits_and_reddit_in_china_mode():
                 "company_of_interest": "159241.SZ",
                 "trade_date": "2026-06-17",
                 "asset_type": "stock",
-                "messages": [HumanMessage(content="analyze")],
+                "social_messages": [HumanMessage(content="analyze")],
             }
         )
 

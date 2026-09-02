@@ -12,7 +12,8 @@ from tradingagents.agents.utils.agent_utils import (
 from tradingagents.agents.utils.prefetch_context import build_prefetch_block
 
 
-def create_market_analyst(llm):
+def create_market_analyst(llm, messages_key: str = "market_messages"):
+    """``messages_key`` is this analyst's private ReAct channel (see AgentState)."""
 
     def market_analyst_node(state):
         current_date = state["trade_date"]
@@ -87,7 +88,7 @@ Before writing the final report, call get_verified_market_snapshot for this tick
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(state[messages_key])
 
         report = ""
 
@@ -95,7 +96,7 @@ Before writing the final report, call get_verified_market_snapshot for this tick
             report = result.content
 
         return with_evidence_items({
-            "messages": [result],
+            messages_key: [result],
             "market_report": report,
         })
 

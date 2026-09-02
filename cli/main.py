@@ -44,7 +44,7 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.analyst_execution import (
     AnalystWallTimeTracker,
     build_analyst_execution_plan,
-    get_initial_analyst_node,
+    iter_state_messages,
     sync_analyst_tracker_from_chunk,
 )
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -897,6 +897,19 @@ ANALYST_REPORT_MAP = {
 }
 
 
+def _analyst_waves(selected, wall_time_tracker):
+    """Selected analyst keys grouped into the concurrency waves the graph runs.
+
+    Falls back to one analyst per wave (the sequential default) when no
+    execution plan is available.
+    """
+    plan = getattr(wall_time_tracker, "plan", None)
+    if plan is None:
+        return [[key] for key in ANALYST_ORDER if key in selected]
+    waves = [[spec.key for spec in wave if spec.key in selected] for wave in plan.waves]
+    return [wave for wave in waves if wave]
+
+
 def update_analyst_statuses(message_buffer, chunk, wall_time_tracker=None):
     """Update analyst statuses based on accumulated report state.
 
@@ -904,41 +917,47 @@ def update_analyst_statuses(message_buffer, chunk, wall_time_tracker=None):
     - Store new report content from the current chunk if present
     - Check accumulated report_sections (not just current chunk) for status
     - Analysts with reports = completed
-    - First analyst without report = in_progress
-    - Remaining analysts without reports = pending
+    - Every analyst still missing a report in the earliest unfinished wave =
+      in_progress (a wave holds more than one analyst when
+      ``analyst_concurrency_limit`` > 1, and they really do run together)
+    - Analysts in later waves = pending
     - When all analysts done, set Bull Researcher to in_progress
     """
     selected = message_buffer.selected_analysts
-    found_active = False
 
     if wall_time_tracker is not None:
         sync_analyst_tracker_from_chunk(wall_time_tracker, chunk)
 
+    # Capture new report content from current chunk
     for analyst_key in ANALYST_ORDER:
         if analyst_key not in selected:
             continue
-
-        agent_name = ANALYST_AGENT_NAMES[analyst_key]
         report_key = ANALYST_REPORT_MAP[analyst_key]
-
-        # Capture new report content from current chunk
         if chunk.get(report_key):
             message_buffer.update_report_section(report_key, chunk[report_key])
 
+    active_wave_found = False
+    for wave in _analyst_waves(selected, wall_time_tracker):
         # Determine status from accumulated sections, not just current chunk
-        has_report = bool(message_buffer.report_sections.get(report_key))
-
-        if has_report:
-            message_buffer.update_agent_status(agent_name, "completed")
-        elif not found_active:
-            message_buffer.update_agent_status(agent_name, "in_progress")
-            found_active = True
-        else:
-            message_buffer.update_agent_status(agent_name, "pending")
+        pending = [
+            key
+            for key in wave
+            if not message_buffer.report_sections.get(ANALYST_REPORT_MAP[key])
+        ]
+        for analyst_key in wave:
+            agent_name = ANALYST_AGENT_NAMES[analyst_key]
+            if analyst_key not in pending:
+                message_buffer.update_agent_status(agent_name, "completed")
+            elif not active_wave_found:
+                message_buffer.update_agent_status(agent_name, "in_progress")
+            else:
+                message_buffer.update_agent_status(agent_name, "pending")
+        if pending:
+            active_wave_found = True
 
     # When all analysts complete, transition research team to in_progress
     if (
-        not found_active
+        not active_wave_found
         and selected
         and message_buffer.agent_status.get("Bull Researcher") == "pending"
     ):
@@ -1132,10 +1151,11 @@ def run_analysis(checkpoint: bool = False):
         )
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
-        # Update agent status to in_progress for the first analyst
-        first_analyst = get_initial_analyst_node(analyst_execution_plan)
-        message_buffer.update_agent_status(first_analyst, "in_progress")
-        analyst_wall_time_tracker.mark_started(selected_analyst_keys[0])
+        # Update agent status to in_progress for the first wave of analysts
+        # (a single analyst unless analyst_concurrency_limit > 1).
+        for spec in analyst_execution_plan.waves[0]:
+            message_buffer.update_agent_status(spec.agent_node, "in_progress")
+            analyst_wall_time_tracker.mark_started(spec.key)
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
         # Create spinner text
@@ -1164,8 +1184,9 @@ def run_analysis(checkpoint: bool = False):
         # Stream the analysis
         trace = []
         for chunk in graph.graph.stream(init_agent_state, **args):
-            # Process all messages in chunk, deduplicating by message ID
-            for message in chunk.get("messages", []):
+            # Process all messages in chunk, deduplicating by message ID.
+            # Analysts write private channels, so scan those too.
+            for message in iter_state_messages(chunk):
                 msg_id = getattr(message, "id", None)
                 if msg_id is not None:
                     if msg_id in message_buffer._processed_message_ids:

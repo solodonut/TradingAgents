@@ -10,6 +10,27 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **`analyst_concurrency_limit` 接上 LangGraph 并行分支:4 个 analyst 可在单次 run 内并行执行。**
+  该配置项(`DEFAULT_CONFIG["analyst_concurrency_limit"]` / `TRADINGAGENTS_ANALYST_CONCURRENCY_LIMIT`)
+  之前一路传到 `AnalystExecutionPlan` 却无人消费,是个死旋钮;现在 `graph/setup.py` 按它把 analyst
+  切成 **wave**,wave 内所有 analyst 从上游同时 fan-out,把 analyst 阶段的 4 段串行压成并行。
+  单次分析的墙钟时间几乎全在等 LLM 和数据源,这是纯等待时间的重叠。**默认值仍是 `1`(opt-in)**,
+  此时退化成 4 个单元素 wave,图的节点集与边集与改动前逐边一致、不产生任何 join 节点。
+  三处配套改动是并行正确性的前提:(1) **每个 analyst 一条私有 message 通道**
+  (`market_messages`/`social_messages`/`news_messages`/`fundamentals_messages`,各带 `add_messages`
+  reducer),analyst 工厂、`ToolNode(messages_key=...)`、`should_continue_*` 路由、`create_msg_delete`
+  与初始 state 播种全线跟上——共用 `messages` 时 4 份 tool_call 会交错进同一个列表,导致
+  `messages[-1].tool_calls` 路由错、ToolNode 执行别人的 tool call、provider 因 tool_call/result
+  配不上而 400。(2) **wave 出口经一个 `defer=True` 的空 join 节点**:analyst 的 tool 轮数不等长,
+  普通 fan-in 会在最快的分支落地时就触发,让 Bull Researcher 及整条下游流水线重跑一遍。
+  (3) **`evidence_items` 换成按引用 id 取并集的 reducer**(原来的 `Annotated[..., "说明字符串"]`
+  等价于 LastValue,同一 super-step 内多个 analyst 写它会抛 `InvalidUpdateError`),并给
+  `EvidenceRegistry.register()` 加锁保证并发下 `S#` 编号唯一,否则并集去重会把不同来源合成一条。
+  消费端同步跟上:`api/runner.py` 的 tool-status 与 `cli/main.py` 的进度面板改为扫描全部 message
+  通道(否则并行时 analyst 阶段看起来是静默的),CLI 的"单个活跃 analyst"假设改成活跃 wave 内全部标记。
+  **注意两点**:开启并行后 4 个 analyst 同时打数据源,tushare/AKShare 的分钟级配额压力翻倍,且
+  `akshare_utils` 的熔断器是进程级共享的——一个 analyst 打爆某 endpoint 会让另一个在 60s 内直接
+  拿到 `NO_DATA_AVAILABLE`;升级前生成的 checkpoint 因新增通道而失效(按 ticker+date 短生命周期,重跑即可)。
 - **AmazingData(银河证券)接入为 A股/ETF 数据 vendor 链首,并新增资金面/事件面维度。**
   新增 `dataflows/ad_service_client.py`(常驻服务 HTTP 客户端,仅标准库,绕过 `HTTP_PROXY`
   直连本地服务)+ `dataflows/amazingdata_utils.py`(探测降级 + HTTP 错误分类 + 落盘缓存 +

@@ -1,6 +1,7 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from time import monotonic
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -10,12 +11,16 @@ class AnalystNodeSpec:
     clear_node: str
     tool_node: str
     report_key: str
+    messages_key: str
 
 
 @dataclass(frozen=True)
 class AnalystExecutionPlan:
     specs: list[AnalystNodeSpec]
     concurrency_limit: int
+    # ``specs`` split into batches of at most ``concurrency_limit`` analysts.
+    # Each wave runs as one LangGraph super-step; waves run back to back.
+    waves: list[list[AnalystNodeSpec]]
 
 
 ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
@@ -25,6 +30,7 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
         clear_node="Msg Clear Market",
         tool_node="tools_market",
         report_key="market_report",
+        messages_key="market_messages",
     ),
     "social": AnalystNodeSpec(
         # Wire key stays "social" for saved-config back-compat; the
@@ -36,6 +42,7 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
         clear_node="Msg Clear Sentiment",
         tool_node="tools_social",
         report_key="sentiment_report",
+        messages_key="social_messages",
     ),
     "news": AnalystNodeSpec(
         key="news",
@@ -43,6 +50,7 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
         clear_node="Msg Clear News",
         tool_node="tools_news",
         report_key="news_report",
+        messages_key="news_messages",
     ),
     "fundamentals": AnalystNodeSpec(
         key="fundamentals",
@@ -50,8 +58,26 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
         clear_node="Msg Clear Fundamentals",
         tool_node="tools_fundamentals",
         report_key="fundamentals_report",
+        messages_key="fundamentals_messages",
     ),
 }
+
+ANALYST_MESSAGE_KEYS: tuple[str, ...] = tuple(
+    spec.messages_key for spec in ANALYST_NODE_SPECS.values()
+)
+
+
+def iter_state_messages(state: Mapping[str, Any]) -> Iterator[Any]:
+    """Yield messages from the shared channel plus every analyst's private one.
+
+    Consumers that used to scan ``state["messages"]`` for analyst tool calls
+    must look at the private channels too, otherwise the analyst phase looks
+    silent (see ``AgentState`` for why the channels are separate).
+    """
+    for key in ("messages", *ANALYST_MESSAGE_KEYS):
+        messages = state.get(key)
+        if isinstance(messages, list):
+            yield from messages
 
 
 def build_analyst_execution_plan(
@@ -71,7 +97,15 @@ def build_analyst_execution_plan(
     if not specs:
         raise ValueError("at least one analyst must be selected")
 
-    return AnalystExecutionPlan(specs=specs, concurrency_limit=concurrency_limit)
+    waves = [
+        specs[start : start + concurrency_limit]
+        for start in range(0, len(specs), concurrency_limit)
+    ]
+    return AnalystExecutionPlan(
+        specs=specs,
+        concurrency_limit=concurrency_limit,
+        waves=waves,
+    )
 
 
 def get_initial_analyst_node(plan: AnalystExecutionPlan) -> str:
@@ -125,16 +159,20 @@ def sync_analyst_tracker_from_chunk(
     now: float | None = None,
 ) -> None:
     current_time = monotonic() if now is None else now
-    active_found = False
+    active_wave_found = False
 
-    for spec in tracker.plan.specs:
-        has_report = bool(chunk.get(spec.report_key))
+    for wave in tracker.plan.waves:
+        pending: list[AnalystNodeSpec] = []
+        for spec in wave:
+            if chunk.get(spec.report_key):
+                tracker.mark_started(spec.key, started_at=current_time)
+                tracker.mark_completed(spec.key, completed_at=current_time)
+            else:
+                pending.append(spec)
 
-        if has_report:
-            tracker.mark_started(spec.key, started_at=current_time)
-            tracker.mark_completed(spec.key, completed_at=current_time)
-            continue
-
-        if not active_found:
-            tracker.mark_started(spec.key, started_at=current_time)
-            active_found = True
+        # Every analyst still pending in the earliest unfinished wave is running
+        # concurrently, so they all start now — not just the first one.
+        if pending and not active_wave_found:
+            for spec in pending:
+                tracker.mark_started(spec.key, started_at=current_time)
+            active_wave_found = True

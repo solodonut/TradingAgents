@@ -257,7 +257,14 @@ def get_instrument_context_from_state(state: Mapping[str, Any]) -> str:
     )
 
 
-def create_msg_delete():
+def create_msg_delete(messages_key: str = "messages"):
+    """Build the node that clears one analyst's message channel.
+
+    ``messages_key`` selects the channel to clear; each analyst owns a private
+    one (see ``AgentState``) so clearing it cannot disturb a concurrently
+    running analyst.
+    """
+
     def delete_messages(state):
         """Clear messages and add a context-anchored placeholder.
 
@@ -268,7 +275,7 @@ def create_msg_delete():
         date keeps the next analyst on-task even if the provider treats the
         placeholder as a standalone request.
         """
-        messages = state["messages"]
+        messages = state[messages_key]
         removal_operations = [RemoveMessage(id=m.id) for m in messages]
 
         instrument_context = get_instrument_context_from_state(state)
@@ -279,6 +286,6 @@ def create_msg_delete():
                 f"{instrument_context} The analysis date is {trade_date}."
             )
         )
-        return {"messages": removal_operations + [placeholder]}
+        return {messages_key: removal_operations + [placeholder]}
 
     return delete_messages

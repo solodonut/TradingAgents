@@ -16,7 +16,9 @@ from tradingagents.agents.utils.agent_utils import (
 )
 
 
-def create_fundamentals_analyst(llm):
+def create_fundamentals_analyst(llm, messages_key: str = "fundamentals_messages"):
+    """``messages_key`` is this analyst's private ReAct channel (see AgentState)."""
+
     def fundamentals_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = get_instrument_context_from_state(state)
@@ -65,7 +67,7 @@ def create_fundamentals_analyst(llm):
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = chain.invoke(state[messages_key])
 
         report = ""
 
@@ -73,7 +75,7 @@ def create_fundamentals_analyst(llm):
             report = result.content
 
         return with_evidence_items({
-            "messages": [result],
+            messages_key: [result],
             "fundamentals_report": report,
         })
 

@@ -2,6 +2,19 @@
 
 from tradingagents.agents.utils.agent_states import AgentState
 
+from .analyst_execution import ANALYST_NODE_SPECS
+
+
+def _has_tool_calls(state: AgentState, analyst_key: str) -> bool:
+    """Whether the given analyst's own last message asked for a tool call.
+
+    Reads that analyst's private message channel: with concurrent analysts the
+    shared ``messages`` channel would carry another analyst's turn and route
+    this one into the wrong branch.
+    """
+    messages = state[ANALYST_NODE_SPECS[analyst_key].messages_key]
+    return bool(messages[-1].tool_calls)
+
 
 class ConditionalLogic:
     """Handles conditional logic for determining graph flow."""
@@ -13,9 +26,7 @@ class ConditionalLogic:
 
     def should_continue_market(self, state: AgentState):
         """Determine if market analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if _has_tool_calls(state, "market"):
             return "tools_market"
         return "Msg Clear Market"
 
@@ -27,25 +38,19 @@ class ConditionalLogic:
         back-compat); the returned ``clear_node`` label uses the v0.2.5
         rename so it matches the node registered by the execution plan.
         """
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if _has_tool_calls(state, "social"):
             return "tools_social"
         return "Msg Clear Sentiment"
 
     def should_continue_news(self, state: AgentState):
         """Determine if news analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if _has_tool_calls(state, "news"):
             return "tools_news"
         return "Msg Clear News"
 
     def should_continue_fundamentals(self, state: AgentState):
         """Determine if fundamentals analysis should continue."""
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
+        if _has_tool_calls(state, "fundamentals"):
             return "tools_fundamentals"
         return "Msg Clear Fundamentals"
 

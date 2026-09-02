@@ -54,13 +54,15 @@ def _domestic_china_only() -> bool:
     return bool(get_config().get("domestic_china_only", False))
 
 
-def create_sentiment_analyst(llm):
+def create_sentiment_analyst(llm, messages_key: str = "social_messages"):
     """Create a sentiment analyst node for the trading graph.
 
     Pre-fetches news + StockTwits + Reddit data, injects them into the
     prompt as structured blocks, and produces a deterministic sentiment
     report via structured output (with a free-text fallback for providers
     that do not support it).
+
+    ``messages_key`` is this analyst's private message channel (see AgentState).
     """
     structured_llm = bind_structured(llm, SentimentReport, "Sentiment Analyst")
 
@@ -111,7 +113,7 @@ def create_sentiment_analyst(llm):
         # Format the template into a concrete message list so the structured
         # and free-text paths receive the same input. No bind_tools — the
         # data is already in the prompt.
-        formatted_messages = prompt.format_messages(messages=state["messages"])
+        formatted_messages = prompt.format_messages(messages=state[messages_key])
 
         report_text = invoke_structured_or_freetext(
             structured_llm,
@@ -122,7 +124,7 @@ def create_sentiment_analyst(llm):
         )
 
         return with_evidence_items({
-            "messages": [AIMessage(content=report_text)],
+            messages_key: [AIMessage(content=report_text)],
             "sentiment_report": report_text,
         })
 
