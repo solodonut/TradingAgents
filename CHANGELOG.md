@@ -106,6 +106,9 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **`TRADINGAGENTS_ANALYST_CONCURRENCY_LIMIT` 从来不生效。** `default_config._ENV_OVERRIDES`
+  是显式白名单,`analyst_concurrency_limit` 一直没登记进去,所以设了这个环境变量也仍然拿到默认值 `1`。
+  补上映射后按默认值类型(int)强制转换,`=4` 现在真的把并发度调成 4。
 - **航天航空类 ETF 拿不到主题新闻(词序漏匹配)。** `tushare_etf_news._THEME_PATTERNS`
   用子串匹配基金名派生主题词,原有 `航空航天` 只认这一种词序,像「天弘国证**航天航空**行业ETF」
   (159241)这类反序命名的基金一个主题词都命不中、只能退回全名搜索。改为拆成 `航空` + `航天`

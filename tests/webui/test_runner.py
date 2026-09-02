@@ -60,6 +60,54 @@ def test_tool_messages_emit_collection_status():
     } in statuses
 
 
+def test_tool_status_reads_private_analyst_channels():
+    # Analysts write their own message channel, not the shared "messages" one,
+    # so scanning only "messages" would make the whole analyst phase look silent.
+    seen = set()
+    events = chunk_to_events(
+        {
+            "fundamentals_messages": [
+                ToolMessage(
+                    content="balance sheet",
+                    tool_call_id="call-fund",
+                    name="get_balance_sheet",
+                )
+            ],
+            "news_messages": [
+                ToolMessage(content="headlines", tool_call_id="call-news", name="get_news")
+            ],
+        },
+        seen,
+    )
+
+    statuses = [e["data"] for e in events if e["event"] == "agent_status"]
+    assert {
+        "agent": "fundamentals_analyst",
+        "team": "analyst",
+        "status": "working",
+        "detail": "get_balance_sheet",
+    } in statuses
+    assert {
+        "agent": "news_analyst",
+        "team": "analyst",
+        "status": "working",
+        "detail": "get_news",
+    } in statuses
+
+
+def test_same_tool_call_in_two_channels_is_emitted_once():
+    # Dedup is keyed on tool_call_id, so a call visible in more than one channel
+    # (or re-seen in a later accumulated chunk) does not double-report.
+    seen = set()
+    call = ToolMessage(content="csv", tool_call_id="call-1", name="get_stock_data")
+
+    first = chunk_to_events({"market_messages": [call]}, seen)
+    second = chunk_to_events({"messages": [call], "market_messages": [call]}, seen)
+
+    assert first
+    assert second == []
+
+
 def test_tool_status_is_not_re_emitted_for_same_tool_message():
     seen = set()
     chunk = {

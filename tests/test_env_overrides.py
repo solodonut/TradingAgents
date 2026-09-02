@@ -26,6 +26,8 @@ def test_no_env_uses_built_in_defaults(monkeypatch):
     assert dc.DEFAULT_CONFIG["backend_url"] is None
     assert dc.DEFAULT_CONFIG["max_debate_rounds"] == 1
     assert dc.DEFAULT_CONFIG["checkpoint_enabled"] is False
+    # Analysts stay strictly sequential unless the user opts in.
+    assert dc.DEFAULT_CONFIG["analyst_concurrency_limit"] == 1
 
 
 def test_string_overrides(monkeypatch):
@@ -49,11 +51,14 @@ def test_int_coercion(monkeypatch):
         monkeypatch,
         TRADINGAGENTS_MAX_DEBATE_ROUNDS="3",
         TRADINGAGENTS_MAX_RISK_ROUNDS="2",
+        TRADINGAGENTS_ANALYST_CONCURRENCY_LIMIT="4",
     )
     assert dc.DEFAULT_CONFIG["max_debate_rounds"] == 3
     assert isinstance(dc.DEFAULT_CONFIG["max_debate_rounds"], int)
     assert dc.DEFAULT_CONFIG["max_risk_discuss_rounds"] == 2
     assert isinstance(dc.DEFAULT_CONFIG["max_risk_discuss_rounds"], int)
+    assert dc.DEFAULT_CONFIG["analyst_concurrency_limit"] == 4
+    assert isinstance(dc.DEFAULT_CONFIG["analyst_concurrency_limit"], int)
 
 
 @pytest.mark.parametrize(

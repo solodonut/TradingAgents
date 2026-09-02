@@ -243,6 +243,31 @@ print(decision)
 
 See `tradingagents/default_config.py` for all configuration options.
 
+## Parallel analysts (opt-in)
+
+The four analysts run one after another by default. Almost all of that time is spent waiting on LLM responses and data vendors, so running them concurrently overlaps the waiting and cuts the analyst phase of a run down towards the slowest single analyst instead of the sum of all four.
+
+`analyst_concurrency_limit` controls how many analysts share a batch. It defaults to `1` (strictly sequential, the pre-existing behaviour); raise it to fan them out:
+
+```bash
+TRADINGAGENTS_ANALYST_CONCURRENCY_LIMIT=4 tradingagents analyze
+```
+
+```python
+config = DEFAULT_CONFIG.copy()
+config["analyst_concurrency_limit"] = 4   # all four analysts in one batch
+ta = TradingAgentsGraph(config=config)
+```
+
+Values between the two extremes batch the analysts in the selected order, e.g. `2` runs market + sentiment together, then news + fundamentals. Each batch waits for all of its analysts to finish before the next one starts, and the researcher debate only begins once every report has landed.
+
+Two things to know before turning it up:
+
+- **Data-vendor pressure multiplies.** Four analysts hitting tushare/AKShare at once quadruples your per-minute request rate. AKShare's circuit breaker is also process-wide, so one analyst tripping an endpoint makes the others read `NO_DATA_AVAILABLE` from it for the next 60 seconds. If you are close to a vendor quota, `2` is a safer step than `4`.
+- **Checkpoints from a serial run do not carry over.** Parallel analysts each need their own message channel, so a checkpoint written before this feature existed cannot be resumed. Checkpoints are per ticker+date and short-lived; just re-run.
+
+The `Analyst wall time` line printed at the end of a run reports each analyst's elapsed time, which is the easiest way to confirm the overlap is happening.
+
 ## Persistence and Recovery
 
 TradingAgents persists two kinds of state across runs.
