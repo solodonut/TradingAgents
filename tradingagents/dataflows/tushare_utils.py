@@ -15,6 +15,7 @@ from .akshare_utils import (
     to_bare_code,
 )
 from .errors import VendorError, VendorNotConfiguredError, VendorRateLimitError
+from .utils import atomic_cache_write
 
 try:
     import tushare as ts
@@ -136,7 +137,8 @@ def cached_call(key: str, ttl_seconds: int, func):
     result = func()
     with contextlib.suppress(Exception):
         if isinstance(result, pd.DataFrame):
-            result.to_pickle(cache_file)
+            with atomic_cache_write(cache_file) as tmp_file:
+                result.to_pickle(tmp_file)
     return result
 
 

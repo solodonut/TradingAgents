@@ -1,16 +1,59 @@
 """Append-only markdown decision log for TradingAgents."""
 
+import contextlib
+import os
 import re
+import uuid
 from pathlib import Path
 
 from tradingagents.agents.utils.rating import parse_rating
 from tradingagents.obs.run_logger import get_current_run_logger
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows has no fcntl
+    fcntl = None
 
 
 def _emit_memory(op: str, **extra) -> None:
     lg = get_current_run_logger()
     if lg is not None:
         lg.emit("memory_op", op=op, **extra)
+
+
+@contextlib.contextmanager
+def _log_file_lock(log_path: Path):
+    """Hold an exclusive lock on a sidecar file for the duration of the block.
+
+    Parallel runs live in separate processes, so a read-modify-write of the log
+    would otherwise lose one process's update. On platforms without ``fcntl``
+    (Windows) this degrades to a no-op — the pre-existing single-run behaviour.
+    """
+    if fcntl is None:
+        yield
+        return
+    lock_path = log_path.with_name(log_path.name + ".lock")
+    with open(lock_path, "w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _atomic_write(log_path: Path, text: str) -> None:
+    """Replace the log's contents via a uniquely named temp file.
+
+    The temp name carries pid + uuid so two processes writing at once cannot
+    clobber each other's staging file.
+    """
+    tmp_path = log_path.with_name(f"{log_path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        tmp_path.replace(log_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
 
 
 class TradingMemoryLog:
@@ -43,17 +86,20 @@ class TradingMemoryLog:
         """Append pending entry at end of propagate(). No LLM call."""
         if not self._log_path:
             return
-        # Idempotency guard: fast raw-text scan instead of full parse
-        if self._log_path.exists():
-            raw = self._log_path.read_text(encoding="utf-8")
-            for line in raw.splitlines():
-                if line.startswith(f"[{trade_date} | {ticker} |") and line.endswith("| pending]"):
-                    return
-        rating = parse_rating(final_trade_decision)
-        tag = f"[{trade_date} | {ticker} | {rating} | pending]"
-        entry = f"{tag}\n\nDECISION:\n{final_trade_decision}{self._SEPARATOR}"
-        with open(self._log_path, "a", encoding="utf-8") as f:
-            f.write(entry)
+        with _log_file_lock(self._log_path):
+            # Idempotency guard: fast raw-text scan instead of full parse
+            if self._log_path.exists():
+                raw = self._log_path.read_text(encoding="utf-8")
+                for line in raw.splitlines():
+                    if line.startswith(f"[{trade_date} | {ticker} |") and line.endswith(
+                        "| pending]"
+                    ):
+                        return
+            rating = parse_rating(final_trade_decision)
+            tag = f"[{trade_date} | {ticker} | {rating} | pending]"
+            entry = f"{tag}\n\nDECISION:\n{final_trade_decision}{self._SEPARATOR}"
+            with open(self._log_path, "a", encoding="utf-8") as f:
+                f.write(entry)
         _emit_memory("append", ticker=ticker)
 
     # --- Read path (Phase A) ---
@@ -121,11 +167,25 @@ class TradingMemoryLog:
 
         Finds the first pending entry matching (trade_date, ticker), updates
         its tag with return figures, and appends a REFLECTION section.  Uses
-        a temp-file + os.replace() so a crash mid-write never corrupts the log.
+        a temp-file + os.replace() so a crash mid-write never corrupts the log,
+        under a file lock so a parallel run cannot lose this update.
         """
         if not self._log_path or not self._log_path.exists():
             return
+        with _log_file_lock(self._log_path):
+            self._update_with_outcome_locked(
+                ticker, trade_date, raw_return, alpha_return, holding_days, reflection
+            )
 
+    def _update_with_outcome_locked(
+        self,
+        ticker: str,
+        trade_date: str,
+        raw_return: float,
+        alpha_return: float,
+        holding_days: int,
+        reflection: str,
+    ) -> None:
         text = self._log_path.read_text(encoding="utf-8")
         blocks = text.split(self._SEPARATOR)
 
@@ -168,10 +228,7 @@ class TradingMemoryLog:
             return
 
         new_blocks = self._apply_rotation(new_blocks)
-        new_text = self._SEPARATOR.join(new_blocks)
-        tmp_path = self._log_path.with_suffix(".tmp")
-        tmp_path.write_text(new_text, encoding="utf-8")
-        tmp_path.replace(self._log_path)
+        _atomic_write(self._log_path, self._SEPARATOR.join(new_blocks))
         _emit_memory("reflect", ticker=ticker)
 
     def batch_update_with_outcomes(self, updates: list[dict]) -> None:
@@ -182,7 +239,10 @@ class TradingMemoryLog:
         """
         if not self._log_path or not self._log_path.exists() or not updates:
             return
+        with _log_file_lock(self._log_path):
+            self._batch_update_with_outcomes_locked(updates)
 
+    def _batch_update_with_outcomes_locked(self, updates: list[dict]) -> None:
         text = self._log_path.read_text(encoding="utf-8")
         blocks = text.split(self._SEPARATOR)
 
@@ -223,10 +283,7 @@ class TradingMemoryLog:
                 new_blocks.append(block)
 
         new_blocks = self._apply_rotation(new_blocks)
-        new_text = self._SEPARATOR.join(new_blocks)
-        tmp_path = self._log_path.with_suffix(".tmp")
-        tmp_path.write_text(new_text, encoding="utf-8")
-        tmp_path.replace(self._log_path)
+        _atomic_write(self._log_path, self._SEPARATOR.join(new_blocks))
         _emit_memory("reflect", count=len(updates))
 
     # --- Helpers ---

@@ -26,6 +26,7 @@ from .tushare_utils import (
     resolve_symbol_type,
     to_ts_code,
 )
+from .utils import atomic_cache_write
 
 # AmazingData 代码规范化与 Tushare 一致(.SS -> .SH),直接复用。
 to_ad_code = to_ts_code
@@ -135,7 +136,11 @@ def cached_call(key: str, ttl_seconds: int, func):
 
     result = func()
     if _has_rows(result):
-        with contextlib.suppress(Exception), open(cache_file, "w", encoding="utf-8") as fh:
+        with (
+            contextlib.suppress(Exception),
+            atomic_cache_write(cache_file) as tmp_file,
+            open(tmp_file, "w", encoding="utf-8") as fh,
+        ):
             _json.dump(result, fh)
     return result
 

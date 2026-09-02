@@ -1,4 +1,7 @@
+import contextlib
+import os
 import re
+import uuid
 from datetime import date, datetime, timedelta
 from typing import Annotated
 
@@ -40,6 +43,25 @@ def safe_ticker_component(value: str, *, max_len: int = 32) -> str:
     if set(value) == {"."}:
         raise ValueError(f"ticker cannot consist solely of dots: {value!r}")
     return value
+
+
+@contextlib.contextmanager
+def atomic_cache_write(cache_file: str):
+    """Yield a temp path; on success atomically replace ``cache_file`` with it.
+
+    Parallel runs are separate processes sharing one cache directory, so writing
+    straight into ``cache_file`` lets a reader see a half-written file. The temp
+    name carries pid + uuid so two writers never collide, and the temp file is
+    always cleaned up.
+    """
+    tmp = f"{cache_file}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+    try:
+        yield tmp
+        os.replace(tmp, cache_file)
+    finally:
+        if os.path.exists(tmp):
+            with contextlib.suppress(OSError):
+                os.remove(tmp)
 
 
 def save_output(data: pd.DataFrame, tag: str, save_path: SavePathType = None) -> None:

@@ -35,6 +35,8 @@ import time
 import pandas as pd
 import requests
 
+from .utils import atomic_cache_write
+
 logger = logging.getLogger(__name__)
 
 # Proxy env vars the requests/urllib3 stack consults, lower- and upper-case.
@@ -211,7 +213,8 @@ def cached_call(key: str, ttl_seconds: int, func):
     result = func()
     with contextlib.suppress(Exception):
         if isinstance(result, pd.DataFrame):
-            result.to_pickle(cache_file)
+            with atomic_cache_write(cache_file) as tmp_file:
+                result.to_pickle(tmp_file)
     return result
 
 
