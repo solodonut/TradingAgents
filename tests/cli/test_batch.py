@@ -55,7 +55,7 @@ class FakeClient:
         return {"run_ids": [f"run-{ticker.strip().upper()}"]}
 
     def get_queue(self):
-        return self._queues.pop(0) if self._queues else {"running": None, "pending": []}
+        return self._queues.pop(0) if self._queues else {"running": [], "pending": []}
 
     def get_history(self):
         return self._history
@@ -110,13 +110,13 @@ def test_poll_until_done_advances_to_terminal():
     state = BatchState(wl)
     state.set_run_map({"run-AAPL": "AAPL", "run-MSFT": "MSFT"})
     queues = [
-        {"running": {"run_id": "run-AAPL", "ticker": "AAPL", "status": "running",
-                     "queue_position": None, "created_at": "t"},
+        {"running": [{"run_id": "run-AAPL", "ticker": "AAPL", "status": "running",
+                      "queue_position": None, "created_at": "t"}],
          "pending": [{"run_id": "run-MSFT", "ticker": "MSFT", "status": "pending",
                       "queue_position": 1, "created_at": "t"}]},
-        {"running": {"run_id": "run-MSFT", "ticker": "MSFT", "status": "running",
-                     "queue_position": None, "created_at": "t"}, "pending": []},
-        {"running": None, "pending": []},
+        {"running": [{"run_id": "run-MSFT", "ticker": "MSFT", "status": "running",
+                      "queue_position": None, "created_at": "t"}], "pending": []},
+        {"running": [], "pending": []},
     ]
     history = [
         {"run_id": "run-AAPL", "ticker": "AAPL", "trade_date": "t", "decision": "Buy",
@@ -149,7 +149,7 @@ def test_poll_until_done_survives_transient_api_error():
             if self._first:
                 self._first = False
                 raise ApiError("transient")
-            return {"running": None, "pending": []}
+            return {"running": [], "pending": []}
 
     poll_until_done(FlakyClient(), state, poll_interval=0, sleep=lambda _: None)
     assert state.all_done()

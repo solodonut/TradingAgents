@@ -386,7 +386,8 @@ pytest tests/webui/
 
 ## Current Caveats
 
-- The backend single-run invariant is database-based. A crashed process can leave a stale `running` row that blocks new runs until marked `error` or deleted.
+- The queue runs up to `max_parallel_runs` analyses at once (default 2, max 4; stored in `app_settings`). Each run lives in its own spawned subprocess because `dataflows` config, the prefetch context, and the AKShare `no_proxy_session()` monkeypatch are all process-global. Startup resets orphaned `running` rows, so a crashed process no longer blocks the queue.
+- Parallel runs multiply data-vendor quota use by the concurrency, give every subprocess its own AKShare circuit breaker, and would collide on `~/.tradingagents/cache/checkpoints/<TICKER>.db` if the same ticker were queued twice (checkpointing is off by default in the WebUI path). See [http-api-reference.md](./http-api-reference.md#队列并行).
 - A-share and China ETF data can depend on AKShare. In environments where AKShare is unavailable or blocked, yfinance may be usable for some `.SZ` ETF price data, but this should be a deliberate config choice.
 - WebUI history stores results in `~/.tradingagents/webui.db`; deleting the database clears WebUI history only, not memory logs.
 - The frontend is dark-only by design for the current research workbench.

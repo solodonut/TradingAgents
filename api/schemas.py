@@ -9,6 +9,11 @@ AnalystName = Literal["market", "social", "news", "fundamentals"]
 Decision = Literal["Buy", "Overweight", "Hold", "Underweight", "Sell"]
 RunStatus = Literal["pending", "running", "completed", "error", "cancelled"]
 
+# Upper bound for the queue's parallel-run selector. Each parallel run is a full
+# child process with its own LLM + vendor traffic, so this stays small.
+MAX_PARALLEL_RUNS_LIMIT = 4
+DEFAULT_MAX_PARALLEL_RUNS = 2
+
 
 class AnalysisRequest(BaseModel):
     ticker: str
@@ -74,12 +79,16 @@ class QueueItem(BaseModel):
 
 
 class QueueState(BaseModel):
-    running: QueueItem | None
+    running: list[QueueItem] = []
     pending: list[QueueItem]
 
 
 class ReorderRequest(BaseModel):
     ordered_run_ids: list[str]
+
+
+class ParallelismState(BaseModel):
+    max_parallel_runs: int = Field(ge=1, le=MAX_PARALLEL_RUNS_LIMIT)
 
 
 class WatchlistItem(BaseModel):

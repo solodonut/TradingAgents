@@ -47,6 +47,6 @@ def test_queue_state_shape():
         run_id="r1", ticker="NVDA", status="pending",
         queue_position=1, created_at="2024-05-10T00:00:00+00:00",
     )
-    state = QueueState(running=None, pending=[item])
+    state = QueueState(running=[], pending=[item])
     assert state.pending[0].ticker == "NVDA"
-    assert state.running is None
+    assert state.running == []

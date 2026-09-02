@@ -20,6 +20,8 @@ import {
   cancelAnalysis,
   enqueueAnalysis,
   getQueue,
+  getParallelism,
+  setParallelism,
   removeQueueItem,
   clearQueue,
   reorderQueue,
@@ -215,7 +217,8 @@ export default function Home() {
   const manualCacheUnsubscribeRef = useRef<(() => void) | null>(null);
   const followGenRef = useRef(0);
 
-  const [queue, setQueue] = useState<QueueState>({ running: null, pending: [] });
+  const [queue, setQueue] = useState<QueueState>({ running: [], pending: [] });
+  const [maxParallel, setMaxParallel] = useState(1);
   const [healthItems, setHealthItems] = useState<Record<string, ServiceHealthItem>>({});
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthCheckingIds, setHealthCheckingIds] = useState<Set<string>>(new Set());
@@ -233,7 +236,7 @@ export default function Home() {
     () =>
       getQueue()
       .then(setQueue)
-      .catch(() => setQueue({ running: null, pending: [] })),
+      .catch(() => setQueue({ running: [], pending: [] })),
     [],
   );
 
@@ -430,6 +433,7 @@ export default function Home() {
     getConfigOptions().then(setOptions).catch(() => setError("无法连接后端"));
     refreshHistory();
     refreshQueue();
+    getParallelism().then(setMaxParallel).catch(() => {});
     watchStartupCache();
     const healthTimer = window.setTimeout(runServiceHealthCheck, 0);
     return () => {
@@ -450,7 +454,7 @@ export default function Home() {
   // both the queue panel and the history sidebar independently — otherwise both
   // freeze on stale state until the page is reloaded. Keep the last known values
   // on a transient error instead of blanking them.
-  const queueActive = queue.running !== null || queue.pending.length > 0;
+  const queueActive = queue.running.length > 0 || queue.pending.length > 0;
   useEffect(() => {
     if (!queueActive) return;
     const timer = window.setInterval(() => {
@@ -666,9 +670,12 @@ export default function Home() {
       return;
     }
     setQueue(q);
-    if (q.running) {
+    // Several runs can be in flight; attach to one we were not just following
+    // (falling back to the same run if it is somehow still going).
+    const next = q.running.filter((r) => r.run_id !== currentRunId)[0] ?? q.running[0];
+    if (next) {
       resetRunView();
-      followRun(q.running.run_id);
+      followRun(next.run_id);
       return;
     }
     if (q.pending.length > 0 && attempt < 5) {
@@ -689,10 +696,12 @@ export default function Home() {
     resetRunView();
     setError(null);
     try {
-      const { running_run_id, queue: nextQueue } = await enqueueAnalysis(req);
+      const { running_run_ids, queue: nextQueue } = await enqueueAnalysis(req);
       setQueue(nextQueue);
       refreshHistory();
-      if (running_run_id) followRun(running_run_id);
+      // Several runs may have started at once; follow the first and let the user
+      // switch with the queue panel's 观察 button.
+      if (running_run_ids.length > 0) followRun(running_run_ids[0]);
     } catch (err) {
       setRunning(false);
       setCanceling(false);
@@ -722,8 +731,10 @@ export default function Home() {
         // followNextInQueue sets running/canceling/currentRunId appropriately.
         void followNextInQueue();
       } else {
-        setRunning(false);
         setCanceling(false);
+        // Cancelling a run we are not following must not tear down the live panel
+        // of the run we are following (several runs can be in flight).
+        if (!currentRunId) setRunning(false);
       }
     } catch (err) {
       setCanceling(false);
@@ -734,6 +745,31 @@ export default function Home() {
   const onCancel = () => {
     if (!currentRunId) return;
     void cancelRun(currentRunId);
+  };
+
+  // Switch the live panel to another in-flight run. Live state is single-slot, so
+  // drop the current subscription and rebuild the view from the new run's stream.
+  const onFollowRunning = (runId: string) => {
+    if (runId === currentRunId) return;
+    followGenRef.current += 1;
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    exitDetail();
+    resetRunView();
+    followRun(runId);
+  };
+
+  const onChangeMaxParallel = (value: number) => {
+    setMaxParallel(value); // optimistic; the PUT echoes back the stored value
+    setParallelism(value)
+      .then((stored) => {
+        setMaxParallel(stored);
+        return refreshQueue();
+      })
+      .catch((e) => {
+        setError((e as Error).message);
+        getParallelism().then(setMaxParallel).catch(() => {});
+      });
   };
 
   const onRemoveQueueItem = (runId: string) =>
@@ -980,6 +1016,10 @@ export default function Home() {
               onClear={onClearQueue}
               onReorder={onReorderQueue}
               onCancelRunning={(runId) => void cancelRun(runId)}
+              maxParallel={maxParallel}
+              onChangeMaxParallel={onChangeMaxParallel}
+              followedRunId={currentRunId}
+              onFollow={onFollowRunning}
               canceling={canceling}
               disabled={!startupReady}
               disabledReason={startupGateReason}

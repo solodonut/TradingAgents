@@ -41,9 +41,11 @@ def test_post_analysis_returns_run_id_and_streams_done(client):
 
 def test_post_analysis_while_running_enqueues_instead_of_409(client):
     import api.main as main
+    from api.scheduler import MAX_PARALLEL_SETTING
 
-    # an already-running row makes the scheduler keep the new POST pending
+    # one slot, already taken -> the scheduler must keep the new POST pending
     store = main.get_store()
+    store.set_setting(MAX_PARALLEL_SETTING, "1")
     store.insert_run("busy", "NVDA", "2024-05-10", "stock", {})
 
     _install_fake_graph(client, chunks=[], decision="Hold", final_state={})

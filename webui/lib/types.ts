@@ -43,7 +43,8 @@ export interface QueueItem {
 }
 
 export interface QueueState {
-  running: QueueItem | null;
+  /** Every run currently in flight, oldest first (the queue runs N in parallel). */
+  running: QueueItem[];
   pending: QueueItem[];
 }
 

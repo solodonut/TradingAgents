@@ -31,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Single-user invariant: only one analysis runs at a time.
 app.state.store = None
 app.state.store_lock = threading.Lock()
 app.state.run_lock = threading.Lock()
@@ -42,6 +41,7 @@ app.state.starting_telemetry = None
 app.state.graph_factory = None  # set by real_graph_factory at startup; tests inject their own
 app.state.chat_llm_factory = None  # set at startup; tests inject their own
 app.state.scheduler = None  # QueueScheduler, created at startup; tests reset to None
+app.state.run_launcher = None  # ProcessLauncher, created at startup
 app.state.startup_cache_clearer = None  # StartupCacheClearer, created at startup
 app.state.manual_cache_clearer = None  # StartupCacheClearer, created on manual clear
 app.state.model_health = None  # set by the startup health check; tests may inject
@@ -155,13 +155,16 @@ from api.routes import diagnostics as diagnostics_routes  # noqa: E402
 app.include_router(diagnostics_routes.router)
 
 
-def real_graph_factory(req):
+def real_graph_factory(req, callbacks=None):
     """Build a TradingAgentsGraph from a request.
 
     Returns (graph, init_state_with_stream_args, None, None). The init_state we
     return is a tuple-free dict; stream args are attached on the graph instance
     as ``_stream_args`` for the runner to pass through to ``.stream()``.
     decision/final_state are computed by the runner after the stream completes.
+
+    ``callbacks`` lets a child process pass its own telemetry handler in; when
+    omitted we fall back to ``app.state.starting_telemetry`` (in-process path).
     """
     config = DEFAULT_CONFIG.copy()
     config["max_debate_rounds"] = req.research_depth
@@ -174,8 +177,9 @@ def real_graph_factory(req):
     if req.quick_think_llm:
         config["quick_think_llm"] = req.quick_think_llm
 
-    telemetry = getattr(app.state, "starting_telemetry", None)
-    callbacks = [telemetry.callback_handler()] if telemetry is not None else []
+    if callbacks is None:
+        telemetry = getattr(app.state, "starting_telemetry", None)
+        callbacks = [telemetry.callback_handler()] if telemetry is not None else []
 
     graph = TradingAgentsGraph(
         selected_analysts=req.analysts, debug=False, config=config, callbacks=callbacks
@@ -246,9 +250,12 @@ def _wire_graph_factory():
     if app.state.chat_llm_factory is None:
         app.state.chat_llm_factory = real_chat_llm_factory
     if app.state.scheduler is None:
-        from api.scheduler import QueueScheduler
+        from api.scheduler import ProcessLauncher, QueueScheduler
 
-        app.state.scheduler = QueueScheduler(app)
+        scheduler = QueueScheduler(app)
+        if app.state.run_launcher is None:
+            app.state.run_launcher = ProcessLauncher(app, scheduler, DB_PATH)
+        app.state.scheduler = scheduler
     if app.state.startup_cache_clearer is None:
         app.state.startup_cache_clearer = StartupCacheClearer(DEFAULT_CONFIG["data_cache_dir"])
 

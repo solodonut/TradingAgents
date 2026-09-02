@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS etf_snapshots (
     fetched_at   TEXT NOT NULL,
     PRIMARY KEY (ticker, trade_date, category)
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 
@@ -129,6 +134,13 @@ class Store:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
+        # Parallel runs live in separate processes, so `self._lock` gives no
+        # cross-process protection. WAL lets readers and one writer coexist and
+        # busy_timeout makes concurrent writers wait instead of raising
+        # "database is locked".
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
         return conn
 
     def insert_run(
@@ -285,6 +297,13 @@ class Store:
             ).fetchone()
         return row is not None
 
+    def running_count(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM analysis_runs WHERE status='running'"
+            ).fetchone()
+        return int(row["n"])
+
     def _to_queue_item(self, row: sqlite3.Row) -> QueueItem:
         return QueueItem(
             run_id=row["run_id"],
@@ -345,18 +364,18 @@ class Store:
 
     def list_queue(self) -> QueueState:
         with self._connect() as conn:
-            running_row = conn.execute(
+            running_rows = conn.execute(
                 "SELECT run_id, ticker, status, queue_position, created_at "
                 "FROM analysis_runs WHERE status='running' "
-                "ORDER BY created_at ASC LIMIT 1"
-            ).fetchone()
+                "ORDER BY created_at ASC, rowid ASC"
+            ).fetchall()
             pending_rows = conn.execute(
                 "SELECT run_id, ticker, status, queue_position, created_at "
                 "FROM analysis_runs WHERE status='pending' "
                 "ORDER BY queue_position ASC, rowid ASC"
             ).fetchall()
         return QueueState(
-            running=self._to_queue_item(running_row) if running_row else None,
+            running=[self._to_queue_item(r) for r in running_rows],
             pending=[self._to_queue_item(r) for r in pending_rows],
         )
 
@@ -399,6 +418,23 @@ class Store:
                 (_dumps({"error": "服务重启中断"}), _now()),
             )
             return cur.rowcount
+
+    # ---- app settings (generic string key/value) ----
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM app_settings WHERE key=?", (key,)
+            ).fetchone()
+        return default if row is None else row["value"]
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
 
     # ---- watchlist (persistent instrument list) ----
 

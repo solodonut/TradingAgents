@@ -184,8 +184,51 @@ def test_list_queue_returns_running_and_ordered_pending(tmp_path):
     store.start_run("a")
 
     state = store.list_queue()
-    assert state.running.run_id == "a"
+    assert [r.run_id for r in state.running] == ["a"]
     assert [p.ticker for p in state.pending] == ["AAPL", "TSLA"]
+
+
+def test_list_queue_returns_all_running_when_parallel(tmp_path):
+    """Parallel runs: every running row must be reported, oldest first."""
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    store.enqueue_run("a", "NVDA", "2024-05-10", "stock", {})
+    store.enqueue_run("b", "AAPL", "2024-05-10", "stock", {})
+    store.enqueue_run("c", "TSLA", "2024-05-10", "stock", {})
+    store.start_run("a")
+    store.start_run("b")
+
+    state = store.list_queue()
+    assert [r.run_id for r in state.running] == ["a", "b"]
+    assert [p.run_id for p in state.pending] == ["c"]
+    assert store.running_count() == 2
+
+
+def test_connections_use_wal_so_processes_can_write_concurrently(tmp_path):
+    """Parallel runs write from different processes; the threading lock can't help there."""
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    with store._connect() as conn:
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    assert mode.lower() == "wal"
+    assert timeout >= 5000
+
+
+def test_settings_roundtrip_and_default(tmp_path):
+    from api.store import Store
+
+    store = Store(tmp_path / "q.db")
+    assert store.get_setting("max_parallel_runs") is None
+    assert store.get_setting("max_parallel_runs", "2") == "2"
+
+    store.set_setting("max_parallel_runs", "3")
+    assert store.get_setting("max_parallel_runs") == "3"
+
+    store.set_setting("max_parallel_runs", "4")  # upsert, not a second row
+    assert store.get_setting("max_parallel_runs") == "4"
 
 
 def test_remove_pending_only_removes_pending(tmp_path):
@@ -211,7 +254,7 @@ def test_clear_pending_leaves_running(tmp_path):
     store.enqueue_run("c", "TSLA", "2024-05-10", "stock", {})
 
     assert store.clear_pending() == 2
-    assert store.list_queue().running.run_id == "a"
+    assert [r.run_id for r in store.list_queue().running] == ["a"]
     assert store.list_queue().pending == []
 
 

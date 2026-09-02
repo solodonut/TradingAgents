@@ -83,7 +83,7 @@ export interface EnqueueRequest {
 
 export async function enqueueAnalysis(
   req: EnqueueRequest,
-): Promise<{ run_ids: string[]; running_run_id: string | null; queue: QueueState }> {
+): Promise<{ run_ids: string[]; running_run_ids: string[]; queue: QueueState }> {
   const r = await fetch(`${BASE}/api/queue`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -95,7 +95,23 @@ export async function enqueueAnalysis(
 
 export async function getQueue(): Promise<QueueState> {
   const r = await fetch(`${BASE}/api/queue`);
-  return r.ok ? r.json() : { running: null, pending: [] };
+  return r.ok ? r.json() : { running: [], pending: [] };
+}
+
+export async function getParallelism(): Promise<number> {
+  const r = await fetch(`${BASE}/api/queue/parallelism`);
+  if (!r.ok) throw new Error("无法读取并发数");
+  return (await r.json()).max_parallel_runs as number;
+}
+
+export async function setParallelism(value: number): Promise<number> {
+  const r = await fetch(`${BASE}/api/queue/parallelism`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ max_parallel_runs: value }),
+  });
+  if (!r.ok) throw new Error("无法设置并发数");
+  return (await r.json()).max_parallel_runs as number;
 }
 
 export async function removeQueueItem(runId: string): Promise<void> {

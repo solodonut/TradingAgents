@@ -10,6 +10,25 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **WebUI 队列可以并行分析多个标的(默认并发 2,UI 可调 1–4)。** `api/scheduler.py::QueueScheduler`
+  原来严格串行(`advance()` 里 `if store.has_running_run(): return`),观察列表 10 个标的就得排
+  10 倍时间,而一个 run 的墙钟几乎全花在等 LLM/数据源上。现在 `advance()` 循环启动到
+  `running_count() >= max_parallel_runs`,每个 run 跑在**独立子进程**里(`multiprocessing` spawn,
+  新增 `api/run_worker.py::run_in_child`)。**必须是进程而不是线程**:`dataflows/config.py::_config`
+  与 `_PREFETCH_CTX` 是模块级单例(后启动的 run 会改掉前一个的配置、先结束的 run 会清空还在跑的
+  预取上下文),而 `akshare_utils.no_proxy_session()` 会 pop 代理 env var 并猴补丁
+  `requests.Session.__init__`——两个执行流交错进出时补丁会永久留在进程里、代理 env var 永久丢失,
+  之后所有 LLM 调用绕过代理而失败。子进程冷启动约 1.8s,相对分钟级 run 可忽略。
+  新增 `ProcessLauncher`:子进程事件经 `mp.Queue` → 父进程桥接线程 → 既有
+  `app.state.queues/telemetry`,所以 `api/routes/analysis.py`(SSE/取消/状态)与 `api/runner.py`
+  **零改动**;子进程猝死(不发哨兵就退出)会 `mark_error` + 推 `error` 事件 + 继续推进队列,
+  不再让 SSE 永久挂着。测试注入假图时(`app.state.graph_factory`)仍走 `InlineLauncher` 线程路径,
+  既有测试形状不变。并发数存在 `app_settings` 表,新增 `GET/PUT /api/queue/parallelism`。
+  `GET /api/queue` 的 `running` 由单个对象改为**数组**,`POST /api/queue` 返回
+  `running_run_ids`(前端、CLI 批量看板同步)。WebUI 队列面板每个 running 行新增「观察」按钮
+  (把实时面板切到那个 run)与独立「停止」;实时面板仍是单份,符合单 run 跟随的设计。
+  三条代价(数据源配额按并发翻倍、每进程独立 AKShare 熔断器、同 ticker 并发会撞 checkpoint 库)
+  记在 [docs/http-api-reference.md](docs/http-api-reference.md) 的「队列并行」一节。
 - **AmazingData(银河证券)接入为 A股/ETF 数据 vendor 链首,并新增资金面/事件面维度。**
   新增 `dataflows/ad_service_client.py`(常驻服务 HTTP 客户端,仅标准库,绕过 `HTTP_PROXY`
   直连本地服务)+ `dataflows/amazingdata_utils.py`(探测降级 + HTTP 错误分类 + 落盘缓存 +
@@ -85,6 +104,15 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **多进程写共享文件的三处竞争(并行队列暴露出来的)。** ① `api/store.py::_connect()` 只有一把
+  `threading.Lock`,对跨进程毫无效力,多进程同时写必然 `database is locked`——改为
+  `journal_mode=WAL` + `busy_timeout=5000` + `synchronous=NORMAL`。② `agents/utils/memory.py`
+  的决策日志是整文件读-改-写、临时文件还用固定名 `.with_suffix(".tmp")`,两个进程同时反思会丢更新、
+  临时文件互相覆盖——读-改-写整段加 `fcntl.flock` 排他锁,临时文件改唯一名
+  (`.tmp.<pid>.<uuid4hex>`)后 `os.replace()`(Windows 无 `fcntl` 时退化为无锁)。
+  ③ 三份 `cached_call`(`akshare_utils`/`tushare_utils`/`amazingdata_utils`)的
+  `open(cache_file, "w")` 非原子,跨进程可能读到写一半的缓存——统一走新的
+  `dataflows/utils.py::atomic_cache_write`(唯一名 tmp + `os.replace`)。
 - **航天航空类 ETF 拿不到主题新闻(词序漏匹配)。** `tushare_etf_news._THEME_PATTERNS`
   用子串匹配基金名派生主题词,原有 `航空航天` 只认这一种词序,像「天弘国证**航天航空**行业ETF」
   (159241)这类反序命名的基金一个主题词都命不中、只能退回全名搜索。改为拆成 `航空` + `航天`

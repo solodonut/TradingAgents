@@ -4,7 +4,13 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
-from api.schemas import AnalysisRequest, EnqueueRequest, QueueState, ReorderRequest
+from api.schemas import (
+    AnalysisRequest,
+    EnqueueRequest,
+    ParallelismState,
+    QueueState,
+    ReorderRequest,
+)
 from api.startup_cache import assert_startup_cache_ready
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])
@@ -35,7 +41,7 @@ def enqueue(req: EnqueueRequest, request: Request) -> dict:
     queue = store.list_queue()
     return {
         "run_ids": run_ids,
-        "running_run_id": queue.running.run_id if queue.running else None,
+        "running_run_ids": [item.run_id for item in queue.running],
         "queue": queue.model_dump(),
     }
 
@@ -45,6 +51,28 @@ def get_queue() -> QueueState:
     from api.main import get_store
 
     return get_store().list_queue()
+
+
+@router.get("/parallelism", response_model=ParallelismState)
+def get_parallelism() -> ParallelismState:
+    from api.main import get_store
+    from api.scheduler import read_max_parallel
+
+    return ParallelismState(max_parallel_runs=read_max_parallel(get_store()))
+
+
+@router.put("/parallelism", response_model=ParallelismState)
+def set_parallelism(req: ParallelismState, request: Request) -> ParallelismState:
+    from api.main import get_store
+    from api.scheduler import MAX_PARALLEL_SETTING, read_max_parallel
+
+    store = get_store()
+    store.set_setting(MAX_PARALLEL_SETTING, str(req.max_parallel_runs))
+    # Raising the limit should start waiting runs right away; lowering it only
+    # affects future launches (in-flight runs are never killed).
+    if request.app.state.scheduler is not None:
+        request.app.state.scheduler.advance()
+    return ParallelismState(max_parallel_runs=read_max_parallel(store))
 
 
 @router.delete("/{run_id}", status_code=204)

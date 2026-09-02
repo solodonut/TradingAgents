@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from api.scheduler import QueueScheduler
+from api.scheduler import MAX_PARALLEL_SETTING, QueueScheduler
 from api.store import Store
 
 
@@ -53,6 +53,9 @@ def scheduler_env(tmp_path, monkeypatch):
     import api.main as main
 
     monkeypatch.setattr(main, "get_store", lambda: store)
+    # One slot by default so these tests exercise the serial chain deterministically;
+    # the parallel tests below raise it explicitly.
+    store.set_setting(MAX_PARALLEL_SETTING, "1")
     return store, main
 
 
@@ -74,6 +77,81 @@ def test_advance_starts_first_pending_and_chains(scheduler_env):
 
     assert _wait_until(lambda: store.get_status("a") == "completed")
     assert _wait_until(lambda: store.get_status("b") == "completed")
+
+
+def _gated_factory(gate: threading.Event):
+    """graph_factory whose stream blocks on ``gate`` so runs stay in flight."""
+
+    def factory(req):
+        class _Gated:
+            def stream(inner_self, init_state, **kwargs):
+                yield {"market_report": "m"}
+                gate.wait(timeout=5)
+                yield {"final_trade_decision": "**Rating**: Hold"}
+
+        return types.SimpleNamespace(graph=_Gated()), {}, "Hold", {"final_trade_decision": "x"}
+
+    return factory
+
+
+def _enqueue(store, pairs):
+    for run_id, ticker in pairs:
+        store.enqueue_run(
+            run_id, ticker, "2024-05-10", "stock",
+            {"ticker": ticker, "trade_date": "2024-05-10"},
+        )
+
+
+def test_advance_runs_two_at_once_when_limit_is_two(scheduler_env):
+    """Both runs must be in flight while neither has finished."""
+    store, _ = scheduler_env
+    store.set_setting(MAX_PARALLEL_SETTING, "2")
+    gate = threading.Event()
+    sched = QueueScheduler(_FakeApp(store, _gated_factory(gate)))
+
+    _enqueue(store, [("a", "NVDA"), ("b", "AAPL")])
+    sched.advance()
+
+    assert _wait_until(lambda: store.running_count() == 2)
+    assert [r.run_id for r in store.list_queue().running] == ["a", "b"]
+
+    gate.set()
+    assert _wait_until(lambda: store.get_status("a") == "completed")
+    assert _wait_until(lambda: store.get_status("b") == "completed")
+
+
+def test_advance_holds_extra_runs_until_a_slot_frees(scheduler_env):
+    """A third run waits while two occupy the slots, then runs when they finish."""
+    store, _ = scheduler_env
+    store.set_setting(MAX_PARALLEL_SETTING, "2")
+    gate = threading.Event()
+    sched = QueueScheduler(_FakeApp(store, _gated_factory(gate)))
+
+    _enqueue(store, [("a", "NVDA"), ("b", "AAPL"), ("c", "TSLA")])
+    sched.advance()
+
+    assert _wait_until(lambda: store.running_count() == 2)
+    assert store.get_status("c") == "pending"
+
+    gate.set()
+    assert _wait_until(lambda: store.get_status("c") == "completed", timeout=5.0)
+
+
+def test_advance_is_serial_when_limit_is_one(scheduler_env):
+    """The default fixture limit of 1 keeps the second run pending."""
+    store, _ = scheduler_env
+    gate = threading.Event()
+    sched = QueueScheduler(_FakeApp(store, _gated_factory(gate)))
+
+    _enqueue(store, [("a", "NVDA"), ("b", "AAPL")])
+    sched.advance()
+
+    assert _wait_until(lambda: store.get_status("a") == "running")
+    assert store.get_status("b") == "pending"
+    assert store.running_count() == 1
+
+    gate.set()
+    assert _wait_until(lambda: store.get_status("b") == "completed", timeout=5.0)
 
 
 def test_advance_skips_failing_run(scheduler_env):

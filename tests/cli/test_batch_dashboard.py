@@ -36,8 +36,8 @@ def test_apply_queue_sets_running_and_pending():
     s = _state()
     s.set_run_map({"r1": "AAPL", "r2": "BTC-USD"})
     s.apply_queue({
-        "running": {"run_id": "r1", "ticker": "AAPL", "status": "running",
-                    "queue_position": None, "created_at": "t"},
+        "running": [{"run_id": "r1", "ticker": "AAPL", "status": "running",
+                     "queue_position": None, "created_at": "t"}],
         "pending": [{"run_id": "r2", "ticker": "BTC-USD", "status": "pending",
                      "queue_position": 1, "created_at": "t"}],
     })
@@ -45,6 +45,24 @@ def test_apply_queue_sets_running_and_pending():
     assert s.rows[0].status == "running"
     assert s.rows[1].status == "pending"
     assert not s.all_done()
+
+
+@pytest.mark.unit
+def test_apply_queue_marks_every_parallel_run_running():
+    """Parallel queue: all running rows show as running, detail follows the first."""
+    s = _state()
+    s.set_run_map({"r1": "AAPL", "r2": "BTC-USD"})
+    s.apply_queue({
+        "running": [
+            {"run_id": "r1", "ticker": "AAPL", "status": "running",
+             "queue_position": None, "created_at": "t1"},
+            {"run_id": "r2", "ticker": "BTC-USD", "status": "running",
+             "queue_position": None, "created_at": "t2"},
+        ],
+        "pending": [],
+    })
+    assert s.current_running_id == "r1"
+    assert [r.status for r in s.rows] == ["running", "running"]
 
 
 @pytest.mark.unit
@@ -68,7 +86,7 @@ def test_apply_history_fills_decision_and_terminal():
 @pytest.mark.unit
 def test_apply_queue_ignores_unlinked_rows():
     s = _state()  # no run_map set
-    s.apply_queue({"running": None, "pending": []})
+    s.apply_queue({"running": [], "pending": []})
     assert s.current_running_id is None
     assert all(r.status == "pending" for r in s.rows)
 
@@ -81,9 +99,9 @@ def test_render_runs_without_error():
 
     s = _state()
     s.set_run_map({"r1": "AAPL"})
-    s.apply_queue({"running": {"run_id": "r1", "ticker": "AAPL",
-                               "status": "running", "queue_position": None,
-                               "created_at": "t"}, "pending": []})
+    s.apply_queue({"running": [{"run_id": "r1", "ticker": "AAPL",
+                                "status": "running", "queue_position": None,
+                                "created_at": "t"}], "pending": []})
     s.apply_status({"last_report_section": "market_report", "llm_active": True,
                     "active_llm_calls": 1, "last_llm_model": "deepseek-chat",
                     "last_llm_error": None})

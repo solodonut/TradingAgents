@@ -36,7 +36,7 @@ def _fake_response(payload):
 def test_enqueue_builds_payload():
     client = ApiClient("http://h:8000")
     with patch("cli.api_client.requests.post") as post:
-        post.return_value = _fake_response({"run_ids": ["r1"], "running_run_id": "r1"})
+        post.return_value = _fake_response({"run_ids": ["r1"], "running_run_ids": ["r1"]})
         out = client.enqueue(
             ticker="aapl", name="Apple", trade_date="2026-07-02", asset_type="stock",
             analysts=["market"], research_depth=3, output_language="Chinese",

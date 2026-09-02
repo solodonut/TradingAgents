@@ -22,6 +22,7 @@ def client(tmp_path, monkeypatch):
     main.app.state.telemetry = {}
     main.app.state.starting_telemetry = None
     main.app.state.scheduler = None  # re-created by startup against fresh state
+    main.app.state.run_launcher = None  # ditto, so it points at this test's DB
     main.app.state.chat_llm_factory = None
     AppStatus.should_exit = False
     AppStatus.should_exit_event = None

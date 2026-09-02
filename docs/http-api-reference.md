@@ -4,8 +4,9 @@ WebUI 后端从 [api/main.py](../api/main.py) 挂载,路由定义在 [api/routes
 本文只覆盖对外的 FastAPI HTTP 接口;**Agent 侧的数据获取方法**(`get_stock_data`
 等)不是 HTTP 接口,见 [data-fetching-apis.md](./data-fetching-apis.md)。
 
-> 单用户不变量:同一时刻只跑一个分析。忙时不再返回 409,而是入队(见
-> [api/scheduler.py](../api/scheduler.py))。CORS 只放行 `localhost:3000`。
+> 单用户后端,但队列可并行:同一时刻最多跑 `max_parallel_runs` 个分析(默认 2,可在
+> WebUI 队列面板下拉框或 `PUT /api/queue/parallelism` 改,1–4)。忙时不返回 409,而是入队
+> (见 [api/scheduler.py](../api/scheduler.py))。CORS 只放行 `localhost:3000`。
 
 ## 运行时 HTTP 路由
 
@@ -22,6 +23,8 @@ WebUI 后端从 [api/main.py](../api/main.py) 挂载,路由定义在 [api/routes
 | `DELETE` | `/api/queue/{run_id}` | 移除一个 pending 队列项。 |
 | `DELETE` | `/api/queue` | 清空所有 pending 队列项。 |
 | `PATCH` | `/api/queue/order` | 重排 pending 队列顺序。 |
+| `GET` | `/api/queue/parallelism` | 返回当前并发运行上限。 |
+| `PUT` | `/api/queue/parallelism` | 设置并发运行上限(1–4),调高立即启动等待中的 run。 |
 | `GET` | `/api/history` | 列出历史分析运行。 |
 | `GET` | `/api/history/reports.zip` | 打包下载选定/全部已完成报告。 |
 | `GET` | `/api/history/{run_id}` | 返回单条历史运行。 |
@@ -44,3 +47,27 @@ WebUI 后端从 [api/main.py](../api/main.py) 挂载,路由定义在 [api/routes
 | `GET` | `/api/ticker/{code}` | 把 ticker/代码解析为显示名。 |
 | `GET` | `/api/watchlist` | 返回持久化自选列表。 |
 | `PUT` | `/api/watchlist` | 替换持久化自选列表。 |
+
+## 队列并行
+
+一个 run 的墙钟时间几乎全花在等 LLM 和数据源上,所以队列可以同时跑多个标的。
+并发数存在 `webui.db` 的 `app_settings` 表(键 `max_parallel_runs`,默认 2,上限 4),
+WebUI 队列面板头部的「并发」下拉框即读写 `/api/queue/parallelism`;调高立即启动等待中的
+run,调低只影响之后的启动(不会打断在跑的)。
+
+每个 run 跑在**独立子进程**里(`multiprocessing` spawn,`api/run_worker.py`),因为
+`dataflows` 的配置单例、预取上下文、以及 AKShare 的 `no_proxy_session()` 猴补丁都是进程级的,
+同进程并行会互相污染。子进程冷启动约 1.8s,相对分钟级的 run 可忽略。SSE / 取消 / 遥测
+经父进程的桥接线程转发,接口形状不变。
+
+`GET /api/queue` 的 `running` 是**数组**(所有在跑的 run,最早的在前);`POST /api/queue`
+返回 `running_run_ids`。WebUI 的实时面板仍只跟随一个 run,队列面板每个 running 行的
+「观察」按钮可切换跟随对象,「停止」只取消那一行。
+
+并行的三条已知代价:
+
+- **数据源配额按并发数翻倍**。tushare/AKShare 有分钟级限流,调高并发前先确认额度。
+- **每个子进程有独立的 AKShare 熔断器**(进程级状态)。好处是坏 endpoint 不再跨 run 传染,
+  坏处是 N 个进程会各自把同一个坏 endpoint 再踩一遍。
+- **同一个 ticker 同时入队两次会撞 checkpoint 库**(`~/.tradingagents/cache/checkpoints/<TICKER>.db`
+  按 ticker 分库)。checkpoint 在 WebUI 路径下默认关闭,所以只记文档、代码不做防护。

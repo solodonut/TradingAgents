@@ -63,13 +63,16 @@ class BatchState:
             row.status = "error"
 
     def apply_queue(self, queue: dict) -> None:
-        running = queue.get("running")
+        # The queue can run several analyses at once; the detail panel follows the
+        # oldest one (server orders `running` oldest-first) so it stays put while
+        # newer siblings come and go.
+        running_ids = [r["run_id"] for r in queue.get("running") or []]
         pending_ids = {p["run_id"] for p in queue.get("pending", [])}
-        self.current_running_id = running["run_id"] if running else None
+        self.current_running_id = running_ids[0] if running_ids else None
         for row in self.rows:
             if row.run_id is None:
                 continue
-            if running and row.run_id == running["run_id"]:
+            if row.run_id in running_ids:
                 row.status = "running"
             elif row.run_id in pending_ids:
                 row.status = "pending"
