@@ -27,9 +27,9 @@
 
 ### 全源 × 全能力总表
 
-一张表看完 **15 个源**(10 个路由内 vendor + 2 处路由外社交源 + 腾讯/新浪/东财三家未接入源)
-在 10 类能力上的实测结果。**这是全文的索引**:耗时、体积、失败根因等细节在第 4 节(现有源)
-和第 8 节(三家横评)。
+一张表看完 **16 个源**(10 个路由内 vendor + 2 处路由外社交源 + 腾讯/新浪/东财三家未接入源
++ QMT Native Bridge)在 10 类能力上的实测结果。**这是全文的索引**:耗时、体积、失败根因等细节
+在第 4 节(现有源)、第 8 节(三家横评)和第 9 节(QMT Native Bridge)。
 
 图例:✅ 有数据 · ⚪ 调用成功但内容为空 · ⛔ 未配置(缺 key/CLI/占位) ·
 🚫 本次网络层失败 · ⚠️ 静默降级 · ❌ 接口存在但无此字段 ·
@@ -52,8 +52,9 @@
 | **腾讯**(未接入) | ✅ K 线+快照 | ➖ 须自算 | ✅ **88 字段最全** | ❓ | ❓ | ❓ | ❓ | ✅ | 未测 | — |
 | **新浪**(未接入) | ✅ 快照 | ➖ 须自算 | ❌ **34 字段无估值** | ✅ HTML | ✅ **1 次拿全** | ✅ **含当天** | ✅ | ✅ | 未测 | — |
 | **东财**(直连,超出现接入面) | 🚫 push2 抖动 | ➖ 须自算 | ✅ | ✅ JSON | ✅ **字段最深** | ✅ 排序有问题 | ✅ | ✅ | 未测 | — |
+| **QMT Native Bridge**(未接入) | ⚠️ 当日 ✅,历史**逐 code** | ➖ 须自算 | ⚠️ 有股本/涨跌停,**无 PE/PB** | ❌ 501 | ❌ 501 | ➖ | ➖ | ✅ 全 300 成分申赎清单 | ⚠️ 仅当日 | **申赎篮子/涨跌停价/五档盘口/板块成分/真实持仓**(唯一源) |
 
-读这张表要注意 5 点,否则会误读:
+读这张表要注意 6 点,否则会误读:
 
 1. **一格 🚫 不代表方法不可用**。每格是「该 vendor 自己」的能力(直接调 vendor 函数、绕过
    `route_to_vendor`),而实际调用走 fallback 链 —— 链上任一格 ✅ 就够用。例:`get_stock_data`
@@ -69,6 +70,10 @@
    **新浪**,所以「新浪」也已经被间接用上了。上游集中度详见第 5 节。
 5. **➖「须自算」**:三家都不提供算好的技术指标。项目的 `get_indicators` 是本地 stockstats
    基于 OHLCV 计算,换源只影响 OHLCV 底座,不影响指标能力。
+6. **QMT Native Bridge 那一行的 ⚠️ 全是「口径」而不是「抖动」**:它的行情格不是网络问题,
+   而是**历史日线有没有取决于该 code 在客户端本地库里补过没有** —— 没补过的 code 返回
+   **200 + 全 0 行**,不报错。这一格误读的代价比其它任何格都大,细节与接入前必须做的
+   零值拦截见第 9 节。它也是唯一能给出**账户真实持仓/委托/成交**的源,但项目当前没有对应方法。
 
 ---
 
@@ -524,7 +529,188 @@ AKShare 的 `stock_news_em` 用的是嵌套结构但写死 `"sort": "default"`,�
 
 ---
 
-## 9. 加一个数据源要改哪里
+## 9. QMT Native Bridge(未接入,已实测)
+
+[QMT Native Bridge](file:///Volumes/%5BC%5D%20Windows%2011.hidden/Users/joseph/Code/qmt-native-bridge)
+把**国金 QMT 完整版客户端**的能力经 HTTP/WebSocket 暴露到局域网(109 条 HTTP + 2 条 WS,
+其中 27 ✅ / 24 ⚠️ / 60 固定 501)。**未接入本项目**,以下是 2026-09-03 15:00–15:20
+对它 15 条数据面路由逐条真实调用的结论。
+
+### 9.1 先分清:它不是 `amazingdata`
+
+两个源都叫「QMT」,但**不是同一个东西,也不是同一个上游**,混起来会得出完全错误的替换结论:
+
+| | `amazingdata`(已接入) | QMT Native Bridge(未接入) |
+| --- | --- | --- |
+| 真实上游 | **银河证券**,经本地 QMT docker 常驻服务 | **国金证券**,经 Windows 上的完整版 QMT 客户端进程 |
+| 地址 | `127.0.0.1:8888`(`AD_API_PORT`) | 局域网 `<VM-IP>:8000`(本机实测 `10.211.55.3:8000`) |
+| 取数机制 | 服务内调银河 SDK | 客户端**进程内**内置 Python 模型 `ContextInfo` + socket IPC |
+| 覆盖面 | 行情/指标/基本面/ETF 分钟/资金面 4 类 | 行情快照/合约/板块/日历/ETF 申赎清单/**真实账户与交易** |
+| 财务三表 | ✅ | ❌ 固定 501 |
+
+所以它**不是** `amazingdata` 的备份档:两者能力面只在「当日行情」上重叠,资金面(龙虎榜/两融/
+股东户数/业绩预告)和财务三表**桥一条都没有**。第 5 节的上游集中度问题里,「银河证券离线则
+`amazingdata` 整条链首失效」这一条,桥**补不上**。
+
+### 9.2 实测能力矩阵(2026-09-03)
+
+标的 `600519.SH` / `510300.SH` / `000001.SZ`;桥版本 0.1.0;数据面默认不鉴权。
+
+| 路由 | 实测 | 内容 |
+| --- | --- | --- |
+| `/api/meta/health` | ✅ 0.01s | `{"status":"ok","data_agent":"up"}` |
+| `/api/market/full_tick` | ✅ 0.008s | **19 字段**:五档 `askPrice/bidPrice/askVol/bidVol` + OHLC + `lastClose` + `amount` + `volume`(手)+ `pvolume`(股)+ `stockStatus` |
+| `/api/market/history`(1d) | ⚠️ 0.03–0.10s | **逐 code 分化**,见 9.3.1 |
+| `/api/market/history`(1m / 5m) | ⚠️ 0.04s | 1m **241 根 = 当日整段**(09:30→15:00);5m **63 根**(含 09-02 尾盘 15 根)。**没有更早的分钟线** |
+| `/api/market/batch_history` | ✅ 0.03s | 一次拿 5 个 code;零值分化同上 |
+| `/api/market/indices` | ✅ 0.026s | 七大指数(上证/深成/创业板/沪深300/上证50/中证500/中证1000)快照 |
+| `/api/market/divid_factors` | 🚫 **500** | `TypeError: get_divid_factors() got an unexpected keyword argument 'start_time'` —— **桥侧 bug**,`api-coverage.md` 记的是 ✅ |
+| `/api/instrument/detail` | ✅ 0.01s | **30 字段**(见 9.5) |
+| `/api/instrument/is_suspended` | ⚠️ 0.008s | 600519 在 **15:00 后返回 `true`** —— 盘后语义不是「停牌」。桥仓库记的盘中实测是 `false`。**不可直接当停牌判断** |
+| `/api/sector/list` | ✅ 0.01–0.03s | 分层:根节点 10 个目录;`node=沪深板块` → 13 个板块 |
+| `/api/sector/stocks` | ✅ 0.02s | `沪深300` → **300 个 code**(指数成分清单;**没有权重**) |
+| `/api/etf/list` | ✅ 0.02s | **1706 只**(桥仓库 08-24 记的是 1686) |
+| `/api/etf/info` | ✅ 真实申赎清单 | 见 9.5,**这是它最强的一格** |
+| `/api/calendar/trading_dates` | ✅ 0.008s | `market=SH` 区间交易日列表 |
+| `/api/utility/stock_name` · `batch_stock_name` | ✅ 0.01s | 中文名(GBK 已修复,不乱码);批量上限 **100 个 code** |
+| `/api/financial/report` | ❌ **501** | `financial fundamental data is not available in-process on this client` |
+| `/api/formula/call` | ⚠️ | `MA.ma1` 600519 = 1295.338,但 `resolved.bar_time` 是 **13:05**(主图 1m 序列 38686 根的「最后一根」不是收盘那根) |
+
+**延迟是它最突出的优点**:除个别请求外全在 **8–100 ms**。对比第 8.1 节 AKShare 的
+`get_etf_profile` 19–20 秒,快两个数量级。
+
+### 9.3 三个限制,决定它能替换什么
+
+#### 9.3.1 历史日线是**逐 code 的本地库状态**,失败方式是 200 + 全 0 行
+
+同一次 `batch_history`(`period=1d&count=5`)里:
+
+| code | 5 根日线 |
+| --- | --- |
+| `000001.SZ` 平安银行 | **5 根全真实**;拉到 `count=1200` 仍 **1200 根全真实**,回溯到 **2021-09-22** |
+| `000300.SH` 沪深300 | **5 根全真实** |
+| `600519.SH` 贵州茅台 | 只有 **20260903** 一根真实,前 4 根 `open=high=low=close=volume=0` |
+| `510300.SH` / `510500.SH` | 同上,只有当日 |
+
+把 600519 的区间拉到 `20260101→20260903`:返回 **163 行,只有 1 行 `close` 非 0**,其余
+带 `suspendFlag: 1`。
+
+机制:`data_agent.py::_h_market_data_ex` 直接调 `ContextInfo.get_market_data_ex`,**不传
+`subscribe`** —— 读的就是客户端**本地数据库**。补过数据的 code(在主图/自选/持仓里的)有深度历史,
+没补过的没有。而桥的 `/api/download/*` **整组固定 501**(下载是 xtdata 专有),所以**桥自己补不了**,
+只能在 QMT 界面手工「补充数据」。
+
+**接入时必须做零值拦截**:`close == 0 && suspendFlag == 1` 要判成无数据、抛 `NoMarketDataError`。
+不拦的话 agent 会拿到一串 0.0 当真实价格 —— 这正是项目反幻觉约定(`NO_DATA_AVAILABLE` 哨兵
+而不是编造数值)要防的事,而且比网络失败更危险:它是 **HTTP 200**。
+
+#### 9.3.2 数据面依赖 QMT 客户端在跑,且受 handlebar 时间片约束
+
+数据面每次取数都要等客户端进程内模型的**协作时间片**(`SERVE_SLICE_SECONDS = 0.5`),而这个
+时间片与**真钱交易面共用同一个框架线程**。实测到的三个后果:
+
+- **`health` 说 `up` 不等于能取数**。收盘后连打时出现过 `data agent socket error: timed out`
+  和 `[WinError 10061] 目标计算机积极拒绝`,而同一时刻 `/api/meta/health` 仍答 `data_agent: up`
+  —— 健康检查是 listener 层的 ping,取数要排队。瞬时,几秒后自行恢复,但**不能靠 health 做熔断**。
+- **批量有硬上限 100 个 code**(`MAX_BATCH_CODES`,两侧都校)。
+- **A 股收盘后客户端通常被关掉**,而本项目多在盘后跑分析 —— 这是可用性上最现实的障碍,
+  比任何字段缺失都致命。
+
+对本项目还有一层:4 个分析师即使串行跑,每个也会打多次数据工具。把桥放进链首等于让 LLM
+分析的节奏去挤那个 0.5 秒时间片。**它适合做低频校验源,不适合做链首主源。**
+
+#### 9.3.3 没有财务,没有新闻
+
+- **财务**:`/api/financial/report` 固定 501。签名已查明(`get_financial_data(['Table.field'], ['code'], start, end)`),
+  但这台客户端**没有加载财务库**(横跨 10 年 2431 行全 `None`)。
+- **新闻**:桥**一条新闻路由都没有** —— 不是 501,是压根不在 API 形状里。
+
+### 9.4 逐方法:能替换什么
+
+| 项目方法 | 桥能不能替 | 结论 |
+| --- | --- | --- |
+| `get_stock_data` | ⚠️ **不能做通用源** | 覆盖面 = 「这台客户端补过哪些标的」。可作**当日收盘价的独立校验源**(第 5 节说的冗余缺口),或对**已补数据的固定标的池**做主源 |
+| `get_indicators` | ⚠️ 只能换底座 | 项目的指标是本地 stockstats 算的,桥只能替 `load_ohlcv` 的 OHLCV;而 30 天回看窗口对没补数据的 code 直接不成立。`/api/formula/call` **不能**用:单值/单 bar、算不出来时**安静返回 `-1.0`**、且 bar 不一定是最新的 |
+| `get_fundamentals` | ⚠️ 部分 | 给得出总股本/流通股(`TotalVolume`/`FloatVolume`)、涨跌停价、前收 → **总市值可自算**;但 **PE/PB/EPS/股息率全给不出**(缺财务)。第 1 节那个「估值快照」缺口,桥只补一半,腾讯的 88 字段仍是更直接的补位 |
+| `get_balance_sheet` / `get_cashflow` / `get_income_statement` | ❌ | 501 |
+| `get_news` / `get_global_news` / `get_etf_news` | ❌ | 无此能力 |
+| `get_etf_profile` | ✅ **强补位** | `/api/etf/info` 给出现有 4 个 vendor 都没有的**完整申赎清单**;但**不给 IOPV、基金规模、基金份额、跟踪指数、管理人、费率**,所以是**补字段**而不是**换源**(见 9.5) |
+| `get_etf_intraday` | ⚠️ 仅当日 | 当日 5min/1min 可用,可作第三个独立源去定第 4 节那个「AmazingData 与 Tushare 成交量差 9.1 倍」的口径 —— 桥把两种单位**分开命名**(`volume` 手 / `pvolume` 股,实测严格 100 倍),这正是定口径需要的。**历史交易日取不到**,所以替不了这个方法的主要用法 |
+| `get_dragon_tiger` / `get_margin_trading` / `get_shareholders` / `get_profit_forecast` | ❌ | 桥没有对应路由。这 4 个方法仍然只有 `amazingdata` 一档 |
+| `get_macro_indicators` / `get_prediction_markets` / `get_insider_transactions` | ➖ | 出桥的范围(仅 A 股股票 + ETF) |
+
+一句话:**它替不掉任何一个现有 vendor 的主源地位,但能补两个现有 15 个源都没有的东西**(9.5),
+并给「当日行情」加一个真正独立的第三方上游。
+
+### 9.5 独有能力:现有 16 个源里只有它能给
+
+**① ETF 完整申赎清单**(`/api/etf/info`,510300 实测):
+
+```
+nav 4.614 · navPerCU 4152589.89 · reportUnit 900000(最小申赎单位份数)
+cashBalance 105955.89 · ecc 103405.89 · maxCashRatio 0.5
+enableCreation 1 · enableRedemption 1 · creationLimit 0 · redemptionLimit 3600000000
+stocks: 300 只(不是前十!)每只带
+  componentVolume(一个申赎单位里的份数)· ReplaceFlag(49 允许现金替代 179 只 / 50 必须现金替代 121 只)
+  ReplaceRatio · ReplaceBalance · physCreateRedeem · discountReplaceRatio · redemptReplaceBalance
+```
+
+三个直接用法,都是现有源做不到的:
+
+- **申赎篮子** —— [data-fetching-apis.md](./data-fetching-apis.md) 第 8 节里这个字段写的是
+  「Tushare 付费 ETF 权限(可得时)/ 当前凭证未确认」。桥**免费、实测有真值**。
+- **全部成分股 + 份数** —— AKShare/Tushare 只给**前十**重仓。有了 `componentVolume` 就能算
+  近似权重(`componentVolume × 价格 / navPerCU`),等于补上了 `/api/instrument/index_weight`
+  拿不到的东西。注意 **21 只 `componentVolume = 0`**(全现金替代),算权重时不能当缺失值丢掉。
+- **折溢价** —— `lastPrice / nav - 1`,实测 4.621 / 4.614 = **+0.15%**。
+  ⚠️ **口径未定**:`tradingDay` 与 `preTradingDay` 都返回 **0**,所以**这个接口自己说不清 `nav`
+  是哪一天的净值**。用它算折溢价前必须另行确认口径 —— 与第 4 节的 ETF 分钟线成交量差异、
+  第 8.2.1 节的 PE 口径差异是同一类问题。
+
+**② 合约详情 30 字段**(`/api/instrument/detail`,600519 实测):
+
+```
+InstrumentName 贵州茅台 · ExchangeID SH · OpenDate 20010827 · TradingDay 20260903
+PreClose 1297.5 · UpStopPrice 1427.25 · DownStopPrice 1167.75   ← 涨跌停价:现有源全都没有
+TotalVolume / FloatVolume 1250081601                              ← 总股本/流通股 → 市值可自算
+PriceTick 0.01 · VolumeMultiple 1 · InstrumentStatus 0 · HSGTFlag(本例 null)
+```
+
+**涨跌停价**是现有 15 个源一个都不提供的字段,而它对 A 股决策有直接意义(一字板 = 有价无量,
+交易员/风险辩论环节现在无从判断)。
+
+**③ 五档盘口**(`/api/market/full_tick`)—— 腾讯/新浪也有,但两家都未接入代码;桥是**已实测可调**的。
+
+**④ 板块成分清单**(`/api/sector/stocks`)—— `沪深300` 一次给 300 个 code,0.02s。
+
+**⑤ 交易日历**(`/api/calendar/*`)—— 项目当前**完全没有**交易日历,日期窗口全靠自然日推算。
+
+**⑥ 真实账户状态**(`/api/trading/*`、`/api/credit/*`)—— 持仓、委托、成交、资产、信用负债。
+**项目当前没有任何方法承接这类信息**:`final_trade_decision` 是在不知道实际持仓的前提下做的。
+这不是「换数据源」,是新增一类能力,要动的是 `TOOLS_CATEGORIES` 而不是某条 vendor 链。
+⚠️ 交易面**无条件鉴权且 fail-closed**(`QMT_BRIDGE_API_KEY` 为空则一律 503),
+且下单面 `dry_run` 默认开、`opType` 常量未经真机校准 —— 只读查询可以考虑,**写入面不要碰**。
+
+### 9.6 接入建议
+
+如果要接,按第 10 节的步骤,并注意这 6 点:
+
+1. **vendor 名不要叫 `qmt`**,会和 `amazingdata` 的上游混掉。建议 `qmtbridge`,文件
+   `dataflows/qmtbridge_*.py`。
+2. **凭证**:`QMT_BRIDGE_BASE`(如 `http://10.211.55.3:8000`)+ 可选 `QMT_BRIDGE_API_KEY`
+   (`X-API-Key` 请求头)。base 未配 → `VendorNotConfiguredError`。
+3. **探测降级照 `amazingdata_utils.py` 抄**:它已经解决了同一个问题(「本地常驻服务可能离线」),
+   包括把服务端连接类错误归成 `VendorRateLimitError` 让路由回退,而不是 crash 整个 run。
+   桥这边要额外把 `{"code":"unavailable"}`(agent socket 超时)归到这一类,
+   把 `{"code":"unsupported"}`(501)归到 `VendorNotConfiguredError`。
+4. **零值拦截是硬要求**(9.3.1),否则违反反幻觉约定。
+5. **只放链尾或校验位**,别放链首(9.3.2)。
+6. **先接 `get_etf_profile` 的字段补位最划算**:唯一源、免费、20ms、且填的正是现有链
+   `akshare,tushare,tdx,longbridge`(有效档只有 2 个)填不上的字段。风险最小、收益最明确。
+
+---
+
+## 10. 加一个数据源要改哪里
 
 1. 在 `dataflows/` 新建 `<vendor>_<domain>.py`,实现与现有 vendor **同名同签名**的方法
    (`route_to_vendor` 靠这个用同一组参数遍历整条链)。

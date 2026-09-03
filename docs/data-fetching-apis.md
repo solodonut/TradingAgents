@@ -245,6 +245,14 @@ Agent (LangGraph 节点)
 | `fred` | 美国宏观 | 需 key,默认关闭 |
 | `polymarket` | 预测市场 | 默认关闭 |
 
+**候选:QMT Native Bridge** —— **未接入,不在 `VENDOR_METHODS`/`VENDOR_LIST` 里**,不能通过配置
+启用。国金 QMT 完整版客户端经 HTTP 暴露到局域网,已实测可提供当日行情快照/五档、合约详情
+(**涨跌停价、总股本**)、板块成分、交易日历、**ETF 完整申赎清单**;但**无财务三表、无新闻**,
+历史日线**逐 code 取决于客户端本地库补过没有**(没补过的返回 `close: 0.0` 而不是报错)。
+能替换/不能替换哪些方法、以及接入前必须做的零值拦截,见
+[data-sources.md 第 9 节](./data-sources.md#9-qmt-native-bridge未接入已实测)。
+注意它与已接入的 `amazingdata`(银河证券,`127.0.0.1:8888`)**不是同一个上游**。
+
 ---
 
 ## 6. 配置方式
@@ -302,6 +310,23 @@ first-success。字段级偏好参考:
 | 重仓/前十成分 | 名称用 AKShare,稳定披露用 Tushare `fund_portfolio` | 通达信 MCP 部分 | Tushare 返回代码/比例/市值;AKShare 在当前画像输出里返回名称。 |
 | 申赎篮子 | Tushare 付费 ETF 权限(可得时) | AKShare/交易所手工数据 | 当前凭证未确认。 |
 
+**候选补位:QMT Native Bridge**(未接入,见第 5 节与
+[data-sources.md 第 9 节](./data-sources.md#9-qmt-native-bridge未接入已实测))。
+`/api/etf/info` 对 `510300` 实测 20ms 返回,**能补上表里当前最弱的几格**:
+
+- **申赎篮子**(上表唯一标着「当前凭证未确认」的字段)—— 桥直接给出真实篮子。
+- **全部成分股 + 每只的申赎份数** —— 现有源只给**前十**重仓;桥给 **300 只全量**
+  `componentVolume`,还带现金替代标志(允许 179 / 必须 121)与替代比例。
+  ⚠️ 其中 **21 只 `componentVolume = 0`**(全现金替代),别当缺失值丢掉。
+- **NAV / navPerCU / 最小申赎单位 / 申赎状态 / 申赎上限 / 现金余额与现金替代比例上限**。
+
+**不能补**的字段(桥不返回,仍需现有链):IOPV、基金规模、基金份额、跟踪指数、管理人/托管人/费率、
+累计净值。**折溢价率可自算**(`lastPrice / nav - 1`,实测 +0.15%),但 `tradingDay` 与
+`preTradingDay` 都返回 `0`,**`nav` 是哪天的净值这个接口自己说不清** —— 用之前必须先定口径。
+
+所以它的定位是**逐字段 merge 的补位源**,而不是 first-success 链上的又一个 vendor:
+上表的主要格子(最新价/涨跌幅/成交额/换手/市值/规模/份额)桥并不比通达信 MCP 强。
+
 ### 通达信 MCP 配置
 
 本地 Codex MCP 配置(API key 已脱敏):
@@ -341,6 +366,7 @@ range = "JJ"
 | WebSearch | 低成本补充源 | 近期新闻、基金公司/交易所页面、媒体报道 | 必须保留源 URL 与日期过滤;适合近期分析而非严格历史回测。 |
 | AKShare / East Money | 中文回退 | 东方财富个股新闻 | 免费本地化;上游抓取可能不稳定。 |
 | 通达信 MCP | 当前不建议用于 `get_news` | 查询返回空行或仅报价行 | `tdx_wenda_quotes` 未返回结构化新闻/公告标题正文。 |
+| QMT Native Bridge | **不可用于任何新闻方法** | 无 | 桥的 109 条路由里**没有新闻/公告能力** —— 不是权限或 501 的问题,是根本不在它的 API 形状里。它只覆盖行情/合约/板块/日历/ETF/交易。 |
 
 若某 vendor 返回 `Error fetching news...` 字符串(而非抛错),路由会把它当作 vendor
 失败并继续链路。
@@ -370,3 +396,4 @@ Codex 会话中与行情数据相关的 MCP 命名空间:
 | yfinance | Python 包/网络 | 已实现;国内 only 模式不优先。 |
 | FRED | FRED API key | 已实现,默认关闭。 |
 | Polymarket | 网络/API | 已实现,默认关闭。 |
+| QMT Native Bridge | 桥 server 在跑 + **国金 QMT 客户端在跑且 handlebar 在走** + 局域网可达 `<VM-IP>:8000` + 可选 `X-API-Key`(交易面强制) | **未实现为 code vendor**;数据面已于 2026-09-03 实测 15 条路由。可用性受限于「盘后客户端通常关闭」。 |
