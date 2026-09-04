@@ -200,6 +200,40 @@ def test_stream_chat_emits_done_and_persists(client):
     assert "结论" in msgs[1]["content"]
 
 
+def test_stream_chat_does_not_bind_unroutable_tools(client):
+    """境内配置下必然无数据的工具不该绑给 LLM。
+
+    get_insider_transactions 只有 alpha_vantage/yfinance 两个实现,两家在境内配置里
+    都不在链上,绑过去只会换来一轮无效 tool call。主图 _create_tool_nodes 早就不发它了,
+    顾问侧必须一致。
+    """
+    import api.main as main
+
+    bound: dict[str, list[str]] = {}
+
+    class _Chain:
+        def invoke(self, messages):
+            return AIMessage(content="好。不构成投资建议。")
+
+    class _LLM:
+        def bind_tools(self, tools):
+            bound["names"] = [tool.name for tool in tools]
+            return _Chain()
+
+    main.app.state.chat_llm_factory = lambda model=None: (_LLM(), _LLM())
+
+    sid = client.post("/api/chat/sessions", json={}).json()["session_id"]
+    with client.stream(
+        "POST", f"/api/chat/sessions/{sid}/stream", json={"message": "内部人有减持吗?"}
+    ) as s:
+        "".join(s.iter_text())
+
+    assert "get_stock_data" in bound["names"], "没抓到绑定的工具集,测试本身失效了"
+    assert "get_insider_transactions" not in bound["names"]
+    assert "get_macro_indicators" not in bound["names"]
+    assert "get_prediction_markets" not in bound["names"]
+
+
 def test_stream_chat_uses_all_selected_reports(client, monkeypatch):
     import api.main as main
     import api.routes.chat as chat_routes

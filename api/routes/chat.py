@@ -26,7 +26,7 @@ from tradingagents.advisor.engine import run_chat
 from tradingagents.advisor.export import ExportContext, create_export_tools
 from tradingagents.advisor.profile_tools import create_profile_tools
 from tradingagents.advisor.prompt import build_system_prompt
-from tradingagents.advisor.tools import ADVISOR_TOOLS
+from tradingagents.advisor.tools import get_advisor_tools
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 REPORT_DIR = Path(__file__).resolve().parents[2] / "report"
@@ -359,7 +359,8 @@ async def stream_chat(
         return current.model_dump() if current else {}
 
     profile_tools = create_profile_tools(load_profile=load_profile)
-    tools = [*ADVISOR_TOOLS, *profile_tools, *export_tools]
+    # 按当前配置过滤:必然返回 NO_DATA_AVAILABLE 的工具不绑给模型。
+    tools = [*get_advisor_tools(), *profile_tools, *export_tools]
     prompt = ChatPromptTemplate.from_messages(
         [("system", "{system}"), MessagesPlaceholder(variable_name="messages")]
     ).partial(system=system_prompt)

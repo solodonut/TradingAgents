@@ -156,6 +156,17 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Fixed
 
+- **顾问(WebUI 对话)会拿到一批必然无数据的工具。** `advisor/tools.py` 的 `ADVISOR_TOOLS`
+  是无条件的候选全集,而主图 `_create_tool_nodes` 早就按 `domestic_china_only` 过滤掉了
+  海外专属工具,两侧不一致:境内默认配置下顾问仍绑着 `get_insider_transactions`
+  (只有 alpha_vantage/yfinance 两个实现,而链是 `eastmoney,tushare,sina`,零交集)、
+  `get_macro_indicators` 和 `get_prediction_markets`(整条链 `disabled`),模型调用后只会
+  换回一个 `NO_DATA_AVAILABLE:`/`DATA_SOURCE_DISABLED:` 哨兵,白烧一轮 tool call。
+  新增 `get_advisor_tools()`,`api/routes/chat.py` 改为绑它。判定按**可路由性**推导
+  (配置链上是否至少有一家 vendor 在 `VENDOR_METHODS[method]` 里),而不是照抄主图那份写死的
+  China-only 白名单——后者会把实际由 `tushare,sina` 供数的 `get_global_news` 一起砍掉。
+  过滤在**调用时**求值而非模块导入时:`dataflows.config` 是进程级单例,`set_config` 会事后
+  改写它,所以启用 alpha_vantage 后工具会自动回来。
 - **多进程写共享文件的三处竞争(并行队列暴露出来的)。** ① `api/store.py::_connect()` 只有一把
   `threading.Lock`,对跨进程毫无效力,多进程同时写必然 `database is locked`——改为
   `journal_mode=WAL` + `busy_timeout=5000` + `synchronous=NORMAL`。② `agents/utils/memory.py`
