@@ -261,27 +261,23 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # routed to vendors you didn't choose. For ordered fallback, list several,
     # e.g. "yfinance,alpha_vantage". "default" uses all available vendors.
     "data_vendors": {
-        "core_stock_apis": "amazingdata,tushare,akshare",      # Options: amazingdata, alpha_vantage, yfinance, tushare, akshare
-        "technical_indicators": "amazingdata,tushare,akshare", # Options: amazingdata, alpha_vantage, yfinance, tushare, akshare
-        "fundamental_data": "amazingdata,tushare,akshare",     # Options: amazingdata, alpha_vantage, yfinance, tushare, akshare
-        "news_data": "akshare,longbridge",           # Options: alpha_vantage, yfinance, longbridge, akshare
+        "core_stock_apis": "amazingdata,tushare",      # Options: amazingdata, alpha_vantage, yfinance, tushare
+        "technical_indicators": "amazingdata,tushare", # Options: amazingdata, alpha_vantage, yfinance, tushare
+        "fundamental_data": "amazingdata,tushare",     # Options: amazingdata, alpha_vantage, yfinance, tushare
+        "news_data": "eastmoney,tushare",    # Options: alpha_vantage, yfinance, longbridge, eastmoney, tushare
         "macro_data": "disabled",            # Options: fred, disabled
         "prediction_markets": "disabled",    # Options: polymarket, disabled
     },
-    # A-share auto-routing. When True, mainland A-share tickers (600519,
-    # 600519.SS, sh600519, ...) are served by AKShare first for legacy
-    # Yahoo/Alpha Vantage chains because those sources barely cover Chinese
-    # financial statements. Explicit Tushare chains keep their configured
-    # order, so the default "tushare,akshare" still tries Tushare before
-    # falling back to AKShare. Non-A-share tickers are unaffected. Set False
-    # to honor data_vendors for every market.
-    "akshare_auto_route": True,
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
-        "get_news": "tushare,akshare,eastmoney",
+        # eastmoney before tushare: Tushare's per-instrument news search returns
+        # no hits for A-shares (the credential is fine — get_global_news works),
+        # so leading with it just burns a round trip. Both sources are East Money
+        # underneath, so this ordering loses no real redundancy.
+        "get_news": "eastmoney,tushare",
         "get_etf_news": "tushare",
         "get_global_news": "tushare",
-        "get_etf_profile": "akshare,tushare,tdx,longbridge",
+        "get_etf_profile": "tushare,longbridge",
         "get_etf_intraday": "amazingdata,tushare",
         # A股资金面/事件面(仅 AmazingData 覆盖);服务离线时路由回退为 NO_DATA。
         "get_dragon_tiger": "amazingdata",

@@ -23,8 +23,8 @@ Agent (LangGraph 节点)
 ② 路由层  interface.py::route_to_vendor(method, *args, **kwargs)
    │  按类别/方法查配置 → 选定 vendor 链 → 依次尝试,带 fallback
    ▼
-③ Vendor 实现层  dataflows/{yfinance,tushare,akshare,...}.py
-      真正抓 yfinance / Tushare / AKShare / FRED / … 的数据
+③ Vendor 实现层  dataflows/{yfinance,tushare,amazingdata,eastmoney,...}.py
+      真正抓 yfinance / Tushare / AmazingData / 东财 / FRED / … 的数据
 ```
 
 - **同一逻辑方法(如 `get_stock_data`)在每个 vendor 里都有同名实现**,签名保持一致,
@@ -38,11 +38,12 @@ Agent (LangGraph 节点)
 `route_to_vendor` 是所有数据获取的唯一入口,核心约定(见
 [interface.py:304](../tradingagents/dataflows/interface.py#L304)):
 
-1. **配置即链路**:某类别配 `"tushare,akshare"` 就先试 Tushare、失败再试 AKShare。
+1. **配置即链路**:某类别配 `"eastmoney,tushare"` 就先试东财、失败再试 Tushare。
    **不会**回退到没配置的 vendor(避免跨源数据不一致)。`"default"` 表示用该方法所有
-   可用 vendor。
-2. **A 股自动路由**:A 股代码(`600519` / `600519.SS` / `sh600519` …)在未显式指定
-   Tushare/Longbridge/TDX 时,会把 AKShare 提到链首。可用 `akshare_auto_route=False` 关闭。
+   可用 vendor。写一个未注册的 vendor 名(如已停用的 `"akshare"`)会抛 `ValueError`。
+2. **没有按市场重排链的逻辑**:配置写什么顺序就是什么顺序。曾有一个 `akshare_auto_route`
+   开关会为 A 股无条件把 AKShare 提到链首,该开关与 AKShare 已一并从路由层移除
+   (见 [data-sources.md 第 7 节](./data-sources.md#7-默认链路))。
 3. **永不抛错(对 agent)**:返回的永远是字符串。遇到问题返回带前缀的「哨兵」文本,
    让 agent 如实报告「数据不可用」而不是编造数值:
 
@@ -63,19 +64,19 @@ Agent (LangGraph 节点)
 
 | 类别 | 方法 | 默认 vendor 链 | 可用 vendor |
 |---|---|---|---|
-| core_stock_apis | `get_stock_data` | amazingdata,tushare,akshare | amazingdata, alpha_vantage, yfinance, tushare, akshare |
-| technical_indicators | `get_indicators` | amazingdata,tushare,akshare | amazingdata, alpha_vantage, yfinance, tushare, akshare |
-| fundamental_data | `get_fundamentals` | amazingdata,tushare,akshare | amazingdata, alpha_vantage, yfinance, tushare, akshare |
-| fundamental_data | `get_balance_sheet` | amazingdata,tushare,akshare | 同上 |
-| fundamental_data | `get_cashflow` | amazingdata,tushare,akshare | 同上 |
-| fundamental_data | `get_income_statement` | amazingdata,tushare,akshare | 同上 |
-| news_data | `get_news` | tushare,akshare,eastmoney | alpha_vantage, yfinance, longbridge, akshare, eastmoney, tushare |
+| core_stock_apis | `get_stock_data` | amazingdata,tushare | amazingdata, alpha_vantage, yfinance, tushare |
+| technical_indicators | `get_indicators` | amazingdata,tushare | amazingdata, alpha_vantage, yfinance, tushare |
+| fundamental_data | `get_fundamentals` | amazingdata,tushare | amazingdata, alpha_vantage, yfinance, tushare |
+| fundamental_data | `get_balance_sheet` | amazingdata,tushare | 同上 |
+| fundamental_data | `get_cashflow` | amazingdata,tushare | 同上 |
+| fundamental_data | `get_income_statement` | amazingdata,tushare | 同上 |
+| news_data | `get_news` | eastmoney,tushare | alpha_vantage, yfinance, longbridge, eastmoney, tushare |
 | news_data | `get_global_news` | tushare | yfinance, alpha_vantage, tushare |
 | news_data | `get_etf_news` | tushare | tushare |
 | news_data | `get_insider_transactions` | alpha_vantage / yfinance | alpha_vantage, yfinance |
 | macro_data | `get_macro_indicators` | disabled(可选 fred) | fred |
 | prediction_markets | `get_prediction_markets` | disabled(可选 polymarket) | polymarket |
-| etf_data | `get_etf_profile` | akshare,tushare,tdx,longbridge | akshare, tushare, tdx, longbridge |
+| etf_data | `get_etf_profile` | tushare,longbridge | tushare, tdx, longbridge |
 | etf_data | `get_etf_intraday` | amazingdata,tushare | amazingdata, tushare |
 | capital_flow_data | `get_dragon_tiger` | amazingdata | amazingdata |
 | capital_flow_data | `get_margin_trading` | amazingdata | amazingdata |
@@ -238,12 +239,18 @@ Agent (LangGraph 节点)
 | `alpha_vantage` | 行情/指标/基本面/新闻/内部人交易 | 需 key |
 | `amazingdata` | A 股行情/指标/基本面/ETF 日内/资金面 | 需服务;国内默认首选 |
 | `tushare` | A 股行情/指标/基本面/新闻/ETF | 需 token |
-| `akshare` | A 股行情/指标/基本面/新闻/ETF | 免费,A 股自动路由首选 |
-| `eastmoney` | A 股/ETF 新闻 | 东方财富 |
+| `eastmoney` | A 股/ETF 新闻 | 东方财富直连;`get_news` 链首 |
 | `longbridge` | 新闻/ETF 概况 | 长桥 |
 | `tdx` | ETF 概况 | 通达信;**占位适配器,运行时恒被跳过**(仅 MCP 可用) |
 | `fred` | 美国宏观 | 需 key,默认关闭 |
 | `polymarket` | 预测市场 | 默认关闭 |
+
+> **已注销:`akshare`**(2026-09-03 全局停用)。它曾覆盖 A 股行情/指标/基本面/新闻/ETF,
+> 现已从 `VENDOR_LIST` / `VENDOR_METHODS` 移除,配置里写 `"akshare"` 会抛 `ValueError`。
+> `akshare_*.py` 模块与 `akshare` 依赖保留在仓库里供回滚。停用理由与逐方法代价见
+> [data-sources.md 第 7 节](./data-sources.md#7-默认链路)的 7.2 / 7.4。
+> 注意 `dataflows/akshare_utils.py` **不是** AKShare 的封装(代码归一化、A 股识别、
+> 代理绕过、重试、缓存),`eastmoney` vendor 等仍在用它。
 
 **候选:QMT Native Bridge** —— **未接入,不在 `VENDOR_METHODS`/`VENDOR_LIST` 里**,不能通过配置
 启用。国金 QMT 完整版客户端经 HTTP 暴露到局域网,已实测可提供当日行情快照/五档、合约详情
@@ -263,7 +270,12 @@ Agent (LangGraph 节点)
 - `data_vendors.<category>`:按**类别**指定 vendor 链,逗号分隔按序 fallback。
   可设 `disabled`/`none`/`off` 关闭该类别。
 - `tool_vendors.<method>`:按**具体方法**指定,**优先级高于**类别级配置。
-- `akshare_auto_route`(默认 `True`):A 股代码是否自动把 AKShare 提到链首。
+
+这两项就是全部 —— **没有** `disabled_vendors` 之类的全局停用开关,也没有按市场重排链的开关
+(`akshare_auto_route` 已随 AKShare 一并删除)。
+
+**该怎么排这些链**(排序原则、停用 AKShare 的逐方法代价、以及那些配置根本管不到的
+路由层外直连点)见 [data-sources.md 第 7 节](./data-sources.md#7-默认链路)。
 
 新增数据源的步骤:在对应 `dataflows/<vendor>_*.py` 实现同名方法 → 在
 `interface.py::VENDOR_METHODS` 里把它登记到相应 method 下 →(可选)加进 `VENDOR_LIST`。
@@ -283,32 +295,36 @@ Agent (LangGraph 节点)
 
 ## 8. ETF 概况字段级来源
 
-`get_etf_profile` 默认链 `akshare,tushare,tdx,longbridge` 是**首个成功即停**:
-第一个能返回可用画像的 vendor 就结束整条链。AKShare 排首是因为它对 `159241` /
-`510300` 这类境内 ETF 的画像覆盖最广(实时 IOPV、折溢价、市值、最新份额、含中文名
-的重仓)。AKShare 不可达或无数据时,依次回退 Tushare → 可选 TDX → 可选 Longbridge。
+`get_etf_profile` 默认链 `tushare,longbridge` 是**首个成功即停**:第一个能返回可用画像的
+vendor 就结束整条链。原来 AKShare 排首(它对 `159241` / `510300` 这类境内 ETF 覆盖最广:
+实时 IOPV、折溢价、市值、最新份额、含中文名的重仓),但它每次都要付 ~19 秒
+(`fund_etf_spot_em` 内部分 15 页拉全市场),2026-09-03 随全局停用一并摘掉;
+恒被跳过的 `tdx` 占位档也同时从默认链里去掉(`tdx` 仍是合法 vendor,可手工配)。
+
+现在 Tushare 是唯一实际生效的档:ETF 基本信息 + **T+1** 的 OHLCV/净值/复权 + 季度披露持仓。
+**实时 IOPV / 折溢价率现在没有任何源**,基金份额、重仓成分的中文名也随之丢失。
 
 各 vendor 的字段能力差异很大,未来更丰富的实现可能改为**逐字段 merge**;当前仍是
-first-success。字段级偏好参考:
+first-success。字段级偏好参考(「通达信 MCP」是 MCP 侧实测结论,`tdx` vendor 本身是占位适配器):
 
 | 字段 | 首选来源 | 回退 | 备注 |
 | --- | --- | --- | --- |
-| ETF 名称/全称/交易所 | Tushare `fund_basic` | AKShare、Longbridge 静态、通达信 MCP | Tushare 返回结构化 `ts_code`、名称、交易所/上市字段。 |
-| 跟踪指数 | Tushare `fund_basic` benchmark | AKShare/新闻文本 | Tushare 是当前最干净的指数基准元数据源。 |
-| 管理人/托管人/费率 | Tushare `fund_basic` | AKShare | 静态参考数据。 |
-| 最新价 | 通达信 MCP | AKShare、Tushare 付费 ETF 实时/日线 | 测试中通达信 MCP 能返回当前 ETF 价格字段。 |
-| 涨跌/涨跌幅 | 通达信 MCP | AKShare、Tushare 付费实时/日线 | 快照字段。 |
-| 成交量/成交额 | 通达信 MCP | AKShare、Tushare 付费实时/日线 | 快照字段。 |
-| 换手率/市值 | 通达信 MCP | AKShare | 通达信 MCP 返回换手与市值字段。 |
-| NAV / 最新净值 | Tushare `fund_nav`、通达信 MCP | AKShare | Tushare 对配置 token 返回 T+1 净值。 |
-| 累计净值 | 通达信 MCP | AKShare | 测试中通达信 MCP 返回。 |
-| 折溢价率 | 通达信 MCP | AKShare | 通达信 MCP 返回 `溢价率(%)`;AKShare 为回退。 |
-| 基金规模 | 通达信 MCP | AKShare、Tushare(可得时) | 快照/派生字段。 |
-| 基金份额 | AKShare | 通达信 MCP、Tushare(可得时) | 快照/派生字段。 |
-| 申赎状态 | 通达信 MCP | AKShare | 通达信 MCP 返回 `申赎状态`。 |
-| IOPV | AKShare | Tushare ETF 实时参考(付费权限) | 测试中通达信 MCP 未返回 IOPV。 |
-| 重仓/前十成分 | 名称用 AKShare,稳定披露用 Tushare `fund_portfolio` | 通达信 MCP 部分 | Tushare 返回代码/比例/市值;AKShare 在当前画像输出里返回名称。 |
-| 申赎篮子 | Tushare 付费 ETF 权限(可得时) | AKShare/交易所手工数据 | 当前凭证未确认。 |
+| ETF 名称/全称/交易所 | Tushare `fund_basic` | Longbridge 静态、通达信 MCP | Tushare 返回结构化 `ts_code`、名称、交易所/上市字段。 |
+| 跟踪指数 | Tushare `fund_basic` benchmark | 新闻文本 | Tushare 是当前最干净的指数基准元数据源。 |
+| 管理人/托管人/费率 | Tushare `fund_basic` | — | 静态参考数据。 |
+| 最新价 | 通达信 MCP | Tushare 付费 ETF 实时/日线 | 测试中通达信 MCP 能返回当前 ETF 价格字段。 |
+| 涨跌/涨跌幅 | 通达信 MCP | Tushare 付费实时/日线 | 快照字段。 |
+| 成交量/成交额 | 通达信 MCP | Tushare 付费实时/日线 | 快照字段。 |
+| 换手率/市值 | 通达信 MCP | — | 通达信 MCP 返回换手与市值字段。 |
+| NAV / 最新净值 | Tushare `fund_nav`、通达信 MCP | — | Tushare 对配置 token 返回 T+1 净值。 |
+| 累计净值 | 通达信 MCP | — | 测试中通达信 MCP 返回。 |
+| 折溢价率 | 通达信 MCP | ⚠️ **无回退**(原回退 AKShare 已停用) | 通达信 MCP 返回 `溢价率(%)`。 |
+| 基金规模 | 通达信 MCP | Tushare(可得时) | 快照/派生字段。 |
+| 基金份额 | ⚠️ **当前无源**(原为 AKShare) | 通达信 MCP、Tushare(可得时) | 快照/派生字段。 |
+| 申赎状态 | 通达信 MCP | — | 通达信 MCP 返回 `申赎状态`。 |
+| IOPV | ⚠️ **当前无源**(原为 AKShare) | Tushare ETF 实时参考(付费权限) | 测试中通达信 MCP 未返回 IOPV;腾讯 `qt.gtimg.cn` 实测有,但未接入(见 data-sources.md 8.1)。 |
+| 重仓/前十成分 | Tushare `fund_portfolio`(代码/比例/市值) | 通达信 MCP 部分 | 原先 AKShare 负责补中文名,该兜底已删除,现在只有代码。 |
+| 申赎篮子 | Tushare 付费 ETF 权限(可得时) | 交易所手工数据 | 当前凭证未确认。 |
 
 **候选补位:QMT Native Bridge**(未接入,见第 5 节与
 [data-sources.md 第 9 节](./data-sources.md#9-qmt-native-bridge未接入已实测))。
@@ -319,9 +335,10 @@ first-success。字段级偏好参考:
   `componentVolume`,还带现金替代标志(允许 179 / 必须 121)与替代比例。
   ⚠️ 其中 **21 只 `componentVolume = 0`**(全现金替代),别当缺失值丢掉。
 - **NAV / navPerCU / 最小申赎单位 / 申赎状态 / 申赎上限 / 现金余额与现金替代比例上限**。
+- 顺带补上停用 AKShare 丢掉的**全量成分**(但只有代码/份数,中文名仍缺)。
 
 **不能补**的字段(桥不返回,仍需现有链):IOPV、基金规模、基金份额、跟踪指数、管理人/托管人/费率、
-累计净值。**折溢价率可自算**(`lastPrice / nav - 1`,实测 +0.15%),但 `tradingDay` 与
+累计净值 —— 其中 **IOPV 与基金份额现在整个项目都没有源**(见上表)。**折溢价率可自算**(`lastPrice / nav - 1`,实测 +0.15%),但 `tradingDay` 与
 `preTradingDay` 都返回 `0`,**`nav` 是哪天的净值这个接口自己说不清** —— 用之前必须先定口径。
 
 所以它的定位是**逐字段 merge 的补位源**,而不是 first-success 链上的又一个 vendor:
@@ -355,7 +372,7 @@ range = "JJ"
 
 ## 9. 新闻源选型
 
-`get_news`(默认 `tushare,akshare,eastmoney`)当前支持的 vendor 角色:
+`get_news`(默认 `eastmoney,tushare`)当前支持的 vendor 角色:
 
 | 来源 | 建议角色 | 覆盖 | 备注 |
 | --- | --- | --- | --- |
@@ -364,7 +381,7 @@ range = "JJ"
 | Tushare `anns_d` | 结构化公告 | 上市公司公告(带 PDF URL) | 适合 A 股事实性事件。 |
 | Tushare `idx_anns` | ETF/指数相关公告 | 指数公司公告 | 对 ETF 跟踪指数变更有用。 |
 | WebSearch | 低成本补充源 | 近期新闻、基金公司/交易所页面、媒体报道 | 必须保留源 URL 与日期过滤;适合近期分析而非严格历史回测。 |
-| AKShare / East Money | 中文回退 | 东方财富个股新闻 | 免费本地化;上游抓取可能不稳定。 |
+| East Money 直连(`eastmoney`) | **链首**,中文个股新闻 | 东方财富 `search-api-web` 个股新闻 | 免费本地化;直连无库层,但受东财按 IP 限频影响。⚠️ 下一档 Tushare 快讯也读东财,这条链**不覆盖东财自身故障**。 |
 | 通达信 MCP | 当前不建议用于 `get_news` | 查询返回空行或仅报价行 | `tdx_wenda_quotes` 未返回结构化新闻/公告标题正文。 |
 | QMT Native Bridge | **不可用于任何新闻方法** | 无 | 桥的 109 条路由里**没有新闻/公告能力** —— 不是权限或 501 的问题,是根本不在它的 API 形状里。它只覆盖行情/合约/板块/日历/ETF/交易。 |
 
@@ -387,7 +404,8 @@ Codex 会话中与行情数据相关的 MCP 命名空间:
 
 | 来源 | 所需配置 | 当前状态 |
 | --- | --- | --- |
-| AKShare | Python 包 + 直连境内公共源 | 已实现;上游不稳,有代理绕过与重试。 |
+| AKShare | Python 包 + 直连境内公共源 | **已全局停用**(2026-09-03 从路由注销);模块文件保留供回滚。 |
+| East Money 直连 | 无(公开接口) | 已实现;`get_news` 链首,复用 `akshare_utils` 的代理绕过与重试。 |
 | Tushare | `TUSHARE_TOKEN` + 端点级付费权限 | 已实现行情/指标/基本面/ETF 画像回退;测试中新闻权限不可用。 |
 | 通达信 MCP | `tdx` MCP server + `tdx-api-key` header | Codex 会话可用;代码侧为 ETF 画像回退的「配置即跳过」占位适配器。 |
 | WebSearch | 搜索 provider + 源抽取 | 未实现为 code vendor;适合作 `get_news` 补充。 |

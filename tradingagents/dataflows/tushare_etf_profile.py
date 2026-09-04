@@ -1,9 +1,10 @@
 """Tushare-backed ETF profile fallback.
 
 This intentionally reuses the existing Tushare fund fundamentals report rather
-than inventing a second Tushare shape. It gives the router a stable fallback for
-ETF basics, T+1 OHLCV/NAV/adjustment data, and quarterly holdings when AKShare's
-real-time ETF snapshot is unreachable.
+than inventing a second Tushare shape. It gives the router ETF basics, T+1
+OHLCV/NAV/adjustment data, and quarterly holdings. Note the T+1 shape: there is
+no real-time IOPV / discount-premium here, and no vendor supplies one since
+AKShare was removed from routing.
 """
 
 from __future__ import annotations

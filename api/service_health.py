@@ -423,29 +423,10 @@ _DATA_SERVICES = {
         "name": "AmazingData 本地服务",
         "probe": "amazingdata",
     },
-    "akshare": {
-        "name": "AKShare",
-        "url": "https://push2.eastmoney.com/api/qt/stock/get",
-        "params": {"secid": "1.000001", "fields": "f43"},
-        "env": None,
-        "freshness": {
-            "url": "https://push2his.eastmoney.com/api/qt/stock/kline/get",
-            "params": {
-                "secid": "1.000001",
-                "klt": "101",
-                "fqt": "1",
-                "lmt": "1",
-                "end": "20500101",
-                "fields1": "f1,f2,f3,f4,f5,f6",
-                "fields2": "f51,f52,f53,f54,f55,f56",
-            },
-        },
-    },
     "eastmoney": {
-        # East Money direct-search news fallback (search-api-web), probed
-        # separately from AKShare: this endpoint needs a browser UA + Referer,
-        # and it can be up while the AKShare library layer is broken (or vice
-        # versa). See eastmoney_news.get_news.
+        # East Money direct-search news (search-api-web). Needs a browser UA +
+        # Referer, so it gets its own probe rather than sharing the push2 quote
+        # domain's. See eastmoney_news.get_news.
         "name": "Eastmoney 直连",
         "url": "https://search-api-web.eastmoney.com/search/jsonp",
         "params": {

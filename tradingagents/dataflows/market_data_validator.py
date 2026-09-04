@@ -16,7 +16,6 @@ from collections.abc import Iterable
 import pandas as pd
 from stockstats import wrap
 
-from tradingagents.dataflows.akshare_indicator import _load_akshare_ohlcv
 from tradingagents.dataflows.akshare_utils import is_a_share
 from tradingagents.dataflows.amazingdata_indicator import (
     _load_ohlcv as _load_amazingdata_ohlcv,
@@ -44,7 +43,6 @@ def _load_mainland_ohlcv(symbol: str, curr_date: str) -> tuple[pd.DataFrame, str
     loaders = (
         ("AmazingData", _load_amazingdata_ohlcv),
         ("Tushare", _load_tushare_ohlcv),
-        ("AKShare", _load_akshare_ohlcv),
     )
     failures = []
     for source, loader in loaders:
@@ -64,15 +62,15 @@ def _load_mainland_ohlcv(symbol: str, curr_date: str) -> tuple[pd.DataFrame, str
 
     raise SnapshotVendorChainError(
         "All verified snapshot sources failed in order "
-        f"AmazingData -> Tushare -> AKShare ({'; '.join(failures)})"
+        f"AmazingData -> Tushare ({'; '.join(failures)})"
     )
 
 
 def _verified_rows(symbol: str, curr_date: str) -> tuple[pd.DataFrame, str]:
     """OHLCV on or before curr_date, date-sorted. Raises if nothing usable.
 
-    Mainland instruments use the fixed AmazingData -> Tushare -> AKShare
-    verification chain. Other markets keep the existing Yahoo-backed loader.
+    Mainland instruments use the fixed AmazingData -> Tushare verification
+    chain. Other markets keep the existing Yahoo-backed loader.
     Every loader already filters look-ahead rows, but we re-apply the cutoff
     defensively because this verification path must not trust its input.
     """

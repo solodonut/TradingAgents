@@ -32,14 +32,14 @@ class CapturingLLM:
 @pytest.mark.unit
 def test_default_config_uses_domestic_china_data_sources_only():
     assert DEFAULT_CONFIG["domestic_china_only"] is True
-    assert DEFAULT_CONFIG["data_vendors"]["core_stock_apis"] == "amazingdata,tushare,akshare"
-    assert DEFAULT_CONFIG["data_vendors"]["technical_indicators"] == "amazingdata,tushare,akshare"
-    assert DEFAULT_CONFIG["data_vendors"]["fundamental_data"] == "amazingdata,tushare,akshare"
-    assert DEFAULT_CONFIG["data_vendors"]["news_data"] == "akshare,longbridge"
-    assert DEFAULT_CONFIG["tool_vendors"]["get_news"] == "tushare,akshare,eastmoney"
+    assert DEFAULT_CONFIG["data_vendors"]["core_stock_apis"] == "amazingdata,tushare"
+    assert DEFAULT_CONFIG["data_vendors"]["technical_indicators"] == "amazingdata,tushare"
+    assert DEFAULT_CONFIG["data_vendors"]["fundamental_data"] == "amazingdata,tushare"
+    assert DEFAULT_CONFIG["data_vendors"]["news_data"] == "eastmoney,tushare"
+    assert DEFAULT_CONFIG["tool_vendors"]["get_news"] == "eastmoney,tushare"
     assert DEFAULT_CONFIG["tool_vendors"]["get_etf_news"] == "tushare"
     assert DEFAULT_CONFIG["tool_vendors"]["get_global_news"] == "tushare"
-    assert DEFAULT_CONFIG["tool_vendors"]["get_etf_profile"] == "akshare,tushare,tdx,longbridge"
+    assert DEFAULT_CONFIG["tool_vendors"]["get_etf_profile"] == "tushare,longbridge"
     assert DEFAULT_CONFIG["data_vendors"]["macro_data"] == "disabled"
     assert DEFAULT_CONFIG["data_vendors"]["prediction_markets"] == "disabled"
 

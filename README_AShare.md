@@ -1,6 +1,16 @@
 # TradingAgents A 股支持（AKShare 集成）
 
-本文档说明如何在 TradingAgents 中分析中国 A 股（沪深京）。A 股数据通过新增的
+> **状态：AKShare 已全局停用。** 它已从 `VENDOR_LIST` / `VENDOR_METHODS` 注销，
+> 路由层之外的旁路（自动路由开关、`stockstats_utils` 的 A 股分支、`tushare_etf_news`
+> 的持仓兜底、`ticker_name` 的名称查询、健康检查探针）也一并移除。现在 A 股数据走
+> **AmazingData → Tushare**（行情/指标/财务）、**Eastmoney → Tushare**（新闻）、
+> **Tushare → Longbridge**（ETF 档案）。`akshare_*.py` 模块文件与 `akshare` 依赖
+> 保留在仓库里，回滚只需重新注册。已知损失：实时 ETF IOPV / 折溢价率没有替代源。
+>
+> 以下第 3–6 节描述的是 AKShare 集成**当时**的形态，仅作回滚参考；第 1、2、7、9–11 节
+> 与数据源无关，仍然有效。
+
+本文档说明如何在 TradingAgents 中分析中国 A 股（沪深京）。A 股数据曾通过新增的
 **AKShare** vendor 提供，覆盖行情、技术指标、财务报表和公司新闻，全部免费、无需 token。
 
 > 本功能为研究用途，非投资建议。
@@ -78,26 +88,22 @@ python -m cli.main            # 或从源码运行
 
 ---
 
-## 4. 自动路由
+## 4. 自动路由（已移除）
 
-默认开启（`akshare_auto_route = True`）。当请求的 ticker 是 A 股时，price /
-indicator / fundamental / news 调用会**优先**走 AKShare，无论 `data_vendors`
-怎么配；非 A 股 ticker 不受影响。原有 vendor 仍作为回退链保留。
+曾有一个 `akshare_auto_route` 开关（默认 True）：请求的 ticker 是 A 股时，price /
+indicator / fundamental / news 调用会**无条件**把 akshare 插到链首，无论 `data_vendors`
+怎么配 —— 这也正是「只改配置无法禁用 AKShare」的原因。该开关及其分支已删除，现在
+**配置写什么就是什么**，不存在任何按市场重排 vendor 链的逻辑。
 
-关闭自动路由（让所有市场都遵循 `data_vendors` 配置）：
-
-```python
-config = DEFAULT_CONFIG.copy()
-config["akshare_auto_route"] = False
-```
-
-也可把 AKShare 设为某类数据的默认 vendor：
+`"akshare"` 也不再是合法的 vendor 值：写进 `data_vendors` / `tool_vendors` 会让
+`route_to_vendor()` 抛 `ValueError`（未知 vendor），而不是静默回退。当前 A 股默认链见
+`default_config.py`：
 
 ```python
-config["data_vendors"]["fundamental_data"] = "akshare"
-config["data_vendors"]["core_stock_apis"] = "akshare"
-config["data_vendors"]["technical_indicators"] = "akshare"
-# news_data 也支持 "akshare"
+config["data_vendors"]["core_stock_apis"] = "amazingdata,tushare"
+config["data_vendors"]["technical_indicators"] = "amazingdata,tushare"
+config["data_vendors"]["fundamental_data"] = "amazingdata,tushare"
+config["data_vendors"]["news_data"] = "eastmoney,tushare"
 ```
 
 ---
@@ -157,8 +163,8 @@ A 股的 alpha 计算基准已内置于 `default_config.py` 的 `benchmark_map`�
 
 修改：
 
-- `tradingagents/dataflows/interface.py` — 注册 akshare vendor + 自动路由
-- `tradingagents/default_config.py` — `akshare_auto_route` 开关 + vendor 选项说明
+- `tradingagents/dataflows/interface.py` — 注册 akshare vendor + 自动路由（两者均已移除）
+- `tradingagents/default_config.py` — `akshare_auto_route` 开关（已删除）+ vendor 选项说明
 - `tradingagents/llm_clients/anthropic_client.py` — ICA Anthropic Messages 客户端
 - `tradingagents/llm_clients/factory.py` — 注册 `ibm_ica` 原生协议 provider
 - `tradingagents/llm_clients/api_key_env.py` — `ibm_ica` → `IBM_ICA_API_KEY`
@@ -166,7 +172,11 @@ A 股的 alpha 计算基准已内置于 `default_config.py` 的 `benchmark_map`�
 - `tradingagents/llm_clients/validators.py` — `ibm_ica` 接受任意模型名
 - `cli/utils.py` — CLI provider 菜单加入 IBM ICA
 
-依赖：`akshare`（已加入环境，安装：`pip install akshare`）。
+依赖：`akshare`（仍列在 `pyproject.toml` 里，供回滚用；当前没有任何路由路径调用它）。
+
+注意 `akshare_utils.py` **不是** AKShare 的封装 —— 它只用 `requests`（代码归一化、
+A 股识别、代理绕过、重试、缓存），`eastmoney_news` / `ticker_name` /
+`market_data_validator` / `api/run_worker.py` 仍在用，不可删除。
 
 ---
 

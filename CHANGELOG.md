@@ -72,6 +72,31 @@ Breaking changes within the 0.x line are called out explicitly.
   股票基本面 / 参考·与 ETF 无关 三区展示,先按总数铺骨架再逐格变色;新增只读模块
   `tradingagents/dataflows/diagnostics.py`。
 
+### Removed
+
+- **AKShare 全局停用,从 vendor 路由层彻底移除。** 它从 `VENDOR_LIST` / `VENDOR_METHODS`
+  注销(8 处 `"akshare"` 注册全删),配置里再写 `"akshare"` 会抛 `ValueError` 而不是静默回退。
+  默认链随之改为 `amazingdata,tushare`(行情/指标/三表/`get_fundamentals`)、
+  `eastmoney,tushare`(`news_data` 与 `get_news`)、`tushare,longbridge`(`get_etf_profile`)。
+  **只删链是不够的**,所以同时切断了 5 条配置管不到的旁路:`akshare_auto_route` 开关及其
+  「A 股无条件把 akshare prepend 到链首」的分支(它不检查 akshare 在不在配置的链里,
+  因此以前把某条链改成不含 tushare 就会让 AKShare 重新回到链首)、
+  `stockstats_utils._load_ohlcv_akshare` 的 A 股分支、`market_data_validator` 硬编码验证链的
+  第三档、`ticker_name._akshare_name` 中文名档(现 `tushare → yfinance`)、
+  `tushare_etf_news._fetch_akshare_holdings`(藏在 tushare vendor **内部**的持仓兜底 ——
+  在此之前 `get_etf_news: "tushare"` 并不是纯 Tushare),外加 `api/service_health.py` 的
+  AKShare 探针卡。顺带采纳了两条链序建议:`get_news` 把 `eastmoney` 提到 `tushare` 之前
+  (两者本就同源东财,实测返回同一条新闻),`get_etf_profile` 去掉恒被跳过的 `tdx` 占位档。
+  **主要动因是性能**:AKShare 唯一的失败域是东财 `push2`/`push2his` 行情域,而
+  `get_etf_profile` 每次要付 ~19 秒(`fund_etf_spot_em` 内部分 15 页拉全市场 1587 只再筛 1 行)。
+  **已知损失**:实时 ETF IOPV / 折溢价率**没有任何替代源**,另丢基金份额、重仓成分中文名、
+  以及深度历史报表(AKShare 一次给全部 99–103 个报告期,Tushare 只给配置窗口)。
+  `akshare_*.py` 模块与 `pyproject.toml` 的 `akshare` 依赖**保留**,回滚只需重新注册;
+  注意 `akshare_utils.py` **不是** AKShare 的封装(纯 `requests`:代码归一化、A 股识别、
+  代理绕过、重试、缓存、endpoint 熔断),`eastmoney_news` / `ticker_name` /
+  `market_data_validator` / `api/run_worker.py` 仍在用。没有新增 `disabled_vendors` 全局开关。
+  完整决策依据与逐方法代价见 [docs/data-sources.md](docs/data-sources.md) 第 7 节。
+
 ### Changed
 
 - **A股/ETF 已验证市场快照改为 `AmazingData → Tushare → AKShare` 固定回退链。**

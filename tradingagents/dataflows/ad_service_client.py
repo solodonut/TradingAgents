@@ -2,7 +2,7 @@
 
 从 ad-api skill 原样复制而来(仅依赖标准库 urllib,自包含,无需额外安装)。
 服务在跑时优先用它取数(经本地 HTTP 复用登录态,不占用 AmazingData 单点登录);
-不在跑时调用方应回退到其他 vendor(tushare/akshare)。
+不在跑时调用方应回退到其他 vendor(tushare)。
 
 读取环境变量 AD_API_TOKEN、AD_API_PORT(默认 8888);也可用 AD_API_BASE 覆盖 base。
 """

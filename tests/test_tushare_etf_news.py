@@ -24,7 +24,6 @@ def test_get_etf_news_renders_sections_limits_and_dedupes(monkeypatch):
         {"symbol": "300750.SZ", "stk_mkv_ratio": 2.9, "stk_name": "宁德时代", "end_date": "20260331"},
         {"symbol": "601398.SH", "stk_mkv_ratio": 2.4, "stk_name": "工商银行", "end_date": "20260331"},
     ]))
-    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
 
     def fake_stock_news(symbol, start_date, end_date):
         if symbol == "510300.SH":
@@ -67,7 +66,6 @@ def test_get_etf_news_degrades_when_holdings_unavailable(monkeypatch):
         {"ts_code": ts_code, "name": "半导体ETF", "benchmark": ""}
     ]))
     monkeypatch.setattr(tushare_etf_news, "_fetch_fund_portfolio", mock.Mock(side_effect=Exception("down")))
-    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
     monkeypatch.setattr(
         tushare_etf_news.tushare_news,
         "get_news",
@@ -97,7 +95,6 @@ def test_get_etf_news_one_holding_failure_continues(monkeypatch):
         {"symbol": "600519.SH", "stk_mkv_ratio": 5.2, "stk_name": "贵州茅台", "end_date": "20260331"},
         {"symbol": "601318.SH", "stk_mkv_ratio": 4.1, "stk_name": "中国平安", "end_date": "20260331"},
     ]))
-    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
     monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame())
 
     def fake_stock_news(symbol, *args):
@@ -127,7 +124,6 @@ def test_get_etf_news_uses_latest_disclosed_quarter_once_per_holding(monkeypatch
         {"symbol": "600519.SH", "stk_mkv_ratio": 5.20, "stk_name": "贵州茅台", "end_date": "20260331"},
         {"symbol": "601318.SH", "stk_mkv_ratio": 7.62, "stk_name": "中国平安", "end_date": "20251231"},
     ]))
-    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
     monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame())
     monkeypatch.setattr(
         tushare_etf_news.tushare_news,
@@ -161,7 +157,6 @@ def test_get_etf_news_backfills_names_and_normalizes_shanghai_suffix(monkeypatch
         {"symbol": "600519.SH", "mkv": 100, "stk_mkv_ratio": 3.74, "end_date": "20260331"},
         {"symbol": "300750.SZ", "mkv": 90, "stk_mkv_ratio": 4.37, "end_date": "20260331"},
     ]))
-    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
     monkeypatch.setattr(tushare_etf_news, "resolve_ticker_name", lambda sym: {
         "600519.SS": "贵州茅台",
         "300750.SZ": "宁德时代",
@@ -203,7 +198,6 @@ def test_get_etf_news_generic_flash_titles_not_collapsed_across_holdings(monkeyp
         {"symbol": "600519.SH", "stk_mkv_ratio": 3.74, "stk_name": "贵州茅台", "end_date": "20260331"},
         {"symbol": "300750.SZ", "stk_mkv_ratio": 4.37, "stk_name": "宁德时代", "end_date": "20260331"},
     ]))
-    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", lambda *a, **k: [])
     monkeypatch.setattr(tushare_etf_news, "resolve_ticker_name", lambda sym: None)
     # Theme flash: empty title → renders as generic `### 快讯`, seeding the key.
     monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame([
@@ -247,7 +241,6 @@ def test_get_etf_news_static_profile_skips_metadata_fetch(monkeypatch):
 
     monkeypatch.setattr(tushare_etf_news, "_fetch_fund_basic", _boom)
     monkeypatch.setattr(tushare_etf_news, "_fetch_fund_portfolio", _boom)
-    monkeypatch.setattr(tushare_etf_news, "_fetch_akshare_holdings", _boom)
     monkeypatch.setattr(tushare_etf_news.tushare_news, "_fetch_flash", lambda *a, **k: pd.DataFrame([
         {"datetime": "2026-07-06 09:00:00", "title": "沪深300走强", "content": "沪深300指数上涨"},
     ]))

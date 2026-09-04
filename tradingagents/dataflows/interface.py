@@ -5,17 +5,6 @@ import requests
 
 from tradingagents.obs.run_logger import get_current_run_logger
 
-from .akshare_fundamentals import (
-    get_akshare_etf_profile,
-    get_balance_sheet as get_akshare_balance_sheet,
-    get_cashflow as get_akshare_cashflow,
-    get_fundamentals as get_akshare_fundamentals,
-    get_income_statement as get_akshare_income_statement,
-)
-from .akshare_indicator import get_indicators as get_akshare_indicators
-from .akshare_news import get_news as get_akshare_news
-from .akshare_stock import get_stock_data as get_akshare_stock
-from .akshare_utils import is_a_share as _is_a_share_symbol
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
     get_cashflow as get_alpha_vantage_cashflow,
@@ -166,7 +155,6 @@ VENDOR_LIST = [
     "alpha_vantage",
     "amazingdata",
     "tushare",
-    "akshare",
     "eastmoney",
     "longbridge",
     "tdx",
@@ -185,7 +173,6 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
         "tushare": get_tushare_stock,
-        "akshare": get_akshare_stock,
     },
     # technical_indicators
     "get_indicators": {
@@ -193,7 +180,6 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
         "tushare": get_tushare_indicators,
-        "akshare": get_akshare_indicators,
     },
     # fundamental_data
     "get_fundamentals": {
@@ -201,35 +187,30 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
         "tushare": get_tushare_fundamentals,
-        "akshare": get_akshare_fundamentals,
     },
     "get_balance_sheet": {
         "amazingdata": get_amazingdata_balance_sheet,
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
         "tushare": get_tushare_balance_sheet,
-        "akshare": get_akshare_balance_sheet,
     },
     "get_cashflow": {
         "amazingdata": get_amazingdata_cashflow,
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
         "tushare": get_tushare_cashflow,
-        "akshare": get_akshare_cashflow,
     },
     "get_income_statement": {
         "amazingdata": get_amazingdata_income_statement,
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
         "tushare": get_tushare_income_statement,
-        "akshare": get_akshare_income_statement,
     },
     # news_data
     "get_news": {
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
         "longbridge": get_longbridge_news,
-        "akshare": get_akshare_news,
         "eastmoney": get_eastmoney_news,
         "tushare": get_tushare_news,
     },
@@ -255,7 +236,6 @@ VENDOR_METHODS = {
     },
     # etf_data
     "get_etf_profile": {
-        "akshare": get_akshare_etf_profile,
         "tushare": get_tushare_etf_profile,
         "tdx": get_tdx_etf_profile,
         "longbridge": get_longbridge_etf_profile,
@@ -336,26 +316,9 @@ def route_to_vendor(method: str, *args, **kwargs):
     else:
         vendor_chain = all_available_vendors
 
-    # A-share auto-routing: when the requested symbol is a mainland A-share
-    # (600519, 600519.SS, sh600519, ...) and AKShare implements this method,
-    # try AKShare first for legacy Yahoo/Alpha Vantage chains. Explicit chains
-    # that include Tushare keep their configured order, so the production
-    # default "tushare,akshare" tries Tushare first and falls back to AKShare
-    # while the Tushare implementation is still a placeholder. Disable with
-    # config ``akshare_auto_route = False``.
-    config = get_config()
-    explicit_vendor_names = {v.lower() for v in explicit}
-    if (
-        config.get("akshare_auto_route", True)
-        and "akshare" in VENDOR_METHODS[method]
-        and "tushare" not in explicit_vendor_names
-        and "longbridge" not in explicit_vendor_names
-        and "tdx" not in explicit_vendor_names
-    ):
-        symbol = args[0] if args else kwargs.get("symbol") or kwargs.get("ticker")
-        if isinstance(symbol, str) and _is_a_share_symbol(symbol):
-            vendor_chain = ["akshare"] + [v for v in vendor_chain if v != "akshare"]
-
+    # No per-market vendor reordering: the configured chain is the chain. AKShare
+    # used to be prepended here for mainland A-shares, but it is fully removed
+    # from routing now — mainland coverage comes from AmazingData -> Tushare.
     _run_logger = get_current_run_logger()
     _t0 = time.time()
 

@@ -153,7 +153,7 @@ export function ConfigCard({
     return () => clearTimeout(handle);
   }, [tickers, tickersLoaded]);
 
-  // 加载后给名称为空的项补查一次：A 股/ETF 名称走 AKShare，首次因冷缓存可能超时返回空，
+  // 加载后给名称为空的项补查一次：A 股/ETF 名称走 Tushare，首次因冷缓存可能超时返回空，
   // 缓存预热后再次打开页面即自愈。只在 loaded 翻转时跑一次，避免每次清单变化都重查。
   useEffect(() => {
     if (!tickersLoaded) return;

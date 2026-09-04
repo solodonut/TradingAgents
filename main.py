@@ -12,7 +12,7 @@ config = DEFAULT_CONFIG.copy()
 ta = TradingAgentsGraph(debug=True, config=config)
 
 # forward propagate
-# A股案例 159241.SZ（航空航天ETF天弘），经 akshare_auto_route 自动走 AKShare。
+# A股案例 159241.SZ（航空航天ETF天弘），走默认的 AmazingData → Tushare vendor 链。
 _, decision = ta.propagate("159241.SZ", "2026-06-12")
 print(decision)
 

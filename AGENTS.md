@@ -50,8 +50,12 @@ package + Typer CLI + FastAPI backend (`api/`) + Next.js frontend (`webui/`).
   All data goes through `dataflows/interface.py::route_to_vendor()`, which returns a
   `NO_DATA_AVAILABLE: ...` sentinel string (never raises) so agents report
   unavailability instead of fabricating values. Add a source by registering it in
-  `VENDOR_METHODS`. Vendors: yfinance, Alpha Vantage, AKShare (auto-routed for
-  China A-shares `.SS`/`.SZ`), FRED, Polymarket, StockTwits, Reddit.
+  `VENDOR_METHODS`. Vendors: yfinance, Alpha Vantage, AmazingData, Tushare,
+  Eastmoney, Longbridge, TDX, FRED, Polymarket, StockTwits, Reddit. **AKShare is
+  globally disabled** — unregistered from `VENDOR_LIST`/`VENDOR_METHODS`, and no
+  per-market reordering exists any more (the configured chain is the chain). The
+  `akshare_*.py` modules stay on disk for rollback; `akshare_utils.py` is not an
+  AKShare wrapper (proxy bypass, retry, cache, symbol helpers) and is still used.
 - **LLM access**: all instantiation goes through `llm_clients/factory.py::create_llm_client()`.
   `llm_clients/model_catalog.py` (`MODEL_OPTIONS`) is the single registry for CLI
   dropdowns and model validation — add new providers/models there. `openai_client.py`

@@ -1,22 +1,20 @@
-"""East Money direct-search A-share news — same-source fallback for AKShare.
+"""East Money direct-search A-share news — the primary A-share news vendor.
 
-``akshare.stock_news_em`` is a thin wrapper over East Money's public search
-endpoint (``search-api-web.eastmoney.com``). AKShare breaks at the *library*
-level far more often than East Money goes down: an interface rename, a pandas
-parse change, a version drift. When that happens the underlying source is still
-alive, so this module talks to the endpoint directly and lets the router fall
-through from ``akshare`` to ``eastmoney`` without losing Chinese company/ETF
-news.
+``akshare.stock_news_em`` was a thin wrapper over East Money's public search
+endpoint (``search-api-web.eastmoney.com``), and it broke at the *library* level
+far more often than East Money went down: an interface rename, a pandas parse
+change, a version drift. This module talks to the endpoint directly, so it has
+no library layer to break. AKShare is now fully removed from routing and this is
+the head of the ``get_news`` chain.
 
 It mirrors the public contract of ``akshare_news.get_news`` exactly — same
 arguments, same ``## <label> News`` output shape, same look-ahead-safe window,
 the same ``NoMarketDataError`` for non-A-shares and ``Error fetching news``
 sentinel on failure — so ``route_to_vendor`` swaps vendors transparently.
 
-Because it hits the *same backend* as AKShare, it only covers library-level
-AKShare failures, not an East Money outage — the two fail together when the
-source itself is down. A genuinely different source (Sina, CCTV, ...) is what
-covers that case.
+The next vendor in the chain (Tushare 快讯) also reads East Money among its
+sources, so the chain does not cover an East Money outage itself. A genuinely
+different source (Sina, CCTV, ...) is what would cover that case.
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ into prompts, never persisted. This one-off script fills the new
    ``result_json`` (fast, offline).
 2. If that yields nothing (older runs stored only a ticker-only context),
    fall back to resolving the name live via ``resolve_instrument_identity``
-   — the same path the live pipeline uses (AKShare for A-shares, yfinance
+   — the same path the live pipeline uses (Tushare for A-shares, yfinance
    otherwise, subject to ``domestic_china_only``).
 
 Best-effort throughout: unresolvable rows are simply left blank.
@@ -52,7 +52,7 @@ def main() -> int:
         print(f"No database at {DB_PATH}; nothing to backfill.")
         return 0
 
-    set_config(DEFAULT_CONFIG.copy())  # make AKShare / yfinance routing match the live pipeline
+    set_config(DEFAULT_CONFIG.copy())  # make Tushare / yfinance routing match the live pipeline
     store = Store(DB_PATH)  # runs the ALTER TABLE migration if needed
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row

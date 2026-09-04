@@ -37,7 +37,8 @@ def get_verified_market_snapshot(
     """
     # This is an agent-facing tool, so it must honor the data layer's
     # "never raises" contract (see dataflows/interface.py::route_to_vendor).
-    # The underlying fetch (load_ohlcv -> AKShare/yfinance) can raise a
+    # The underlying fetch (AmazingData/Tushare for mainland, load_ohlcv ->
+    # yfinance elsewhere) can raise a
     # transient network error (East Money RemoteDisconnected), NoMarketDataError
     # (no/stale rows), or ValueError (no rows on/before the date). If any of
     # those escaped this tool they would propagate through the LangGraph

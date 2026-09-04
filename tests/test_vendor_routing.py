@@ -111,19 +111,28 @@ class VendorRoutingTests(unittest.TestCase):
             result = interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
         self.assertEqual(result, "AV_DATA")
 
-    def test_explicit_tushare_chain_is_not_reordered_by_akshare_auto_route(self):
-        set_config({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+    def test_akshare_is_fully_unregistered(self):
+        # AKShare is globally disabled: it must not be selectable by any config,
+        # and no method may keep an AKShare implementation to fall back onto.
+        self.assertNotIn("akshare", interface.VENDOR_LIST)
+        for method, vendors in interface.VENDOR_METHODS.items():
+            self.assertNotIn("akshare", vendors, msg=f"{method} still registers akshare")
+
+    def test_a_share_symbol_does_not_reorder_the_configured_chain(self):
+        # AKShare used to be prepended for mainland tickers regardless of config.
+        # No per-market reordering survives: the chain is exactly what was set.
+        set_config({"data_vendors": {"core_stock_apis": "amazingdata,tushare"}})
         calls = []
+
+        def amazingdata(symbol, *a, **k):
+            calls.append("amazingdata")
+            return "AD_DATA"
 
         def tushare(symbol, *a, **k):
             calls.append("tushare")
             return "TS_DATA"
 
-        def akshare(symbol, *a, **k):
-            calls.append("akshare")
-            return "AK_DATA"
-
-        with self._route({"tushare": tushare, "akshare": akshare}):
+        with self._route({"amazingdata": amazingdata, "tushare": tushare}):
             result = interface.route_to_vendor(
                 "get_stock_data",
                 "159241",
@@ -131,15 +140,15 @@ class VendorRoutingTests(unittest.TestCase):
                 "2026-06-20",
             )
 
-        self.assertEqual(result, "TS_DATA")
-        self.assertEqual(calls, ["tushare"])
+        self.assertEqual(result, "AD_DATA")
+        self.assertEqual(calls, ["amazingdata"])
 
-    def test_production_tushare_price_not_configured_falls_back_to_akshare(self):
-        set_config({"data_vendors": {"core_stock_apis": "tushare,akshare"}})
+    def test_production_tushare_price_not_configured_falls_back_to_next_vendor(self):
+        set_config({"data_vendors": {"core_stock_apis": "tushare,amazingdata"}})
 
         with mock.patch.dict(
             interface.VENDOR_METHODS["get_stock_data"],
-            {"akshare": _returns("AK_DATA")},
+            {"amazingdata": _returns("AD_DATA")},
             clear=False,
         ), mock.patch(
             "tradingagents.dataflows.tushare_stock.get_tushare_client",
@@ -152,82 +161,77 @@ class VendorRoutingTests(unittest.TestCase):
                 "2026-06-20",
             )
 
-        self.assertEqual(result, "AK_DATA")
+        self.assertEqual(result, "AD_DATA")
         joined = "\n".join(cm.output)
         self.assertIn("tushare", joined)
         self.assertIn("not configured", joined)
 
-    def test_get_etf_profile_routes_to_akshare(self):
-        # etf_data has no explicit config -> "default" -> use all available
-        # vendors, which for get_etf_profile is just akshare.
-        akshare = mock.Mock(side_effect=_returns("ETF_PROFILE"))
+    def test_get_etf_profile_routes_to_tushare(self):
+        tushare = mock.Mock(side_effect=_returns("ETF_PROFILE"))
         with mock.patch.dict(
             interface.VENDOR_METHODS,
-            {"get_etf_profile": {"akshare": akshare}},
+            {"get_etf_profile": {"tushare": tushare}},
             clear=False,
         ):
             result = interface.route_to_vendor("get_etf_profile", "510300", "2026-06-01")
         self.assertEqual(result, "ETF_PROFILE")
-        akshare.assert_called_once()
+        tushare.assert_called_once()
 
     def test_default_tool_vendors_use_resilient_etf_and_news_chains(self):
         config = interface.get_config()
-        self.assertEqual(
-            config["tool_vendors"]["get_etf_profile"],
-            "akshare,tushare,tdx,longbridge",
-        )
-        self.assertEqual(config["tool_vendors"]["get_news"], "tushare,akshare,eastmoney")
+        self.assertEqual(config["tool_vendors"]["get_etf_profile"], "tushare,longbridge")
+        self.assertEqual(config["tool_vendors"]["get_news"], "eastmoney,tushare")
 
-    def test_production_get_etf_profile_falls_back_from_akshare_to_tushare(self):
+    def test_production_get_etf_profile_falls_back_from_tushare_to_longbridge(self):
         calls = []
-
-        def akshare(symbol, *a, **k):
-            calls.append("akshare")
-            raise NoMarketDataError(symbol, symbol, "akshare down")
 
         def tushare(symbol, *a, **k):
             calls.append("tushare")
-            return "TUSHARE_ETF_PROFILE"
+            raise NoMarketDataError(symbol, symbol, "tushare down")
+
+        def longbridge(symbol, *a, **k):
+            calls.append("longbridge")
+            return "LONGBRIDGE_ETF_PROFILE"
 
         with mock.patch.dict(
             interface.VENDOR_METHODS,
-            {"get_etf_profile": {"akshare": akshare, "tushare": tushare}},
+            {"get_etf_profile": {"tushare": tushare, "longbridge": longbridge}},
             clear=False,
         ):
             result = interface.route_to_vendor("get_etf_profile", "159241", "2026-07-03")
 
-        self.assertEqual(result, "TUSHARE_ETF_PROFILE")
-        self.assertEqual(calls, ["akshare", "tushare"])
+        self.assertEqual(result, "LONGBRIDGE_ETF_PROFILE")
+        self.assertEqual(calls, ["tushare", "longbridge"])
 
-    def test_production_get_news_uses_akshare_before_longbridge(self):
+    def test_production_get_news_uses_eastmoney_before_tushare(self):
         calls = []
 
-        def longbridge(symbol, *a, **k):
-            calls.append("longbridge")
-            return "LONG_BRIDGE_NEWS"
+        def tushare(symbol, *a, **k):
+            calls.append("tushare")
+            return "TUSHARE_NEWS"
 
-        def akshare(symbol, *a, **k):
-            calls.append("akshare")
-            return "AK_NEWS"
+        def eastmoney(symbol, *a, **k):
+            calls.append("eastmoney")
+            return "EM_NEWS"
 
         with mock.patch.dict(
             interface.VENDOR_METHODS,
-            {"get_news": {"longbridge": longbridge, "akshare": akshare}},
+            {"get_news": {"tushare": tushare, "eastmoney": eastmoney}},
             clear=False,
         ):
             result = interface.route_to_vendor("get_news", "159241", "2026-06-26", "2026-07-03")
 
-        self.assertEqual(result, "AK_NEWS")
-        self.assertEqual(calls, ["akshare"])
+        self.assertEqual(result, "EM_NEWS")
+        self.assertEqual(calls, ["eastmoney"])
 
-    def test_akshare_news_error_string_allows_fallback(self):
-        set_config({"tool_vendors": {"get_news": "akshare,longbridge"}})
+    def test_news_error_string_allows_fallback(self):
+        set_config({"tool_vendors": {"get_news": "eastmoney,longbridge"}})
 
         with mock.patch.dict(
             interface.VENDOR_METHODS,
             {
                 "get_news": {
-                    "akshare": _returns("Error fetching news for 159241.SZ: down"),
+                    "eastmoney": _returns("Error fetching news for 159241.SZ: down"),
                     "longbridge": _returns("LONG_BRIDGE_NEWS"),
                 }
             },

@@ -16,7 +16,6 @@ import pandas as pd
 from dateutil.relativedelta import relativedelta
 
 from . import tushare_news
-from .akshare_utils import to_bare_code
 from .config import get_config
 from .errors import NoMarketDataError
 from .ticker_name import resolve_ticker_name
@@ -80,41 +79,6 @@ def _fetch_fund_portfolio(ts_code: str) -> pd.DataFrame:
         _ETF_NEWS_TTL_SECONDS,
         lambda: call_tushare(lambda: get_tushare_client().fund_portfolio(ts_code=ts_code)),
     )
-
-
-def _fetch_akshare_holdings(symbol: str, curr_date: str | None) -> list[Holding]:
-    try:
-        import akshare as ak
-    except ModuleNotFoundError:
-        return []
-
-    year = (curr_date or datetime.now().strftime("%Y-%m-%d")).split("-")[0]
-    code = to_bare_code(symbol)
-    try:
-        data = ak.fund_portfolio_hold_em(symbol=code, date=year)
-    except Exception:
-        return []
-    if data is None or data.empty:
-        return []
-
-    holdings: list[Holding] = []
-    for _, row in data.iterrows():
-        code_value = row.get("股票代码")
-        if pd.isna(code_value):
-            continue
-        stock_code = str(code_value).split(".")[0].zfill(6)
-        # Shanghai uses the yahoo/akshare `.SS` form so downstream name/news
-        # lookups (which reject the tushare `.SH` suffix) accept it.
-        suffix = ".SS" if stock_code.startswith(("5", "6", "9")) else ".SZ"
-        holdings.append(
-            Holding(
-                symbol=f"{stock_code}{suffix}",
-                name=str(row.get("股票名称") or "").strip(),
-                weight=_to_float(row.get("占净值比例")),
-                quarter=_clean_text(row.get("季度")),
-            )
-        )
-    return holdings
 
 
 def _clean_text(value) -> str | None:
@@ -338,8 +302,6 @@ def get_etf_news(
             holdings = _parse_tushare_holdings(_fetch_fund_portfolio(ts_code))
         except Exception:
             holdings = []
-        if not holdings:
-            holdings = _fetch_akshare_holdings(symbol, end_date)
 
     try:
         fund_articles = _parse_news_articles(
@@ -390,7 +352,7 @@ def get_etf_news(
     if static:
         body += f"- Holdings source: static config snapshot, disclosed quarter ({quarter_note}).\n"
     else:
-        body += f"- Holdings source: Tushare fund_portfolio, latest disclosed quarter ({quarter_note}); AKShare fallback only when Tushare holdings are unavailable.\n"
+        body += f"- Holdings source: Tushare fund_portfolio, latest disclosed quarter ({quarter_note}).\n"
     body += "- News source: Tushare first.\n"
     body += f"- Theme terms: {', '.join(theme_terms) if theme_terms else 'none'}.\n"
     body += f"- Missing sections: {missing_text}.\n"

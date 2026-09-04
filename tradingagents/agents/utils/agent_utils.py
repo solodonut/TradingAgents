@@ -161,7 +161,7 @@ def resolve_instrument_identity(ticker: str) -> dict:
     """Resolve deterministic identity metadata for a ticker when enabled.
 
     Mainland A-shares/ETFs resolve their Chinese name from the domestic source
-    (AKShare-first, same path the WebUI ticker lookup uses) so the analyst
+    (Tushare-first, same path the WebUI ticker lookup uses) so the analyst
     prompt is anchored to the real instrument instead of the LLM inventing a
     name from the code (e.g. ETF ``159241`` is "航空航天ETF天弘", not a
     hallucinated semiconductor ETF). Without this, ``domestic_china_only``

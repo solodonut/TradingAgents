@@ -32,7 +32,7 @@ flowchart LR
     LangGraph --> Agents[Analysts, researchers,<br/>trader, risk, portfolio manager]
     Agents --> Tools[ToolNode data tools]
     Tools --> Dataflows[dataflows/interface.py<br/>vendor routing]
-    Dataflows --> Vendors[yfinance, AKShare,<br/>Alpha Vantage, FRED,<br/>Polymarket, StockTwits, Reddit]
+    Dataflows --> Vendors[AmazingData, Tushare,<br/>Eastmoney, Longbridge, TDX,<br/>yfinance, Alpha Vantage,<br/>FRED, Polymarket,<br/>StockTwits, Reddit]
     Core --> LLMFactory[llm_clients/factory.py]
     LLMFactory --> Providers[OpenAI-compatible,<br/>Anthropic, Google,<br/>Azure, Bedrock, etc.]
     Core --> Memory[TradingMemoryLog<br/>~/.tradingagents/memory/]
@@ -184,7 +184,6 @@ flowchart LR
     SetConfig --> VendorRouter[route_to_vendor]
     VendorRouter --> ToolVendors[tool_vendors override]
     VendorRouter --> CategoryVendors[data_vendors category chain]
-    VendorRouter --> AShareAuto[AKShare auto-route<br/>for A-share symbols]
 ```
 
 ### Vendor Routing Rules
@@ -193,9 +192,10 @@ Agent code should not call vendor SDKs directly. Tools call `dataflows/interface
 
 1. Tool-level override in `tool_vendors`.
 2. Category-level chain in `data_vendors`.
-3. A-share auto-route to AKShare when enabled and supported.
-4. Typed no-data handling where vendors raise `NoMarketDataError`.
-5. Vendor errors surfaced through ToolNode error handling as source-unavailable text.
+3. Typed no-data handling where vendors raise `NoMarketDataError`.
+4. Vendor errors surfaced through ToolNode error handling as source-unavailable text.
+
+There is no per-market reordering: the configured chain is tried in order, exactly as written. AKShare used to be prepended for mainland symbols regardless of config; it is now fully unregistered (see Current Caveats).
 
 For WebUI runs, a vendor outage or missing API key should appear as report context whenever the tool error can be handled. If a stale `running` row exists, that is a store-state issue, not an active graph issue.
 
@@ -386,9 +386,9 @@ pytest tests/webui/
 
 ## Current Caveats
 
-- The queue runs up to `max_parallel_runs` analyses at once (default 2, max 4; stored in `app_settings`). Each run lives in its own spawned subprocess because `dataflows` config, the prefetch context, and the AKShare `no_proxy_session()` monkeypatch are all process-global. Startup resets orphaned `running` rows, so a crashed process no longer blocks the queue.
-- Parallel runs multiply data-vendor quota use by the concurrency, give every subprocess its own AKShare circuit breaker, and would collide on `~/.tradingagents/cache/checkpoints/<TICKER>.db` if the same ticker were queued twice (checkpointing is off by default in the WebUI path). See [http-api-reference.md](./http-api-reference.md#队列并行).
-- A-share and China ETF data can depend on AKShare. In environments where AKShare is unavailable or blocked, yfinance may be usable for some `.SZ` ETF price data, but this should be a deliberate config choice.
+- The queue runs up to `max_parallel_runs` analyses at once (default 2, max 4; stored in `app_settings`). Each run lives in its own spawned subprocess because `dataflows` config, the prefetch context, and the `akshare_utils.no_proxy_session()` monkeypatch are all process-global. Startup resets orphaned `running` rows, so a crashed process no longer blocks the queue.
+- Parallel runs multiply data-vendor quota use by the concurrency, give every subprocess its own endpoint circuit breaker, and would collide on `~/.tradingagents/cache/checkpoints/<TICKER>.db` if the same ticker were queued twice (checkpointing is off by default in the WebUI path). See [http-api-reference.md](./http-api-reference.md#队列并行).
+- AKShare is globally disabled: unregistered from `VENDOR_LIST`/`VENDOR_METHODS`, with every routing-layer bypass removed. Mainland coverage is AmazingData → Tushare (prices/indicators/fundamentals), Eastmoney → Tushare (news), and Tushare → Longbridge (ETF profile). The `akshare_*.py` modules stay on disk so a rollback only needs re-registration; `akshare_utils.py` is *not* an AKShare wrapper (proxy bypass, retry, cache, symbol helpers) and remains in active use. Known loss: no vendor supplies real-time ETF IOPV / discount-premium any more.
 - WebUI history stores results in `~/.tradingagents/webui.db`; deleting the database clears WebUI history only, not memory logs.
 - The frontend is dark-only by design for the current research workbench.
 - `report_section` SSE events are emitted but the current UI primarily renders the `message` event shape.

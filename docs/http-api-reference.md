@@ -56,7 +56,7 @@ WebUI 队列面板头部的「并发」下拉框即读写 `/api/queue/parallelis
 run,调低只影响之后的启动(不会打断在跑的)。
 
 每个 run 跑在**独立子进程**里(`multiprocessing` spawn,`api/run_worker.py`),因为
-`dataflows` 的配置单例、预取上下文、以及 AKShare 的 `no_proxy_session()` 猴补丁都是进程级的,
+`dataflows` 的配置单例、预取上下文、以及 `akshare_utils.no_proxy_session()` 猴补丁都是进程级的,
 同进程并行会互相污染。子进程冷启动约 1.8s,相对分钟级的 run 可忽略。SSE / 取消 / 遥测
 经父进程的桥接线程转发,接口形状不变。
 
@@ -66,8 +66,8 @@ run,调低只影响之后的启动(不会打断在跑的)。
 
 并行的三条已知代价:
 
-- **数据源配额按并发数翻倍**。tushare/AKShare 有分钟级限流,调高并发前先确认额度。
-- **每个子进程有独立的 AKShare 熔断器**(进程级状态)。好处是坏 endpoint 不再跨 run 传染,
-  坏处是 N 个进程会各自把同一个坏 endpoint 再踩一遍。
+- **数据源配额按并发数翻倍**。tushare 有分钟级限流,调高并发前先确认额度。
+- **每个子进程有独立的 endpoint 熔断器**(`akshare_utils` 里的进程级状态)。好处是坏 endpoint
+  不再跨 run 传染,坏处是 N 个进程会各自把同一个坏 endpoint 再踩一遍。
 - **同一个 ticker 同时入队两次会撞 checkpoint 库**(`~/.tradingagents/cache/checkpoints/<TICKER>.db`
   按 ticker 分库)。checkpoint 在 WebUI 路径下默认关闭,所以只记文档、代码不做防护。

@@ -8,7 +8,6 @@ import yfinance as yf
 from stockstats import wrap
 from yfinance.exceptions import YFRateLimitError
 
-from .akshare_utils import display_symbol, is_a_share, to_bare_code
 from .config import get_config
 from .symbol_utils import NoMarketDataError, normalize_symbol
 from .utils import safe_ticker_component
@@ -123,41 +122,19 @@ def _assert_ohlcv_not_stale(
         )
 
 
-def _load_ohlcv_akshare(symbol: str, curr_date: str) -> pd.DataFrame:
-    """Load A-share OHLCV via the AKShare path (handles ETF vs stock routing).
-
-    Reuses ``akshare_stock._fetch_hist`` / ``_normalize_frame`` so this
-    verification path inherits the same ETF endpoint selection, retries, and
-    caching as the analyst data tools, then returns the Yahoo-path shape (a
-    ``Date`` column plus OHLCV) the callers expect.
-    """
-    from .akshare_stock import _fetch_hist, _normalize_frame
-
-    curr_dt = pd.to_datetime(curr_date)
-    start = (curr_dt - pd.DateOffset(years=5)).strftime("%Y-%m-%d")
-    end = curr_dt.strftime("%Y-%m-%d")
-    code = to_bare_code(symbol)
-
-    raw = _fetch_hist(code, start, end)
-    if raw is None or raw.empty:
-        raise NoMarketDataError(symbol, symbol, "AKShare returned no rows")
-    return _normalize_frame(raw).reset_index()
-
-
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     """Fetch OHLCV data with caching, filtered to prevent look-ahead bias.
 
     Downloads 5 years of data up to today and caches per symbol. On
     subsequent calls the cache is reused. Rows after curr_date are
     filtered out so backtests never see future prices.
+
+    This is the Yahoo-backed loader only. Mainland A-shares used to be diverted
+    to AKShare here; AKShare is disabled, so mainland OHLCV comes from the
+    AmazingData/Tushare vendors instead — do not add yfinance back to an A-share
+    vendor chain expecting this path to cover it.
     """
     config = get_config()
-    if config.get("akshare_auto_route", True) and is_a_share(symbol):
-        data = _load_ohlcv_akshare(symbol, curr_date)
-        data = _clean_dataframe(data)
-        data = data[data["Date"] <= pd.to_datetime(curr_date)]
-        _assert_ohlcv_not_stale(data, curr_date, symbol, display_symbol(symbol))
-        return data
 
     # Resolve broker/forex symbols (XAUUSD+ -> GC=F) to Yahoo's convention,
     # then reject values that would escape the cache directory when

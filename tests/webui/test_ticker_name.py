@@ -15,26 +15,17 @@ def _stub_tushare(monkeypatch):
 
 def test_a_share_prefers_tushare_chinese_name(monkeypatch):
     monkeypatch.setattr(tn, "_tushare_name", lambda code: "国防ETF")
-    monkeypatch.setattr(tn, "_akshare_name", lambda code: "should-not-be-used")
     monkeypatch.setattr(tn, "_yfinance_name", lambda code: "should-not-be-used")
     assert tn.resolve_ticker_name("159241") == "国防ETF"
 
 
-def test_a_share_falls_back_to_akshare_when_tushare_empty(monkeypatch):
-    monkeypatch.setattr(tn, "_akshare_name", lambda code: "贵州茅台")
-    monkeypatch.setattr(tn, "_yfinance_name", lambda code: "should-not-be-used")
-    assert tn.resolve_ticker_name("600519.SS") == "贵州茅台"
-
-
-def test_a_share_falls_back_to_yfinance_when_tushare_and_akshare_empty(monkeypatch):
-    monkeypatch.setattr(tn, "_akshare_name", lambda code: None)
+def test_a_share_falls_back_to_yfinance_when_tushare_empty(monkeypatch):
     monkeypatch.setattr(tn, "_yfinance_name", lambda code: "Kweichow Moutai")
     assert tn.resolve_ticker_name("600519.SS") == "Kweichow Moutai"
 
 
 def test_bare_a_share_fallback_uses_yahoo_suffix(monkeypatch):
     seen = []
-    monkeypatch.setattr(tn, "_akshare_name", lambda code: None)
 
     def fake_yfinance(code):
         seen.append(code)
@@ -46,37 +37,29 @@ def test_bare_a_share_fallback_uses_yahoo_suffix(monkeypatch):
     assert seen == ["159325.SZ"]
 
 
-def test_a_share_falls_back_when_tushare_and_akshare_raise(monkeypatch):
+def test_a_share_falls_back_when_tushare_raises(monkeypatch):
     def boom(code):
         raise RuntimeError("vendor down")
 
     monkeypatch.setattr(tn, "_tushare_name", boom)
-    monkeypatch.setattr(tn, "_akshare_name", boom)
     monkeypatch.setattr(tn, "_yfinance_name", lambda code: "Kweichow Moutai")
     assert tn.resolve_ticker_name("600519.SS") == "Kweichow Moutai"
 
 
 def test_non_a_share_skips_china_sources_uses_yfinance(monkeypatch):
-    called = {"ts": False, "ak": False}
+    called = {"ts": False}
 
     def ts_name(code):
         called["ts"] = True
         return "nope"
 
-    def ak(code):
-        called["ak"] = True
-        return "nope"
-
     monkeypatch.setattr(tn, "_tushare_name", ts_name)
-    monkeypatch.setattr(tn, "_akshare_name", ak)
     monkeypatch.setattr(tn, "_yfinance_name", lambda code: "NVIDIA Corporation")
     assert tn.resolve_ticker_name("NVDA") == "NVIDIA Corporation"
     assert called["ts"] is False  # 非 A 股不应触发 tushare
-    assert called["ak"] is False  # 非 A 股不应触发 AKShare
 
 
 def test_returns_none_when_all_sources_miss(monkeypatch):
-    monkeypatch.setattr(tn, "_akshare_name", lambda code: None)
     monkeypatch.setattr(tn, "_yfinance_name", lambda code: None)
     assert tn.resolve_ticker_name("ZZZZ") is None
 
@@ -89,7 +72,6 @@ def test_tushare_timeout_falls_back(monkeypatch):
         return "迟到的名字"
 
     monkeypatch.setattr(tn, "_tushare_name", slow)
-    monkeypatch.setattr(tn, "_akshare_name", lambda code: None)
     monkeypatch.setattr(tn, "_NAME_LOOKUP_TIMEOUT_S", 0.2)
     monkeypatch.setattr(tn, "_yfinance_name", lambda code: "Kweichow Moutai")
     assert tn.resolve_ticker_name("600519.SS") == "Kweichow Moutai"

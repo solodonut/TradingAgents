@@ -6,6 +6,17 @@
 方法视角(每个 `get_*` 方法传什么、返回什么)见
 [data-fetching-apis.md](./data-fetching-apis.md)。两篇互为索引,不重复内容。
 
+> **⚠️ 2026-09-03:AKShare 已全局停用,第 7 节的建议已全部落地。** 它从
+> `VENDOR_LIST` / `VENDOR_METHODS` 注销,`akshare_auto_route` 开关与 7.4 记录的三处
+> 旁路(外加 `stockstats_utils` 的 A 股分支)、`service_health` 的 AKShare 探针卡都已删除。
+> 同时采纳 7.2 的两条链序建议:`get_news` 提 `eastmoney` 到 `tushare` 之前,
+> `get_etf_profile` 去掉恒被跳过的 `tdx` 占位档。
+>
+> **本文的实测矩阵(第 4 节)与横评(第 8 节)是 2026-08-29 的快照,保留 AKShare 的行/列
+> 作为历史测量与回滚依据** —— 不要把它们读成「当前可路由的源」。哪些是当前形态、哪些
+> 是历史,以第 2、3、6、7 节的说明为准。`akshare_*.py` 模块与 `akshare` 依赖仍在仓库里,
+> 回滚只需重新注册。
+
 ---
 
 ## 1. 总览
@@ -13,9 +24,10 @@
 数据源分两类,区别在于**走不走 `route_to_vendor`**:
 
 ```
-① 路由层内 —— 10 个 vendor,登记在 interface.py::VENDOR_METHODS
+① 路由层内 —— 9 个 vendor,登记在 interface.py::VENDOR_METHODS
    Agent → @tool → route_to_vendor(method) → vendor 链 → 首个成功即停
    永不抛错,失败返回 NO_DATA_AVAILABLE / DATA_SOURCE_UNAVAILABLE 哨兵
+   (原第 10 个是 akshare,已注销;配置里再写 "akshare" 会抛 ValueError)
 
 ② 路由层外 —— 4 处直连,不经 route_to_vendor
    反幻觉身份解析、reflection 收益回算、stockstats OHLCV、情绪分析师社交源
@@ -27,9 +39,10 @@
 
 ### 全源 × 全能力总表
 
-一张表看完 **16 个源**(10 个路由内 vendor + 2 处路由外社交源 + 腾讯/新浪/东财三家未接入源
-+ QMT Native Bridge)在 10 类能力上的实测结果。**这是全文的索引**:耗时、体积、失败根因等细节
-在第 4 节(现有源)、第 8 节(三家横评)和第 9 节(QMT Native Bridge)。
+一张表看完 **16 个源**(测量时的 10 个路由内 vendor + 2 处路由外社交源 + 腾讯/新浪/东财三家
+未接入源 + QMT Native Bridge)在 10 类能力上的实测结果。**这是全文的索引**:耗时、体积、
+失败根因等细节在第 4 节(现有源)、第 8 节(三家横评)和第 9 节(QMT Native Bridge)。
+`akshare` 那一行是**历史行**(2026-09-03 已注销),留作回滚依据。
 
 图例:✅ 有数据 · ⚪ 调用成功但内容为空 · ⛔ 未配置(缺 key/CLI/占位) ·
 🚫 本次网络层失败 · ⚠️ 静默降级 · ❌ 接口存在但无此字段 ·
@@ -39,7 +52,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **`amazingdata`** 银河/QMT | ✅ | ✅ | ➖ | ✅ | ✅ | ➖ | ➖ | ➖ | ✅ | **龙虎榜/两融/股东/盈利预测**(唯一源) |
 | **`tushare`** Tushare Pro | ✅ | ✅ | ➖ | ✅ | ✅ | ⚪ 无命中 | ✅ | ✅ | ✅ | ETF 新闻(⚪) |
-| **`akshare`** 东财+新浪 | 🚫 push2 抖动 | 🚫 | ➖ | ✅ | ✅ 103 期 | ✅ | ➖ | ✅ 19s | ➖ | — |
+| ~~**`akshare`** 东财+新浪~~(已注销) | 🚫 push2 抖动 | 🚫 | ➖ | ✅ | ✅ 103 期 | ✅ | ➖ | ✅ 19s | ➖ | — |
 | **`eastmoney`** 东财搜索 | ➖ | ➖ | ➖ | ➖ | ➖ | ✅ | ➖ | ➖ | ➖ | — |
 | **`longbridge`** 长桥 | ➖ | ➖ | ➖ | ➖ | ➖ | ⛔ CLI 缺 | ➖ | ⚠️ 误报 | ➖ | — |
 | **`tdx`** 通达信 | ➖ | ➖ | ➖ | ➖ | ➖ | ➖ | ➖ | ⛔ 占位 | ➖ | — |
@@ -57,8 +70,9 @@
 读这张表要注意 6 点,否则会误读:
 
 1. **一格 🚫 不代表方法不可用**。每格是「该 vendor 自己」的能力(直接调 vendor 函数、绕过
-   `route_to_vendor`),而实际调用走 fallback 链 —— 链上任一格 ✅ 就够用。例:`get_stock_data`
-   的默认链 `amazingdata,tushare,akshare` 里 AKShare 挂了,但前两档撑住了。
+   `route_to_vendor`),而实际调用走 fallback 链 —— 链上任一格 ✅ 就够用。例:测量时
+   `get_stock_data` 的默认链是 `amazingdata,tushare,akshare`,AKShare 挂了但前两档撑住了
+   (正因为它那两格本来就是 🚫,现在的链 `amazingdata,tushare` 没有损失)。
 2. **🚫 全部是本次网络环境**,不是数据源的永久属性。yfinance / Reddit / Polymarket 三个境外域
    本机裸 curl 全部 connect timeout;AKShare 那两格是东财 `push2` 行情域间歇 reset(第 4 节末)。
 3. **「估值快照」这一列现有 vendor 全是 ➖ —— 这是一个真实缺口**。项目没有独立的
@@ -77,7 +91,7 @@
 
 ---
 
-## 2. 路由层内:10 个 vendor
+## 2. 路由层内:9 个 vendor
 
 「真实上游」是**实际提供数据的机构**,不是 Python 包名。这一列是本表最重要的信息:
 多个 vendor 可能共享同一上游,链式 fallback 因此可能不提供真正的冗余(见第 5 节)。
@@ -86,8 +100,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `amazingdata` | **银河证券**(经本地 QMT docker 常驻服务 `127.0.0.1:8888`) | 行情/指标/基本面/ETF 分钟/资金面全部 4 个方法 | `AD_API_TOKEN`(+`AD_API_PORT`/`AD_API_BASE`) | 需银河账户与 QMT;服务本身无 API 费 | ✅ 多数类别链首 |
 | `tushare` | **Tushare Pro**;快讯 `news()` 底层为**新浪 + 华尔街见闻** | 行情/指标/基本面/新闻/全球新闻/ETF 画像/ETF 分钟/ETF 新闻 | `TUSHARE_TOKEN` | 注册免费,**ETF/新闻等端点需付费积分** | ✅ |
-| `akshare` | **东方财富**(9 个 `_em` 接口)+ **新浪**(1 个财务指标接口) | 行情/指标/基本面/新闻/ETF 画像 | 无 | 免费,无 SLA | ✅ A 股自动路由链首 |
-| `eastmoney` | **东方财富** 搜索 API(`search-api-web.eastmoney.com`)直连 | `get_news` | 无 | 免费,无 SLA | ✅ 在 `get_news` 链尾 |
+| `eastmoney` | **东方财富** 搜索 API(`search-api-web.eastmoney.com`)直连 | `get_news` | 无 | 免费,无 SLA | ✅ `get_news` 链首 |
 | `longbridge` | **长桥 OpenAPI**(经 `longbridge` CLI subprocess) | `get_news`、ETF 画像 | CLI 自身认证 | 需长桥账户 | ✅ 在链尾 |
 | `tdx` | 通达信「问小达」 | ETF 画像 | 无(见下) | 无 | ⚠️ **纯占位** |
 | `yfinance` | **Yahoo Finance** | 行情/指标/基本面/新闻/全球新闻/内部交易 | 无 | 免费,无 SLA | ❌ 需显式启用 |
@@ -95,13 +108,21 @@
 | `fred` | **美联储圣路易斯分行**(`api.stlouisfed.org`) | `get_macro_indicators` | `FRED_API_KEY` | 免费 | ❌ `disabled` |
 | `polymarket` | **Polymarket** Gamma API | `get_prediction_markets` | 无 | 免费 | ❌ `disabled` |
 
+**已注销**:`akshare`(上游为**东方财富** 9 个 `_em` 接口 + **新浪** 1 个财务指标接口,
+曾覆盖行情/指标/基本面/新闻/ETF 画像,无凭证免费)。它 2026-09-03 从 `VENDOR_LIST` /
+`VENDOR_METHODS` 移除,原因见第 7 节:唯一失效的域是东财 `push2`/`push2his`(行情),
+而它真正的成本是 `get_etf_profile` 那 19 秒 —— `fund_etf_spot_em` 会翻完全市场 ETF。
+
 ### `tdx` 是占位,不是可用 vendor
 
 [tdx.py](../tradingagents/dataflows/tdx.py) 的 `get_etf_profile` **无条件抛**
 `VendorNotConfiguredError`。通达信在本工作区只经 MCP 暴露,没有运行时 Python 依赖。
 它登记在路由表里的唯一作用是:让生产配置能写 `tdx` 这一档而不崩,路由会干净跳过。
 
-所以 `get_etf_profile` 的默认链 `akshare,tushare,tdx,longbridge` **有效档位只有 3 个**。
+测量时 `get_etf_profile` 的默认链是 `akshare,tushare,tdx,longbridge`,**有效档位只有 3 个**。
+现在的默认链是 `tushare,longbridge`:摘掉 AKShare 的同时也去掉了这个恒被跳过的 `tdx` 占位档,
+所以链上每一档都是真会被调用的。`tdx` 仍登记在 `VENDOR_METHODS["get_etf_profile"]` 里
+(写进配置不会崩,路由干净跳过),只是不再出现在默认链中。
 [data-fetching-apis.md](./data-fetching-apis.md) 第 8 节的字段级偏好表里把通达信 MCP
 列为多个字段的首选,那是**在 Codex 会话里经 MCP 手工查询**的结论,代码路径拿不到。
 
@@ -114,17 +135,19 @@
 
 | 位置 | 默认配置下实际走哪条路 | 用途 | 为什么在路由外 |
 | --- | --- | --- | --- |
-| [agent_utils.py:160](../tradingagents/agents/utils/agent_utils.py#L160) `resolve_instrument_identity` | A 股 → **AKShare**(`ticker_name.resolve_ticker_name`);非 A 股且 `domestic_china_only=True` → 直接返回 `{}`;其余才走 yfinance `Ticker().info` | **反幻觉**:标的身份解析一次,注入每个分析师 prompt | 身份必须单源确定,链式 fallback 会让不同 vendor 给出不同名称 |
+| [agent_utils.py:160](../tradingagents/agents/utils/agent_utils.py#L160) `resolve_instrument_identity` | A 股 → **Tushare**(`ticker_name.resolve_ticker_name`,空/失败再回退 yfinance 英文名);非 A 股且 `domestic_china_only=True` → 直接返回 `{}`;其余才走 yfinance `Ticker().info` | **反幻觉**:标的身份解析一次,注入每个分析师 prompt | 身份必须单源确定,链式 fallback 会让不同 vendor 给出不同名称 |
 | [trading_graph.py:298](../tradingagents/graph/trading_graph.py#L298) `_resolve_outcome` | `domestic_china_only=True` → **整段跳过**(log 一行 Skipping),不调 yfinance | **reflection**:回算已实现收益 + benchmark 对比(算 alpha) | 学习层,不是 agent 工具调用 |
-| [stockstats_utils.py:154](../tradingagents/dataflows/stockstats_utils.py#L154) `load_ohlcv` | A 股且 `akshare_auto_route=True` → 复用 **`akshare_stock._fetch_hist`**;其余走 yfinance `download()` + 5 年 CSV 缓存 | stockstats 指标计算的 OHLCV 底座 | vendor 内部实现细节 |
+| [stockstats_utils.py](../tradingagents/dataflows/stockstats_utils.py) `load_ohlcv` | **无分支**:一律走 yfinance `download()` + 5 年 CSV 缓存。A 股曾在这里被分流到 `akshare_stock._fetch_hist`,该分支已删除 —— A 股 OHLCV 现在只经 vendor(AmazingData/Tushare)取,**别指望这条路覆盖 A 股** | stockstats 指标计算的 OHLCV 底座 | vendor 内部实现细节 |
 | [sentiment_analyst.py:81-82](../tradingagents/agents/analysts/sentiment_analyst.py#L81) | **无分支,无条件出境**:StockTwits `api.stocktwits.com`、Reddit `search.json` + RSS 回退 | 情绪分析师的社交面输入 | 只服务单个 analyst,没登记成 `TOOLS_CATEGORIES` 方法 |
 
 Reddit/StockTwits 都不需要 key(Reddit 有可选 OAuth,失败降级到 RSS),两者都自带
 `tradingagents/0.2 (+github…)` 这样的具名 UA —— Reddit 会拦裸 `Mozilla/5.0` 和 `curl/…`。
 
-**一个容易搞错的点**:前三处虽然代码里写着 yfinance,但在默认配置
-(`domestic_china_only=True`、`akshare_auto_route=True`)下,A 股**一次都不会触达 Yahoo** ——
-身份走 AKShare、OHLCV 走 AKShare、reflection 整段跳过。默认配置下唯一无条件出境的是
+**一个容易搞错的点**:前两处虽然代码里写着 yfinance,但在默认配置(`domestic_china_only=True`)
+下,A 股基本不会触达 Yahoo —— 身份先走 Tushare、reflection 整段跳过。**但这里比 AKShare
+时期弱了一格**:`resolve_ticker_name` 在 Tushare 返回空或失败时会回退 yfinance(取英文名),
+以前中间还垫着一层 AKShare;`load_ohlcv` 的 A 股分支也没了,不过 A 股 OHLCV 现在根本不走这条路
+(反幻觉快照用 `AmazingData → Tushare`,指标走 vendor)。默认配置下唯一无条件出境的仍是
 情绪分析师那两个社交源,而第 4 节实测显示两者当前都拿不到数据。
 
 ---
@@ -133,6 +156,9 @@ Reddit/StockTwits 都不需要 key(Reddit 有可选 OAuth,失败降级到 RSS),�
 
 2026-08-29 22:19–22:35 对 `VENDOR_METHODS` 的**全部 54 个 (方法, vendor) 组合**加上第 3 节
 的 7 项路由外直连做了真实调用。
+
+> **本节是 2026-08-29 的历史快照,未重测。** `akshare` 列/行保留原样(它 2026-09-03 已注销),
+> 因为这些数字正是第 7 节决策的依据。当前可路由的 vendor 见第 2 节。
 
 **测法与三条限定**(读表前必须知道,否则会误读):
 
@@ -224,9 +250,9 @@ AmazingData 那三张报表实测 0.01–0.02s,是同进程内缓存命中(`get_
 
 | 探测 | 实测 |
 | --- | --- |
-| `resolve_instrument_identity("600519.SS")` | ✅ 0.0s → `{"company_name": "贵州茅台"}`,走 AKShare 路径 |
+| `resolve_instrument_identity("600519.SS")` | ✅ 0.0s → `{"company_name": "贵州茅台"}`,当时走 AKShare 路径(该档已删,现在 Tushare 之后直接回退 yfinance) |
 | `resolve_instrument_identity("AAPL")` | ⚪ → `{}`,`domestic_china_only=True` 按设计直接跳过 |
-| `load_ohlcv("600519.SS")` | ✅ 0.44s,走 `_load_ohlcv_akshare` |
+| `load_ohlcv("600519.SS")` | ✅ 0.44s,当时走 `_load_ohlcv_akshare`(该分支已删,A 股不再经这条路) |
 | `load_ohlcv("AAPL")` | 🚫 yfinance 返回 0 行 |
 | reflection 收益回算 | 默认配置**整段跳过**;裸调 `yf.Ticker().history()` 验证时报限频 |
 | `fetch_stocktwits_messages("AAPL")` | ⚠️ 返回 34B 占位串 `<stocktwits unavailable: URLError>` |
@@ -268,9 +294,10 @@ DNS 解析正常,是 TCP/TLS 层被 reset。所以:
 - 同一时刻腾讯、新浪均可用 —— 这给 8.1 节的建议补了一条**可用性**理由:腾讯不只是字段
   更全,它在东财行情域抖动时仍然可用,是真正独立的上游。
 
-一个正面结论:`get_stock_data`/`get_indicators` 的默认链 `amazingdata,tushare,akshare` 在
+一个正面结论:`get_stock_data`/`get_indicators` 当时的默认链 `amazingdata,tushare,akshare` 在
 这次东财抖动中**照常工作**,因为前两档一个是本地银河服务、一个是 Tushare,与东财无关。
-兜底档跟着东财抖,但兜底之前的两档撑住了。
+兜底档跟着东财抖,但兜底之前的两档撑住了 —— 这也是现在把这两条链砍成 `amazingdata,tushare`
+不算损失的直接依据。
 
 ---
 
@@ -279,28 +306,30 @@ DNS 解析正常,是 TCP/TLS 层被 reset。所以:
 按第 2 节的「真实上游」列重新归类,会看到链式 fallback 的实际冗余度:
 
 ```
-东方财富  ← akshare(9/11 个接口)、eastmoney
-          ← 也就是 get_news 默认链 tushare,akshare,eastmoney 的后两档同源
-          ← ETF 画像链 akshare,tushare,tdx,longbridge 的首档
+东方财富  ← eastmoney(get_news 链首)
+          ← tushare 快讯 news() 的可选源之一(eastmoney)
+          ← 停用前还有 akshare(9/11 个接口),它与 eastmoney 同源
 
 银河证券  ← amazingdata(行情/指标/基本面/ETF分钟/资金面 全部链首)
           ← 本地服务离线则整条链首失效
 
-新浪      ← akshare 的 stock_financial_analysis_indicator
-          ← tushare 快讯 news() 的底层源之一(sina)
+新浪      ← tushare 快讯 news() 的底层源之一(sina)
+          ← 停用前还有 akshare 的 stock_financial_analysis_indicator
 
-Yahoo     ← yfinance vendor + 3 处路由外直连
+Yahoo     ← yfinance vendor + 2 处路由外直连(身份兜底、非 A 股 OHLCV)
 ```
 
 两个直接后果:
 
-1. **`get_news` 的 `akshare,eastmoney` 两档同源东财**。东财限频或弹验证码时两档一起失败,
-   链路只剩 Tushare 一档 —— 而当前 token 实测没有 `news` 权限。
-2. **ETF 画像链实际只有 2 个有效独立源**(akshare→东财、tushare)。`tdx` 是占位,
-   `longbridge` 需 CLI 认证。
+1. **`get_news` 的 `eastmoney,tushare` 两档实际同源东财**(Tushare 快讯的源列表里也有
+   eastmoney)。东财限频或弹验证码时两档一起失败。**这一点在停用 AKShare 前后没有变化** ——
+   原来的 `akshare` 档也是东财,所以摘掉它没有减少任何真实冗余(实测两者返回同一条新闻)。
+2. **ETF 画像链现在是 2 档**(tushare、longbridge),原来 4 档里 `tdx` 是占位、`akshare`→东财,
+   有效独立源数量不变。`longbridge` 需 CLI 认证,实际常态是单档 Tushare。
 
 已知上游风险:东财自 **2025-04 起按 IP 限频**,AKShare 侧已出现需手工抓 cookie、
-过验证码的情况(akshare#7119)。限频按 IP 计,与用哪个封装无关。
+过验证码的情况(akshare#7119)。限频按 IP 计,与用哪个封装无关 ——
+所以 `eastmoney` 直连同样受这条风险影响。
 
 ---
 
@@ -310,11 +339,11 @@ Yahoo     ← yfinance vendor + 3 处路由外直连
 
 | 变量 | 数据源 | 缺失时行为 |
 | --- | --- | --- |
-| `AD_API_TOKEN` / `AD_API_PORT` / `AD_API_BASE` | AmazingData 本地服务 | 探测失败,链路回退 tushare/akshare |
+| `AD_API_TOKEN` / `AD_API_PORT` / `AD_API_BASE` | AmazingData 本地服务 | 探测失败,链路回退 tushare |
 | `TUSHARE_TOKEN` | Tushare Pro | vendor 跳过 |
 | `ALPHA_VANTAGE_API_KEY` | Alpha Vantage | 抛配置错误 |
 | `FRED_API_KEY` | FRED | vendor 跳过(且默认 `disabled`) |
-| 无 | akshare / eastmoney / yfinance / polymarket / reddit / stocktwits | 直接可用 |
+| 无 | eastmoney / yfinance / polymarket / reddit / stocktwits | 直接可用 |
 | CLI 自身认证 | longbridge | CLI 缺失或未登录则跳过 |
 
 `AD_API_TOKEN` 指向**本地常驻服务**,与 QMT docker 的 `.env` 保持一致,不是银河账号密码。
@@ -328,36 +357,143 @@ Yahoo     ← yfinance vendor + 3 处路由外直连
 
 ```python
 data_vendors = {
-    "core_stock_apis":      "amazingdata,tushare,akshare",
-    "technical_indicators": "amazingdata,tushare,akshare",
-    "fundamental_data":     "amazingdata,tushare,akshare",
-    "news_data":            "akshare,longbridge",     # 被下面 get_news 覆盖
+    "core_stock_apis":      "amazingdata,tushare",
+    "technical_indicators": "amazingdata,tushare",
+    "fundamental_data":     "amazingdata,tushare",
+    "news_data":            "eastmoney,tushare",       # 被下面 get_news 覆盖
     "macro_data":           "disabled",
     "prediction_markets":   "disabled",
 }
 tool_vendors = {                                       # 方法级,优先
-    "get_news":          "tushare,akshare,eastmoney",
+    "get_news":          "eastmoney,tushare",
     "get_etf_news":      "tushare",
     "get_global_news":   "tushare",
-    "get_etf_profile":   "akshare,tushare,tdx,longbridge",
+    "get_etf_profile":   "tushare,longbridge",
     "get_etf_intraday":  "amazingdata,tushare",
     "get_dragon_tiger":  "amazingdata",                # 资金面 4 个方法
     "get_margin_trading": "amazingdata",               # 仅 AmazingData 覆盖,
     "get_shareholders":  "amazingdata",                # 服务离线即 NO_DATA
     "get_profit_forecast": "amazingdata",
 }
-akshare_auto_route = True   # A 股代码把 akshare 提到链首(除显式 tushare/longbridge/tdx 链)
+# 没有 akshare_auto_route,也没有任何按市场重排链的逻辑:配置写什么就是什么。
 ```
 
 配的链**就是**全部候选:路由不会回退到没配置的 vendor(避免跨源数据不一致)。
-`"default"` 哨兵表示用该方法所有可用 vendor。
+`"default"` 哨兵表示用该方法所有可用 vendor。写 `"akshare"` 会抛 `ValueError`(未知 vendor)。
+
+### 7.1 排序原则
+
+上面这套默认值是历史演进的结果,不是按统一标准排的。若要重排,建议按以下权重(高 → 低):
+
+1. **上游独立性** —— 第 5 节已经说明链式 fallback 的冗余大量是假的(两档同源东财)。
+   首档撞在同一个上游上,是唯一会一次性打掉整条链的失误。
+2. **可用性** —— 不依赖易失效的前置条件(本地服务在跑 / CLI 已登录 / 客户端 GUI 开着)。
+3. **覆盖面** —— 字段齐不齐、历史深不深。
+4. **速度** —— **放最后**。一次 run 里 LLM 延迟绝对主导,0.2s 与 2s 的差别看不出来;
+   只有 `get_etf_profile` 那种**19 秒**的量级才值得为速度改排序。
+
+### 7.2 停用 AKShare:决策依据(已落地)
+
+**这一小节记录的是决策依据,配置已经是上面 7 节开头那份。** 保留是因为「为什么这么排」
+比「排成什么样」更容易丢。
+
+AKShare 的不稳定性在第 4 节末尾已定位清楚:**只坏在东财 `push2` / `push2his` 行情域**,
+其余 5 个东财域全程正常。所以它 8 格里 6 格 ✅,挂的正好是 `get_stock_data` / `get_indicators`
+——而这两格前面已有两档健康源兜住。**停用它的最大收益其实不是稳定性,是 `get_etf_profile`
+从 19.0s 降到 0.41s**(见 8.1 节:19 秒是 `fund_etf_spot_em` 分 15 页拉全市场的实现问题,
+与上游抖动无关)。
+
+逐项改动:三条 `data_vendors` 链删掉 `akshare` 尾档(这格本来就 🚫);`news_data` 改
+`eastmoney,tushare`(三个新闻方法都被 `tool_vendors` 覆盖,此行实为死配置,改它只为一致);
+`get_news` 从 `tushare,akshare,eastmoney` 改 `eastmoney,tushare`;`get_etf_profile` 从
+`akshare,tushare,tdx,longbridge` 改 `tushare,longbridge`(顺手删恒跳过的 `tdx`);
+`get_etf_news` / `get_global_news` / `get_etf_intraday` / 资金面 4 个方法的配置不变。
+
+**为什么保持 `amazingdata` 在首档而不是让快一个数量级的 Tushare 上位**:摘掉 AKShare 后每条链
+(下同,「摘掉后」即当前形态)
+只剩 2 档,再把 Tushare 提到首档,就等于行情/指标/基本面/ETF画像/新闻**全部**首档指向同一上游
+——正是第 5 节批评的那个问题。保持「银河(本地)→ Tushare」是两个真正独立的上游,
+且 amazingdata 无外部限频、与资金面 4 个方法口径一致。
+
+**为什么 `get_news` 把 eastmoney 提到 Tushare 前**:实测 Tushare 个股新闻 ⚪ 0.73s 无命中
+(`get_global_news` 有权限且 ✅,是个股维度检索命中不到),eastmoney ✅ 0.18s,省掉每次空转。
+代价是个股新闻变成单上游东财 —— 但**这一点在改动前就已成立**:实测 `akshare` 与 `eastmoney`
+返回的是同一条新闻(2426B vs 2444B)。停用 AKShare 在这里没有减少任何真实冗余。
+
+**逐方法代价**:
+
+| 方法 | 停用后的链 | 实际损失 |
+| --- | --- | --- |
+| `get_stock_data` / `get_indicators` | `amazingdata,tushare` | **零**。AKShare 这两格实测就是 🚫 |
+| `get_fundamentals` | `amazingdata,tushare` | 零(0.30s / 4.3s 双 ✅) |
+| 三张报表 | `amazingdata,tushare` | 轻微:AKShare 一次给**全部 99–103 个报告期**,Tushare 只给配置窗口。仅深度历史报表有感 |
+| `get_news` | `eastmoney,tushare` | 零(同源) |
+| `get_etf_profile` | `tushare,longbridge` | ⚠️ **唯一实质损失**:**IOPV 彻底没有源了**(字段表里首选就是 AKShare,通达信 MCP 实测不返回);另丢基金份额、重仓成分中文名 |
+| `get_etf_intraday` / 资金面 4 个 / `get_global_news` | 不变 | 零 |
+
+讽刺的是丢掉的这几个 ETF 字段走的是 **`push2delay` 延时域(实测 6/6 全通、0.20s)**,
+**不受要规避的那个抖动影响** —— 它们是被 AKShare 那 19 秒的实现连带牺牲的。
+
+### 7.3 为什么只改配置做不到「禁用」:`akshare_auto_route`(已删除)
+
+原 `interface.py` 有这么一段:
+
+```python
+if (config.get("akshare_auto_route", True)
+    and "akshare" in VENDOR_METHODS[method]
+    and "tushare" not in explicit_vendor_names ...):
+    if _is_a_share_symbol(symbol):
+        vendor_chain = ["akshare"] + [v for v in vendor_chain if v != "akshare"]
+```
+
+**无条件 prepend,不检查 akshare 在不在配的链里。** 当时默认每条链都含 `tushare` 才恰好躲过;
+一旦把某条链改成不含 tushare 的(如 `"amazingdata"` 单档),AKShare 会被重新插到**链首**。
+这就是本次改动必须动代码、不能只动配置的原因。
+
+该分支及 `akshare_auto_route` 开关已整段删除,现在不存在任何按市场重排 vendor 链的逻辑。
+连带删除的还有它在 [stockstats_utils.py](../tradingagents/dataflows/stockstats_utils.py)
+`load_ohlcv` 里的那个 A 股分支 —— 那条路现在一律走 yfinance `download()`(本机 🚫),
+所以 **A 股链里绝不能加回 yfinance**,别指望这条路覆盖 A 股。
+
+### 7.4 配置管不到的 AKShare 残留(已全部切断)
+
+改配置之外还有 4 条路会 `import akshare`,`data_vendors` / `tool_vendors` 对它们**完全无效**。
+本次一并切断:
+
+| 位置 | 原行为 | 处理 |
+| --- | --- | --- |
+| [market_data_validator.py](../tradingagents/dataflows/market_data_validator.py) `_load_mainland_ohlcv` | 反幻觉快照的验证链**硬编码** `AmazingData → Tushare → AKShare` | 删第三档,现在是 `AmazingData → Tushare`;失败仍抛 `SnapshotVendorChainError` |
+| [ticker_name.py](../tradingagents/dataflows/ticker_name.py) `_akshare_name` | 中文名解析 `tushare → AKShare → yfinance`,喂给 `resolve_instrument_identity`(反幻觉身份注入)与 WebUI 代码清单 | 删中间档,现在 `tushare → yfinance`(英文名)。仍 fail-open + 6s 线程超时 |
+| [tushare_etf_news.py](../tradingagents/dataflows/tushare_etf_news.py) `_fetch_akshare_holdings` | `get_etf_news` 的 **tushare vendor 内部**:`fund_portfolio` 返回空时直接 `import akshare` 调 `fund_portfolio_hold_em` | 删除。⚠️ 这是最隐蔽的一条 —— 在此之前 `get_etf_news: "tushare"` 并不是纯 Tushare。Coverage Notes 里那句「AKShare 兜底」也一并去掉 |
+| [stockstats_utils.py](../tradingagents/dataflows/stockstats_utils.py) `_load_ohlcv_akshare` | A 股且 `akshare_auto_route=True` 时分流到 AKShare | 删除,见 7.3 |
+
+外加 `api/service_health.py` 的 AKShare 探针卡(探 `push2` 可达性 + `push2his` 新鲜度)——
+探的是已注销 vendor,一并删掉。注意删完之后 `_DATA_SERVICES` 里只剩 `fred` 走
+「可达性探测 → 新鲜度探测」这条分离路径,相关测试已迁到 `fred`。
+
+**没有全局 `disabled_vendors` 开关** —— 本次是逐处删除,不是加开关。回滚要手工还原上述各处。
+
+### 7.5 链只剩两档,第三档补谁
+
+注销 AKShare 后,四条 A 股链都只剩两档(`amazingdata,tushare` ×3 / `eastmoney,tushare` /
+`tushare,longbridge`),而且 `eastmoney` 与 `tushare` 快讯读的是同一家上游(见第 5 节),
+新闻链的冗余是名义上的。**实时 ETF IOPV / 折溢价率现在没有任何源**——这是已经发生的
+缺口,不是假设。补第三档的候选:
+
+| 候选 | 评价 |
+| --- | --- |
+| **腾讯 `qt.gtimg.cn`**(未接入) | ✅ **首选**。东财行情域 0/6 的同一时刻腾讯 200 ✅,是真正独立的第 4 个上游;88 字段含 PE/PB/换手/市值;配合直连东财 `ulist.np`(0.39s)可同时解决 ETF 画像那 19 秒。**能补上除 IOPV 外的全部丢失字段**(见 8.1) |
+| QMT Native Bridge(未接入) | ⚠️ **不适合当第三档**。历史日线逐 code、失败是 200+全 0 行、要求 QMT 客户端在跑(盘后通常关着)。它的价值在**独有字段**(申赎篮子、涨跌停价),不在补位(见第 9 节) |
+| `yfinance` | ❌ 别加回 A 股链。本机三个 Yahoo 域裸 curl connect timeout,且会重新激活 `load_ohlcv` 那条无哨兵的路 |
+| `tdx` | ❌ 占位适配器,运行时恒跳过。本次已从 `get_etf_profile` 的链里摘掉(见 7.2) |
 
 ---
 
 ## 8. 腾讯 / 新浪 / 东财 三家横评
 
-2026-08-29 对这三家的公开接口做过两轮直连实测。东财**已接入**(`eastmoney` vendor +
-AKShare 底层的 6 个东财域);腾讯、新浪**均未接入代码**,留档备查。
+2026-08-29 对这三家的公开接口做过两轮直连实测(当时 AKShare 还在路由里,所以下面
+「东财已接入」包含它底层的 6 个东财域)。现在代码里只剩 `eastmoney` vendor 这一条东财
+直连路径(`search-api-web` 新闻);腾讯、新浪**均未接入代码**,留档备查。
 
 ### 8.1 ETF 维度
 
@@ -382,11 +518,11 @@ AKShare 底层的 6 个东财域);腾讯、新浪**均未接入代码**,留档�
   的第二个独立校验源,补第 5 节说的冗余缺口。
 - **新浪对 ETF 可排除**:34 个字段里没有 IOPV 也没有 NAV。
 - 性能差:`ak.fund_etf_spot_em` **20.7 秒**(内部分 15 页拉全量 1587 只再筛 1 行),
-  直连东财 `ulist.np` 指定 secids **0.39 秒**,约 50 倍。该接口在
-  [akshare_fundamentals.py:107](../tradingagents/dataflows/akshare_fundamentals.py#L107)、
-  [:179](../tradingagents/dataflows/akshare_fundamentals.py#L179)、
-  [ticker_name.py:27](../tradingagents/dataflows/ticker_name.py#L27) 共 3 处调用,
-  有 15 分钟 `cached_call` 兜底,但每次缓存失效都要付这 20 秒。
+  直连东财 `ulist.np` 指定 secids **0.39 秒**,约 50 倍。这 20 秒是停用 AKShare 的主要
+  性能动因(见 7.2)。测量时它有 3 处调用(`akshare_fundamentals` 两处 + `ticker_name`);
+  现在只剩 [akshare_fundamentals.py:107](../tradingagents/dataflows/akshare_fundamentals.py#L107)、
+  [:179](../tradingagents/dataflows/akshare_fundamentals.py#L179) 两处,而该模块已从
+  `VENDOR_METHODS` 注销,**运行时不再被调用**。
 
 费用上三家这些接口都是网页/App 内部接口:零费用、无需 key、**无授权、无 SLA**。
 官方授权路径另算 —— 东财 Choice(`quantapi.eastmoney.com`,商业授权,报价需询)、
@@ -450,8 +586,9 @@ AKShare 底层的 6 个东财域);腾讯、新浪**均未接入代码**,留档�
 - **东财字段深约 2.3 倍**(319 vs 141 等),要做细粒度财报分析只有东财够用。
 - **新浪请求省 21 倍**:一次拿全,东财要翻 21 批。若只需少数几期,东财更省流量;
   若要拉全历史,新浪是一次调用,东财是 21 次串行(限频风险随之上升)。
-- 项目当前走东财(`stock_*_sheet_by_report_em`),第 4 节矩阵里 AKShare 三表耗时
-  5.9–8.1s,正是这个 20+ 次串行请求的代价。
+- 测量时项目经 AKShare 走东财(`stock_*_sheet_by_report_em`),第 4 节矩阵里 AKShare
+  三表耗时 5.9–8.1s,正是这个 20+ 次串行请求的代价。**现在三张报表走
+  `amazingdata,tushare`**,东财/新浪这两列都只是候选参考。
 
 #### 8.2.4 新闻
 
@@ -659,7 +796,8 @@ stocks: 300 只(不是前十!)每只带
 
 - **申赎篮子** —— [data-fetching-apis.md](./data-fetching-apis.md) 第 8 节里这个字段写的是
   「Tushare 付费 ETF 权限(可得时)/ 当前凭证未确认」。桥**免费、实测有真值**。
-- **全部成分股 + 份数** —— AKShare/Tushare 只给**前十**重仓。有了 `componentVolume` 就能算
+- **全部成分股 + 份数** —— Tushare `fund_portfolio` 只给**前十**重仓(AKShare 的持仓兜底也只给
+  前十,且已随本次停用删除)。有了 `componentVolume` 就能算
   近似权重(`componentVolume × 价格 / navPerCU`),等于补上了 `/api/instrument/index_weight`
   拿不到的东西。注意 **21 只 `componentVolume = 0`**(全现金替代),算权重时不能当缺失值丢掉。
 - **折溢价** —— `lastPrice / nav - 1`,实测 4.621 / 4.614 = **+0.15%**。
@@ -706,7 +844,8 @@ PriceTick 0.01 · VolumeMultiple 1 · InstrumentStatus 0 · HSGTFlag(本例 null
 4. **零值拦截是硬要求**(9.3.1),否则违反反幻觉约定。
 5. **只放链尾或校验位**,别放链首(9.3.2)。
 6. **先接 `get_etf_profile` 的字段补位最划算**:唯一源、免费、20ms、且填的正是现有链
-   `akshare,tushare,tdx,longbridge`(有效档只有 2 个)填不上的字段。风险最小、收益最明确。
+   `tushare,longbridge` 填不上的字段。风险最小、收益最明确 —— 尤其在停用 AKShare 之后,
+   实时 IOPV / 折溢价率已经彻底没有源(7.2、7.5),不过桥这边的 `nav` 口径也未定(见上)。
 
 ---
 
