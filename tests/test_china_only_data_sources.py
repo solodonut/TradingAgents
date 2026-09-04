@@ -32,14 +32,16 @@ class CapturingLLM:
 @pytest.mark.unit
 def test_default_config_uses_domestic_china_data_sources_only():
     assert DEFAULT_CONFIG["domestic_china_only"] is True
-    assert DEFAULT_CONFIG["data_vendors"]["core_stock_apis"] == "amazingdata,tushare"
+    # tencent / sina 同为境内源,放在链尾兜底,不改变"只用境内源"这一约束。
+    assert DEFAULT_CONFIG["data_vendors"]["core_stock_apis"] == "amazingdata,tushare,tencent"
     assert DEFAULT_CONFIG["data_vendors"]["technical_indicators"] == "amazingdata,tushare"
     assert DEFAULT_CONFIG["data_vendors"]["fundamental_data"] == "amazingdata,tushare"
-    assert DEFAULT_CONFIG["data_vendors"]["news_data"] == "eastmoney,tushare"
-    assert DEFAULT_CONFIG["tool_vendors"]["get_news"] == "eastmoney,tushare"
+    assert DEFAULT_CONFIG["data_vendors"]["news_data"] == "eastmoney,tushare,sina"
+    assert DEFAULT_CONFIG["tool_vendors"]["get_news"] == "eastmoney,tushare,sina"
     assert DEFAULT_CONFIG["tool_vendors"]["get_etf_news"] == "tushare"
-    assert DEFAULT_CONFIG["tool_vendors"]["get_global_news"] == "tushare"
+    assert DEFAULT_CONFIG["tool_vendors"]["get_global_news"] == "tushare,sina"
     assert DEFAULT_CONFIG["tool_vendors"]["get_etf_profile"] == "tushare,longbridge"
+    assert DEFAULT_CONFIG["tool_vendors"]["get_etf_realtime"] == "tencent"
     assert DEFAULT_CONFIG["data_vendors"]["macro_data"] == "disabled"
     assert DEFAULT_CONFIG["data_vendors"]["prediction_markets"] == "disabled"
 

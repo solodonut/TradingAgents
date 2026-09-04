@@ -261,10 +261,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # routed to vendors you didn't choose. For ordered fallback, list several,
     # e.g. "yfinance,alpha_vantage". "default" uses all available vendors.
     "data_vendors": {
-        "core_stock_apis": "amazingdata,tushare",      # Options: amazingdata, alpha_vantage, yfinance, tushare
+        # tencent / sina 一律放**链尾兜底**:两家都是网页内部接口(零成本、免 key、
+        # 无 SLA),作用是前档全挂时还能出数,不改变默认走哪一档。
+        "core_stock_apis": "amazingdata,tushare,tencent",  # Options: amazingdata, alpha_vantage, yfinance, tushare, tencent
         "technical_indicators": "amazingdata,tushare", # Options: amazingdata, alpha_vantage, yfinance, tushare
         "fundamental_data": "amazingdata,tushare",     # Options: amazingdata, alpha_vantage, yfinance, tushare
-        "news_data": "eastmoney,tushare",    # Options: alpha_vantage, yfinance, longbridge, eastmoney, tushare
+        "news_data": "eastmoney,tushare,sina",  # Options: alpha_vantage, yfinance, longbridge, eastmoney, tushare, sina
         "macro_data": "disabled",            # Options: fred, disabled
         "prediction_markets": "disabled",    # Options: polymarket, disabled
     },
@@ -274,11 +276,18 @@ DEFAULT_CONFIG = _apply_env_overrides({
         # no hits for A-shares (the credential is fine — get_global_news works),
         # so leading with it just burns a round trip. Both sources are East Money
         # underneath, so this ordering loses no real redundancy.
-        "get_news": "eastmoney,tushare",
+        # sina 收尾:eastmoney 和 tushare 底下是同一个上游(东财),所以这条链原本的
+        # 冗余是假的。新浪是真正独立的第三家,东财挂掉时这一档还能出数。
+        # ⚠️ 新浪只对个股有效,对场内基金会抛错回退(见 sina_news 模块注释)。
+        "get_news": "eastmoney,tushare,sina",
         "get_etf_news": "tushare",
-        "get_global_news": "tushare",
+        # 前两档 yfinance/alpha_vantage 在境内不可用,实际只有 tushare 一档在跑;
+        # 新浪 7×24 是境内可直连的第二档。
+        "get_global_news": "tushare,sina",
         "get_etf_profile": "tushare,longbridge",
         "get_etf_intraday": "amazingdata,tushare",
+        # IOPV/净值目前独此一家。
+        "get_etf_realtime": "tencent",
         # A股资金面/事件面(仅 AmazingData 覆盖);服务离线时路由回退为 NO_DATA。
         "get_dragon_tiger": "amazingdata",
         "get_margin_trading": "amazingdata",

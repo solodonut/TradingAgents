@@ -6,6 +6,12 @@
 方法视角(每个 `get_*` 方法传什么、返回什么)见
 [data-fetching-apis.md](./data-fetching-apis.md)。两篇互为索引,不重复内容。
 
+> **✅ 2026-09-04:腾讯 / 新浪已接入路由层(11 个 vendor)。** 按 7.5 的推荐补第三档,
+> 全部**放链尾兜底**,默认走哪一档不变:`core_stock_apis` +`tencent`、`get_news` +`sina`、
+> `get_global_news` +`sina`。AKShare 停用留下的 IOPV/折溢价缺口由**新方法**
+> `get_etf_realtime`(tencent 单档)补回。第 8 节的横评据此从「候选评估」变为「接入依据」,
+> 其中 8.2.4 有两处被本次实测**推翻**的旧结论(新浪对基金无效、页面顺序不可依赖)。
+>
 > **⚠️ 2026-09-03:AKShare 已全局停用,第 7 节的建议已全部落地。** 它从
 > `VENDOR_LIST` / `VENDOR_METHODS` 注销,`akshare_auto_route` 开关与 7.4 记录的三处
 > 旁路(外加 `stockstats_utils` 的 A 股分支)、`service_health` 的 AKShare 探针卡都已删除。
@@ -24,10 +30,11 @@
 数据源分两类,区别在于**走不走 `route_to_vendor`**:
 
 ```
-① 路由层内 —— 9 个 vendor,登记在 interface.py::VENDOR_METHODS
+① 路由层内 —— 11 个 vendor,登记在 interface.py::VENDOR_METHODS
    Agent → @tool → route_to_vendor(method) → vendor 链 → 首个成功即停
    永不抛错,失败返回 NO_DATA_AVAILABLE / DATA_SOURCE_UNAVAILABLE 哨兵
-   (原第 10 个是 akshare,已注销;配置里再写 "akshare" 会抛 ValueError)
+   (2026-09-04 新增 tencent / sina,均放链尾兜底;
+    akshare 已注销,配置里再写 "akshare" 会抛 ValueError)
 
 ② 路由层外 —— 4 处直连,不经 route_to_vendor
    反幻觉身份解析、reflection 收益回算、stockstats OHLCV、情绪分析师社交源
@@ -91,7 +98,7 @@
 
 ---
 
-## 2. 路由层内:9 个 vendor
+## 2. 路由层内:11 个 vendor
 
 「真实上游」是**实际提供数据的机构**,不是 Python 包名。这一列是本表最重要的信息:
 多个 vendor 可能共享同一上游,链式 fallback 因此可能不提供真正的冗余(见第 5 节)。
@@ -101,6 +108,8 @@
 | `amazingdata` | **银河证券**(经本地 QMT docker 常驻服务 `127.0.0.1:8888`) | 行情/指标/基本面/ETF 分钟/资金面全部 4 个方法 | `AD_API_TOKEN`(+`AD_API_PORT`/`AD_API_BASE`) | 需银河账户与 QMT;服务本身无 API 费 | ✅ 多数类别链首 |
 | `tushare` | **Tushare Pro**;快讯 `news()` 底层为**新浪 + 华尔街见闻** | 行情/指标/基本面/新闻/全球新闻/ETF 画像/ETF 分钟/ETF 新闻 | `TUSHARE_TOKEN` | 注册免费,**ETF/新闻等端点需付费积分** | ✅ |
 | `eastmoney` | **东方财富** 搜索 API(`search-api-web.eastmoney.com`)直连 | `get_news` | 无 | 免费,无 SLA | ✅ `get_news` 链首 |
+| `tencent` | **腾讯自有行情**(`qt.gtimg.cn` 快照 / `web.ifzq.gtimg.cn` K 线)网页内部接口 | `get_etf_realtime`(**IOPV 唯一源**)、`get_stock_data` | 无 | 免费,无 SLA | ✅ `get_stock_data` 链尾;`get_etf_realtime` 唯一档 |
+| `sina` | **新浪财经**(`vip.stock.finance.sina.com.cn` 个股新闻 / `zhibo.sina.com.cn` 7×24)网页内部接口 | `get_news`(**仅个股,基金无效**)、`get_global_news` | 无 | 免费,无 SLA | ✅ 两条新闻链链尾 |
 | `longbridge` | **长桥 OpenAPI**(经 `longbridge` CLI subprocess) | `get_news`、ETF 画像 | CLI 自身认证 | 需长桥账户 | ✅ 在链尾 |
 | `tdx` | 通达信「问小达」 | ETF 画像 | 无(见下) | 无 | ⚠️ **纯占位** |
 | `yfinance` | **Yahoo Finance** | 行情/指标/基本面/新闻/全球新闻/内部交易 | 无 | 免费,无 SLA | ❌ 需显式启用 |
@@ -357,19 +366,20 @@ Yahoo     ← yfinance vendor + 2 处路由外直连(身份兜底、非 A 股 OH
 
 ```python
 data_vendors = {
-    "core_stock_apis":      "amazingdata,tushare",
+    "core_stock_apis":      "amazingdata,tushare,tencent",
     "technical_indicators": "amazingdata,tushare",
     "fundamental_data":     "amazingdata,tushare",
-    "news_data":            "eastmoney,tushare",       # 被下面 get_news 覆盖
+    "news_data":            "eastmoney,tushare,sina",  # 被下面 get_news 覆盖
     "macro_data":           "disabled",
     "prediction_markets":   "disabled",
 }
 tool_vendors = {                                       # 方法级,优先
-    "get_news":          "eastmoney,tushare",
+    "get_news":          "eastmoney,tushare,sina",
     "get_etf_news":      "tushare",
-    "get_global_news":   "tushare",
+    "get_global_news":   "tushare,sina",
     "get_etf_profile":   "tushare,longbridge",
     "get_etf_intraday":  "amazingdata,tushare",
+    "get_etf_realtime":  "tencent",                    # IOPV/折溢价独此一家
     "get_dragon_tiger":  "amazingdata",                # 资金面 4 个方法
     "get_margin_trading": "amazingdata",               # 仅 AmazingData 覆盖,
     "get_shareholders":  "amazingdata",                # 服务离线即 NO_DATA
@@ -473,7 +483,14 @@ if (config.get("akshare_auto_route", True)
 
 **没有全局 `disabled_vendors` 开关** —— 本次是逐处删除,不是加开关。回滚要手工还原上述各处。
 
-### 7.5 链只剩两档,第三档补谁
+### 7.5 链只剩两档,第三档补谁(腾讯 / 新浪已于 2026-09-04 接入)
+
+> **✅ 2026-09-04 已落地:本节推荐的腾讯首选方案已实现,新浪同批接入。**
+> 三条链补到第三档(`core_stock_apis` +tencent、`get_news` +sina、`get_global_news` +sina),
+> **全部放链尾兜底**——前档成功时不会被调用,默认行为不变。IOPV/折溢价缺口由**新方法**
+> `get_etf_realtime`(tencent 单档)补上,刻意不进 `get_etf_profile`:`route_to_vendor`
+> 链首成功即停,放链首会把 Tushare 更完整的份额/成分画像永久挤掉,两者互补。
+> 详见下方 8.1 / 8.2.4 的接入注记。
 
 注销 AKShare 后,四条 A 股链都只剩两档(`amazingdata,tushare` ×3 / `eastmoney,tushare` /
 `tushare,longbridge`),而且 `eastmoney` 与 `tushare` 快讯读的是同一家上游(见第 5 节),
@@ -493,7 +510,12 @@ if (config.get("akshare_auto_route", True)
 
 2026-08-29 对这三家的公开接口做过两轮直连实测(当时 AKShare 还在路由里,所以下面
 「东财已接入」包含它底层的 6 个东财域)。现在代码里只剩 `eastmoney` vendor 这一条东财
-直连路径(`search-api-web` 新闻);腾讯、新浪**均未接入代码**,留档备查。
+直连路径(`search-api-web` 新闻)。
+
+> **⚠️ 2026-09-04:腾讯、新浪已接入,本节从「候选横评」变成「接入依据」。**
+> 落地范围按「各取所长」:腾讯 → `get_etf_realtime`(IOPV/NAV/折溢价)+ `get_stock_data`
+> 日线;新浪 → `get_news` + `get_global_news`。表格里两家为 ❌ 的能力**没有**接进来。
+> 实现:`tencent_utils/tencent_etf/tencent_stock.py`、`sina_utils/sina_news/sina_global_news.py`。
 
 ### 8.1 ETF 维度
 
@@ -597,10 +619,22 @@ if (config.get("akshare_auto_route", True)
 | 项目 | 腾讯 | 新浪 `vCB_AllNewsStock` | 东财 `search-api-web` |
 | --- | --- | --- | --- |
 | 可用性 | **未找到** | ✅ 40 条 | ✅ `hitsTotal` = 619 |
-| 返回格式 | — | HTML(须 BeautifulSoup) | JSON |
-| 严格时间倒序 | — | ✅ | ❌ 默认按相关性 |
+| 返回格式 | — | HTML(实现用限定范围的正则,未引入 BeautifulSoup) | JSON |
+| 严格时间倒序 | — | ⚠️ 不可依赖(见下) | ❌ 默认按相关性 |
 | 最新一条 | — | **当天 08-29**(当天 9 条) | 08-27 |
 | 每条含发布时间 | — | ✅ | ✅(但项目输出时丢弃,见 8.2.6) |
+| **场内基金(ETF)** | — | ❌ **无效,见下** | ✅ |
+
+> **⚠️ 2026-09-04 接入时的两处实测修正**(上表「严格时间倒序 ✅」是 2026-08-29 只在
+> 600519 上测的,样本不足):
+>
+> 1. **`vCB_AllNewsStock` 对基金代码无效。** 给 510300 和 159241 返回的页面**字节完全
+>    相同**(55382 字符),都是通用大盘新闻、还夹 2 条广告,不是该基金的新闻。因此
+>    `sina_news.get_news` 对基金代码一律抛 `NoMarketDataError` 回退东财/Tushare ——
+>    把通用大盘新闻当成某只 ETF 的新闻喂给 agent,正是 AGENTS.md 禁止的那类编造。
+> 2. **页面顺序不可依赖**,广告行会插在中间打乱它,所以实现自己按时间倒序重排。
+>
+> 另:实现**保留了每条的发布时间**(东财那版丢弃,见 8.2.6),agent 才能判断新闻新旧。
 
 全局财经快讯:
 
@@ -609,8 +643,10 @@ if (config.get("akshare_auto_route", True)
 | 接口 | **未找到**(2 个候选全 404) | `zhibo.sina.com.cn/api/zhibo/feed` | `np-weblist…getFastNewsList` |
 | 结果 | — | ✅ 200 · 0.15s · 54KB | ✅ 200 · 0.23s · 20KB |
 
-两家都可用且都未接入项目(项目的 `get_global_news` 只有 yfinance / alpha_vantage / tushare
-三档,前两档在境内网络下不可用)。**新浪与东财的快讯是可直接补上的境内替代**。
+两家都可用。项目的 `get_global_news` 原有 yfinance / alpha_vantage / tushare 三档,
+前两档在境内网络下不可用,**实际只有 Tushare 一档在跑**(单点)。
+**✅ 2026-09-04 已把新浪 7×24 接为第二档**(`sina_global_news.py`,`zhibo_id=152`,JSON
+返回无需解析 HTML)。东财快讯仍未接入,留作后续候选。
 
 #### 8.2.5 腾讯:结论必须谨慎
 
@@ -851,12 +887,36 @@ PriceTick 0.01 · VolumeMultiple 1 · InstrumentStatus 0 · HSGTFlag(本例 null
 
 ## 10. 加一个数据源要改哪里
 
+> 下面这份清单按 2026-09-04 接入 tencent / sina 的实际改动核对过。原先只列了 5 步,
+> 漏了 `VENDOR_LIST`、`TOOLS_CATEGORIES` 与 `diagnostics.py` —— 漏掉前者会在配置校验时
+> 报「未知 vendor」,漏掉后两者会让新方法路由不可用 / 诊断页测试失败。
+
+**接一个已有方法的新 vendor(最常见):**
+
 1. 在 `dataflows/` 新建 `<vendor>_<domain>.py`,实现与现有 vendor **同名同签名**的方法
-   (`route_to_vendor` 靠这个用同一组参数遍历整条链)。
-2. 在 [interface.py](../tradingagents/dataflows/interface.py) 的 `VENDOR_METHODS`
-   对应方法下登记。
+   (`route_to_vendor` 靠这个用同一组参数遍历整条链)。多个模块共用的抓取逻辑抽到
+   `<vendor>_utils.py`(照 `tencent_utils.py` / `sina_utils.py`)。
+2. 在 [interface.py](../tradingagents/dataflows/interface.py) 里两处都要改:
+   - `VENDOR_LIST` 加 vendor 名 —— **漏了这步配置校验会拒绝这个名字**;
+   - `VENDOR_METHODS[<method>]` 下登记实现。
 3. 需要默认启用时,改 [default_config.py](../tradingagents/default_config.py) 的
-   `data_vendors` / `tool_vendors`。
-4. 凭证写进 [.env.example](../.env.example) 并在第 5 节补一行。
+   `data_vendors` / `tool_vendors`。**新源放链尾**(9.3.2):前档成功时不会被调用,
+   默认行为不变,收益是前档全挂时还能出数。
+4. 凭证写进 [.env.example](../.env.example) 并在第 2 节表格补一行。网页内部接口
+   (腾讯/新浪/东财这类)无凭证,但要在表里写明「免费,无 SLA」。
 5. 无数据时抛 `NoMarketDataError`,未配置时抛 `VendorNotConfiguredError` —— 路由靠这两个
    区分「查不到」和「跳过」。**不要**自己返回哨兵字符串,那是路由层的职责。
+6. **零值拦截是硬要求**(9.3.1):停牌/上游异常常返回 0,把 0 当价格报出去等于伪造数据。
+7. 输出**形状要对齐同方法的其它 vendor**(同 header、同分块格式),否则换源时 agent
+   拿到的报告结构会变。
+
+**如果还新增了一个方法(如本次的 `get_etf_realtime`),额外改:**
+
+8. `interface.py` 的 `TOOLS_CATEGORIES[<category>]["tools"]` 加方法名 ——
+   不在任何类别里,`get_category_for_method` 会抛 `ValueError`,路由直接不可用。
+9. [diagnostics.py](../tradingagents/dataflows/diagnostics.py) 的 `METHOD_GROUP` /
+   `METHOD_DESC` / `METHOD_PROBES` 三个字典都要加(`tests/dataflows/test_diagnostics.py`
+   断言它们完整覆盖 `VENDOR_METHODS`)。
+10. 暴露成 `@tool` 才能被 agent 调到:`agents/utils/<domain>_tools.py` 加函数、
+    `agents/utils/agent_utils.py` 的 import 与 `__all__`、需要时 `advisor/tools.py`
+    的 `ADVISOR_TOOLS` 与 `advisor/prompt.py` 的框架说明。

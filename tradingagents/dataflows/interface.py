@@ -44,7 +44,11 @@ from .longbridge import (
     get_news as get_longbridge_news,
 )
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from .sina_global_news import get_global_news as get_sina_global_news
+from .sina_news import get_news as get_sina_news
 from .tdx import get_etf_profile as get_tdx_etf_profile
+from .tencent_etf import get_etf_realtime as get_tencent_etf_realtime
+from .tencent_stock import get_stock_data as get_tencent_stock
 from .tushare_etf_news import get_etf_news as get_tushare_etf_news
 from .tushare_etf_profile import get_etf_profile as get_tushare_etf_profile
 from .tushare_fundamentals import (
@@ -135,6 +139,7 @@ TOOLS_CATEGORIES = {
         "tools": [
             "get_etf_profile",
             "get_etf_intraday",
+            "get_etf_realtime",
         ]
     },
     "capital_flow_data": {
@@ -158,6 +163,8 @@ VENDOR_LIST = [
     "eastmoney",
     "longbridge",
     "tdx",
+    "tencent",
+    "sina",
 ]
 
 
@@ -173,6 +180,7 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
         "tushare": get_tushare_stock,
+        "tencent": get_tencent_stock,
     },
     # technical_indicators
     "get_indicators": {
@@ -213,11 +221,13 @@ VENDOR_METHODS = {
         "longbridge": get_longbridge_news,
         "eastmoney": get_eastmoney_news,
         "tushare": get_tushare_news,
+        "sina": get_sina_news,
     },
     "get_global_news": {
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
         "tushare": get_tushare_global_news,
+        "sina": get_sina_global_news,
     },
     "get_etf_news": {
         "tushare": get_tushare_etf_news,
@@ -243,6 +253,11 @@ VENDOR_METHODS = {
     "get_etf_intraday": {
         "amazingdata": get_amazingdata_etf_intraday,
         "tushare": get_tushare_etf_intraday,
+    },
+    # 单档:AKShare 停用后腾讯是唯一还给 IOPV 的源。刻意不进 get_etf_profile ——
+    # route_to_vendor 首个成功即返回,放链首会挤掉 Tushare 更完整的份额/成分画像。
+    "get_etf_realtime": {
+        "tencent": get_tencent_etf_realtime,
     },
     # capital_flow_data (AmazingData 新增维度)
     "get_dragon_tiger": {

@@ -180,7 +180,7 @@ class VendorRoutingTests(unittest.TestCase):
     def test_default_tool_vendors_use_resilient_etf_and_news_chains(self):
         config = interface.get_config()
         self.assertEqual(config["tool_vendors"]["get_etf_profile"], "tushare,longbridge")
-        self.assertEqual(config["tool_vendors"]["get_news"], "eastmoney,tushare")
+        self.assertEqual(config["tool_vendors"]["get_news"], "eastmoney,tushare,sina")
 
     def test_production_get_etf_profile_falls_back_from_tushare_to_longbridge(self):
         calls = []

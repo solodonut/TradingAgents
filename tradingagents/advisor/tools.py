@@ -5,6 +5,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_cashflow,
     get_etf_news,
     get_etf_profile,
+    get_etf_realtime,
     get_fundamentals,
     get_global_news,
     get_income_statement,
@@ -33,6 +34,7 @@ ADVISOR_TOOLS = [
     get_macro_indicators,
     get_prediction_markets,
     get_etf_profile,
+    get_etf_realtime,
 ]
 
 _NO_DATA_PREFIXES = (

@@ -10,6 +10,33 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **腾讯、新浪接入为数据源 vendor(路由层 9 → 11 个),并补回 IOPV/折溢价缺口。**
+  两家都是网页内部接口:零费用、免 key、无 SLA、境内可直连。按「各取所长」只接各自有
+  已验证端点的能力,`docs/data-sources.md` 第 8 节里为 ❌ 的能力一律不接。
+  **新增 6 个模块**:`tencent_utils`/`tencent_etf`/`tencent_stock`、
+  `sina_utils`/`sina_news`/`sina_global_news`(共用抓取层复用 `akshare_utils.ak_retry` 的
+  代理绕过 + 指数退避 + 熔断;`akshare_utils` 不是 AKShare 封装,是通用抓取工具箱)。
+  **新增方法 `get_etf_realtime`**(tencent 单档 + 同名 `@tool`):实时 IOPV、单位净值(T-1)、
+  折溢价率。AKShare 停用后这三个字段彻底断供,这是本项目**唯一**的 IOPV 源。刻意**不**登记
+  到 `get_etf_profile` —— `route_to_vendor` 链首成功即停,放链首会把 Tushare 更完整的
+  份额/成分画像永久挤掉,两者是互补关系。同时修正 `get_etf_profile` 的 docstring:
+  它此前承诺「折溢价/IOPV」但没有任何 vendor 提供,现改为指向 `get_etf_realtime`。
+  **三条既有链各补一档,全部放链尾兜底**,前档成功时不会被调用(有路由测试保证),
+  默认走哪一档不变:`core_stock_apis` +`tencent`(日线,注意上游 `qfqday` 行序是
+  `[日期,开,收,高,低,量]`,收盘价在第 3 位而非常见 OHLC 顺序)、
+  `get_news` +`sina`、`get_global_news` +`sina`。后两条的收益是**真上游冗余**:
+  `eastmoney` 与 `tushare` 的新闻底下是同一家东财,原本的 fallback 冗余是名义上的;
+  而 `get_global_news` 前两档在境内不可用,实际只有 Tushare 一档在跑(单点)。
+  `sina_news` 比东财那版**多保留每条的发布时间**(东财版丢弃,见 docs 8.2.6)。
+  接入时两处旧文档结论被实测推翻并已更正:①`vCB_AllNewsStock` **对基金代码无效**
+  (510300 与 159241 返回的页面字节完全相同,都是通用大盘新闻还夹广告),故基金一律抛
+  `NoMarketDataError` 回退——把通用大盘新闻当成某只 ETF 的新闻属于 AGENTS.md 禁止的编造;
+  ②页面顺序不可依赖(广告行会打乱),实现自行按时间倒序重排。
+  新增 34 个单测(fixture 为 2026-09-04 真实响应,只 mock 网络边界),含零值拦截、
+  窗口过滤(防回测看到未来数据)、广告行过滤、链尾不被调用等;
+  `diagnostics.py` 三个字典同步登记新方法。`docs/data-sources.md` 第 10 节
+  「加一个数据源要改哪里」按本次实际改动补全(原先漏了 `VENDOR_LIST`、
+  `TOOLS_CATEGORIES`、`diagnostics.py` 三处)。
 - **WebUI 队列可以并行分析多个标的(默认并发 2,UI 可调 1–4)。** `api/scheduler.py::QueueScheduler`
   原来严格串行(`advance()` 里 `if store.has_running_run(): return`),观察列表 10 个标的就得排
   10 倍时间,而一个 run 的墙钟几乎全花在等 LLM/数据源上。现在 `advance()` 循环启动到

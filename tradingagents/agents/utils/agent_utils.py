@@ -14,7 +14,7 @@ from tradingagents.agents.utils.capital_flow_tools import (
     get_shareholders,
 )
 from tradingagents.agents.utils.core_stock_tools import get_stock_data
-from tradingagents.agents.utils.etf_data_tools import get_etf_profile
+from tradingagents.agents.utils.etf_data_tools import get_etf_profile, get_etf_realtime
 from tradingagents.agents.utils.fundamental_data_tools import (
     get_balance_sheet,
     get_cashflow,
@@ -52,6 +52,7 @@ __all__ = [
     "get_macro_indicators",
     "get_prediction_markets",
     "get_etf_profile",
+    "get_etf_realtime",
     "get_verified_market_snapshot",
     "build_instrument_context",
     "resolve_instrument_identity",
