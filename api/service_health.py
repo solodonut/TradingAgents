@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections.abc import Iterator
@@ -120,6 +121,42 @@ def _json_probe(
     except Exception as exc:  # noqa: BLE001 - any exception is a service failure
         elapsed = int((time.monotonic() - start) * 1000)
         message = _redact_secret_values(f"{type(exc).__name__}: {exc}", params, json_payload)
+        return False, message, elapsed
+
+
+def _text_probe(
+    url: str,
+    *,
+    params: dict | None = None,
+    headers: dict | None = None,
+    encoding: str = "utf-8",
+) -> tuple[bool, str, int]:
+    """GET ``url`` 并返回响应正文,供需要自己解析非 JSON 正文的探针使用。
+
+    只给腾讯/新浪这类**境内网页内部接口**用,两点与 ``_http_probe`` 不同:
+
+    - ``trust_env = False`` 强制绕过代理。企业代理隧道不到境内主机(见
+      ``akshare_utils.no_proxy_session`` 的说明),不绕过会让健康检查报红而实际取数
+      是好的。这里用 session 级开关而不是那个上下文管理器 —— 后者猴补丁
+      ``requests.Session.__init__`` 并清空进程级环境变量,并发时会波及同进程里
+      正需要代理的 LLM 调用。
+    - 不复用 vendor 的 ``ak_retry``:那条路有 6 次指数退避重试(最坏上百秒)和进程级
+      熔断,会把 SSE 健康流拖死,还会污染真实调用的熔断状态。
+    """
+    start = time.monotonic()
+    try:
+        with requests.Session() as session:
+            session.trust_env = False
+            response = session.get(url, params=params, headers=headers, timeout=_REQUEST_TIMEOUT)
+        elapsed = int((time.monotonic() - start) * 1000)
+        if not 200 <= response.status_code < 400:
+            return False, f"HTTP {response.status_code}", elapsed
+        # 响应头不带 charset 时 requests 会猜成 ISO-8859-1,中文变乱码,故显式指定。
+        response.encoding = encoding
+        return True, response.text, elapsed
+    except Exception as exc:  # noqa: BLE001 - any exception is a service failure
+        elapsed = int((time.monotonic() - start) * 1000)
+        message = _redact_secret_values(f"{type(exc).__name__}: {exc}", params)
         return False, message, elapsed
 
 
@@ -373,6 +410,104 @@ def _run_amazingdata_probe() -> tuple[ServiceStatus, str, int]:
     return status, message, latency_ms
 
 
+_TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q=sh510300"  # 沪深300ETF华泰柏瑞:最大、几乎不停牌
+
+# 下标与 tencent_etf 的实测字段表一致(第 30 位快照时间、第 78 位 IOPV、第 81 位单位净值)。
+# 腾讯是网页内部接口,字段位置漂移一次就会让 IOPV 静默失真,所以这里盯住字段数与 IOPV。
+_TENCENT_IDX_TIMESTAMP = 30
+_TENCENT_IDX_IOPV = 78
+_TENCENT_MIN_FIELDS = 82
+
+
+def _run_tencent_probe() -> tuple[ServiceStatus, str, int]:
+    """探腾讯 ``qt.gtimg.cn`` 实时快照 —— IOPV / 折溢价在本项目没有第二个来源。
+
+    腾讯另一个域(``web.ifzq.gtimg.cn`` 日线)只在 ``core_stock_apis`` 链尾兜底,前两档
+    健康时根本不会被调用,所以这张卡盯住独此一家的那条路径。要逐 cell 探整张
+    ``VENDOR_METHODS`` 表用 ``/api/diagnostics/etf/{code}``。
+    """
+    from tradingagents.dataflows.tencent_utils import parse_quote_fields
+
+    ok, text, latency_ms = _text_probe(_TENCENT_QUOTE_URL, encoding="gbk")
+    if not ok:
+        return "error", text, latency_ms
+
+    fields = parse_quote_fields(text)
+    if not fields:
+        return (
+            "error",
+            "Reachable, but the quote response was empty (rate-limited or blocked)",
+            latency_ms,
+        )
+    if len(fields) < _TENCENT_MIN_FIELDS:
+        return (
+            "error",
+            f"Reachable, but the quote had {len(fields)} fields; "
+            f"expected at least {_TENCENT_MIN_FIELDS}",
+            latency_ms,
+        )
+
+    try:
+        iopv = float(fields[_TENCENT_IDX_IOPV])
+    except ValueError:
+        iopv = 0.0
+    if not iopv:
+        # 零值拦截:vendor 这时会抛 NoMarketDataError,IOPV 实际已断供,但停牌/非交易
+        # 时段也可能是 0,所以报 warning 而不是 error。
+        return (
+            "warning",
+            "Reachable, but IOPV is missing or zero (suspended or upstream error)",
+            latency_ms,
+        )
+
+    latest_date = _normalize_date(fields[_TENCENT_IDX_TIMESTAMP])
+    if not latest_date:
+        return "warning", "Reachable, but the snapshot has no usable timestamp", latency_ms
+    status, message = _freshness_status(latest_date)
+    return status, message, latency_ms
+
+
+_SINA_FEED_URL = "https://zhibo.sina.com.cn/api/zhibo/feed"
+_SINA_FEED_PARAMS = {
+    "page": 1,
+    "page_size": 1,
+    "zhibo_id": 152,  # 新浪财经 7×24 直播间,与 sina_global_news 一致
+    "tag_id": 0,
+    "dire": "f",
+    "dpc": 1,
+}
+# 新浪缺 Referer 会 403(见 sina_utils)。
+_SINA_HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/"}
+
+
+def _run_sina_probe() -> tuple[ServiceStatus, str, int]:
+    """探新浪 7×24 快讯 feed —— ``get_global_news`` 境内唯一可直连的第二档。
+
+    新浪的另一个能力(个股新闻页 ``vip.stock.finance.sina.com.cn``)在 ``get_news`` 里排
+    第三,前面有东财 + Tushare 两档,所以不单独探。不做新鲜度判定:新闻源没有「今天的
+    行情数据」这层语义,与 Eastmoney 那张卡一致(见 data-service-freshness 设计文档)。
+    """
+    ok, text, latency_ms = _text_probe(
+        _SINA_FEED_URL, params=_SINA_FEED_PARAMS, headers=_SINA_HEADERS
+    )
+    if not ok:
+        return "error", text, latency_ms
+
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        return "error", "Reachable, but the feed response was not JSON", latency_ms
+
+    result = payload.get("result") if isinstance(payload, dict) else None
+    data = result.get("data") if isinstance(result, dict) else None
+    feed = data.get("feed") if isinstance(data, dict) else None
+    items = feed.get("list") if isinstance(feed, dict) else None
+    if not items:
+        # HTTP 200 + 空列表是抓取式接口的典型静默失败,可达但取不到东西。
+        return "warning", "Reachable, but the 7x24 feed returned no items", latency_ms
+    return "ok", "Reachable", latency_ms
+
+
 def _probe_llm_services(config: dict) -> Iterator[dict]:
     yield _event(
         service_id="llm:provider",
@@ -510,6 +645,24 @@ _DATA_SERVICES = {
         "params": {"limit": "1"},
         "env": None,
     },
+    "tencent": {
+        # 网页内部接口:零费用、免 key、无 SLA。正文是 GBK 的 ~ 分隔串而不是 JSON,
+        # 且要校验字段位置,所以走专门分支而不是 url+params 模式。
+        "name": "腾讯行情 (IOPV)",
+        "probe": "tencent",
+    },
+    "sina": {
+        # 同为网页内部接口。JSON 但嵌套三层且需要 Referer,也走专门分支。
+        "name": "新浪财经 7×24",
+        "probe": "sina",
+    },
+}
+
+# 不适用「url + params 可达性探测」模式的服务:本地 daemon、需要校验正文结构的抓取式接口。
+_CUSTOM_PROBES = {
+    "amazingdata": _run_amazingdata_probe,
+    "tencent": _run_tencent_probe,
+    "sina": _run_sina_probe,
 }
 
 
@@ -527,8 +680,9 @@ def _probe_data_services(config: dict) -> Iterator[dict]:
             )
             continue
 
-        if spec.get("probe") == "amazingdata":
-            status, message, latency_ms = _run_amazingdata_probe()
+        probe_kind = spec.get("probe")
+        if probe_kind:
+            status, message, latency_ms = _CUSTOM_PROBES[str(probe_kind)]()
             yield _event(
                 service_id=f"data:{service_id}",
                 name=name,

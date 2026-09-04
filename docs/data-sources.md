@@ -889,7 +889,9 @@ PriceTick 0.01 · VolumeMultiple 1 · InstrumentStatus 0 · HSGTFlag(本例 null
 
 > 下面这份清单按 2026-09-04 接入 tencent / sina 的实际改动核对过。原先只列了 5 步,
 > 漏了 `VENDOR_LIST`、`TOOLS_CATEGORIES` 与 `diagnostics.py` —— 漏掉前者会在配置校验时
-> 报「未知 vendor」,漏掉后两者会让新方法路由不可用 / 诊断页测试失败。
+> 报「未知 vendor」,漏掉后两者会让新方法路由不可用 / 诊断页测试失败。**同批还漏了
+> `api/service_health.py` 的探针卡**(已于 2026-09-04 补上,见第 8 步):漏掉不会报错,
+> 只会让新源在 WebUI 健康面板里彻底隐身 —— 挂了也没人知道,正是最不该静默的一处。
 
 **接一个已有方法的新 vendor(最常见):**
 
@@ -909,14 +911,28 @@ PriceTick 0.01 · VolumeMultiple 1 · InstrumentStatus 0 · HSGTFlag(本例 null
 6. **零值拦截是硬要求**(9.3.1):停牌/上游异常常返回 0,把 0 当价格报出去等于伪造数据。
 7. 输出**形状要对齐同方法的其它 vendor**(同 header、同分块格式),否则换源时 agent
    拿到的报告结构会变。
+8. [api/service_health.py](../api/service_health.py) 的 `_DATA_SERVICES` 加一张探针卡,
+   否则新源在 WebUI 健康面板里不出现。约定:
+   - **一个 vendor 一张卡**,探它**独此一家的那条路径**(没有回退的那个能力)。腾讯探
+     `qt.gtimg.cn` 快照而不是日线,因为 `get_etf_realtime` 只有它一档,日线在
+     `core_stock_apis` 链尾、前两档健康时压根不会被调用。要逐 cell 探整张
+     `VENDOR_METHODS` 表用 `/api/diagnostics/etf/{code}`,那才是全覆盖的工具。
+   - 行情类源做**新鲜度判定**(最新数据日 ≠ 今天 → `warning`);新闻类源只探可达性 ——
+     新闻没有「今天的行情数据」这层语义,硬判会给出误导性结论。
+   - `url` + `params` 能表达的走通用路径;要校验正文结构的(GBK ~ 分隔串、嵌套 JSON)
+     写个 `_run_<vendor>_probe` 并登记到 `_CUSTOM_PROBES`。
+   - 境内网页内部接口用 `_text_probe`,它按 session 级 `trust_env=False` 绕过代理
+     (企业代理隧道不到境内主机)。**不要**复用 vendor 的 `ak_retry`:6 次指数退避会把
+     SSE 健康流拖死,还会污染真实调用的进程级熔断状态。
+   - 零值 / 空列表算 `warning` 而不是 `ok`:抓取式接口的典型静默失败是 HTTP 200 + 空正文。
 
 **如果还新增了一个方法(如本次的 `get_etf_realtime`),额外改:**
 
-8. `interface.py` 的 `TOOLS_CATEGORIES[<category>]["tools"]` 加方法名 ——
+9. `interface.py` 的 `TOOLS_CATEGORIES[<category>]["tools"]` 加方法名 ——
    不在任何类别里,`get_category_for_method` 会抛 `ValueError`,路由直接不可用。
-9. [diagnostics.py](../tradingagents/dataflows/diagnostics.py) 的 `METHOD_GROUP` /
-   `METHOD_DESC` / `METHOD_PROBES` 三个字典都要加(`tests/dataflows/test_diagnostics.py`
-   断言它们完整覆盖 `VENDOR_METHODS`)。
-10. 暴露成 `@tool` 才能被 agent 调到:`agents/utils/<domain>_tools.py` 加函数、
+10. [diagnostics.py](../tradingagents/dataflows/diagnostics.py) 的 `METHOD_GROUP` /
+    `METHOD_DESC` / `METHOD_PROBES` 三个字典都要加(`tests/dataflows/test_diagnostics.py`
+    断言它们完整覆盖 `VENDOR_METHODS`)。
+11. 暴露成 `@tool` 才能被 agent 调到:`agents/utils/<domain>_tools.py` 加函数、
     `agents/utils/agent_utils.py` 的 import 与 `__all__`、需要时 `advisor/tools.py`
     的 `ADVISOR_TOOLS` 与 `advisor/prompt.py` 的框架说明。

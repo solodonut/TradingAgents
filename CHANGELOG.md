@@ -10,6 +10,25 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **腾讯、新浪进 WebUI 健康面板(探针卡 7 → 9 张)。** 上一条把两家接成了 vendor,但
+  `api/service_health.py` 的 `_DATA_SERVICES` 没登记 —— 新源在健康面板里彻底隐身,挂了
+  没人知道。按「一个 vendor 一张卡、探它**独此一家**的那条路径」补齐:
+  **腾讯**探 `qt.gtimg.cn` 实时快照(`get_etf_realtime` 只有它一档,挂了没有回退),
+  校验字段数 ≥ 82、第 78 位 IOPV 非零、按第 30 位快照时间做新鲜度判定;不探
+  `web.ifzq.gtimg.cn` 日线 —— 那档在 `core_stock_apis` 链尾,前两档健康时压根不会被调用。
+  **新浪**探 `zhibo.sina.com.cn` 7×24 feed(`get_global_news` 境内唯一可直连的第二档),
+  只判可达 + 列表非空,**不做新鲜度判定**:新闻源没有「今天的行情数据」这层语义,与
+  Eastmoney 那张卡一致。要逐 cell 探整张 `VENDOR_METHODS` 表仍用
+  `/api/diagnostics/etf/{code}`,两者分工不变。
+  新增 `_text_probe`(GBK/嵌套 JSON 正文需要自己解析,`_http_probe` 只回可达性),
+  按 session 级 `trust_env=False` 绕过代理 —— 企业代理隧道不到境内主机,不绕过会报红而
+  实际取数是好的;**刻意不复用 vendor 的 `ak_retry`**:6 次指数退避(最坏上百秒)会把 SSE
+  健康流拖死,还会污染真实调用的进程级熔断状态。也没用 `no_proxy_session()`,它猴补丁
+  `requests.Session.__init__` 并清空进程级环境变量,并发时会波及同进程正需要代理的 LLM 调用。
+  零值 / 空列表判 `warning` 而不是 `error`(停牌与非交易时段也会是 0)。原先 amazingdata
+  那个 `if spec.get("probe") == "amazingdata"` 分支收敛成 `_CUSTOM_PROBES` 字典分发。
+  新增 10 个单测,fixture 与 vendor 单测共用同一份 2026-09-04 真实响应;
+  `docs/data-sources.md` 第 10 节补第 8 步(探针卡),这是上批接入实际漏掉的一步。
 - **腾讯、新浪接入为数据源 vendor(路由层 9 → 11 个),并补回 IOPV/折溢价缺口。**
   两家都是网页内部接口:零费用、免 key、无 SLA、境内可直连。按「各取所长」只接各自有
   已验证端点的能力,`docs/data-sources.md` 第 8 节里为 ❌ 的能力一律不接。
