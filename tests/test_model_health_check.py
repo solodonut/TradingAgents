@@ -79,8 +79,8 @@ def _factory_where(ok_models):
 
 
 @pytest.mark.unit
-def test_check_and_select_keeps_configured_when_it_works():
-    # 所有候选都可用 -> 原配置优先，selected == configured
+def test_check_and_select_probes_only_configured_models():
+    # 只探测 .env 配置的模型，不再带 catalog 备选
     all_ok = MagicMock()
     all_ok.get_llm.return_value.invoke.return_value = MagicMock()
     with patch(
@@ -94,24 +94,16 @@ def test_check_and_select_keeps_configured_when_it_works():
     assert report.any_failed is False
     deep = report.slots["deep_think_llm"]
     quick = report.slots["quick_think_llm"]
+    assert [c.model for c in deep.candidates] == ["claude-opus-4-8"]
+    assert [c.model for c in quick.candidates] == ["claude-haiku-4-5"]
     assert deep.selected == "claude-opus-4-8"
     assert quick.selected == "claude-haiku-4-5"
-    # "全部测一遍"：候选含 configured + catalog 非 custom 项
-    assert deep.candidates[0].model == "claude-opus-4-8"
-    assert len(deep.candidates) == 3  # opus-4-8, opus-4-7, sonnet-4-6
-    assert len(quick.candidates) == 2  # haiku-4-5, sonnet-4-6
-    assert all(c.model.startswith("claude-") for c in [*deep.candidates, *quick.candidates])
-    assert "custom" not in [c.model for c in deep.candidates]
 
 
 @pytest.mark.unit
-def test_check_and_select_falls_back_to_first_working_candidate():
-    # 配置的 deep 模型挂，下一候选 opus-4-7 可用；quick 全程可用
-    ok = {
-        "claude-haiku-4-5",
-        "claude-opus-4-7",
-        "claude-sonnet-4-6",
-    }  # 注意：不含 claude-opus-4-8
+def test_check_and_select_does_not_fall_back_when_configured_fails():
+    # 配置的 deep 模型挂：即使 catalog 里有可用模型也不切换，直接标记失败
+    ok = {"claude-haiku-4-5", "claude-opus-4-7", "claude-sonnet-4-6"}
     with patch(
         "tradingagents.llm_clients.health_check.create_llm_client",
         side_effect=_factory_where(ok),
@@ -119,29 +111,10 @@ def test_check_and_select_falls_back_to_first_working_candidate():
         report = check_and_select(dict(_ICA_CONFIG))
 
     deep = report.slots["deep_think_llm"]
-    assert deep.configured == "claude-opus-4-8"
-    assert deep.selected == "claude-opus-4-7"  # configured 之后第一个 ok
-    assert deep.all_failed is False
-    assert report.any_failed is False
-    assert report.slots["quick_think_llm"].selected == "claude-haiku-4-5"
-
-
-@pytest.mark.unit
-def test_check_and_select_marks_all_failed_and_keeps_configured():
-    # deep 槽位所有候选都挂；quick 正常
-    quick_only = {
-        "claude-haiku-4-5",
-    }
-    with patch(
-        "tradingagents.llm_clients.health_check.create_llm_client",
-        side_effect=_factory_where(quick_only),
-    ):
-        report = check_and_select(dict(_ICA_CONFIG))
-
-    deep = report.slots["deep_think_llm"]
-    assert deep.all_failed is True
     assert deep.selected == "claude-opus-4-8"  # 保留原配置
+    assert deep.all_failed is True
     assert report.any_failed is True
+    assert report.slots["quick_think_llm"].all_failed is False
 
 
 @pytest.mark.unit
