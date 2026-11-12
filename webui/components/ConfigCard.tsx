@@ -1,36 +1,11 @@
 "use client";
 import Link from "next/link";
-import { Cpu, GripVertical, LoaderCircle, Play, Plus, X } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { GripVertical, LoaderCircle, Play, Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { getWatchlist, lookupTicker, saveWatchlist } from "@/lib/api";
 import type { AnalysisRequest, ConfigOptions } from "@/lib/types";
 
 type TickerItem = { ticker: string; name: string; type?: "etf" | "stock" };
-
-const DEEP_LLM_STORAGE_KEY = "ta:deep_think_llm";
-const QUICK_LLM_STORAGE_KEY = "ta:quick_think_llm";
-const MODEL_STORAGE_EVENT = "ta:model-storage";
-
-type ModelStorageKey = typeof DEEP_LLM_STORAGE_KEY | typeof QUICK_LLM_STORAGE_KEY;
-
-function getStoredModel(key: ModelStorageKey) {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(key);
-}
-
-function subscribeModelStorage(onStoreChange: () => void) {
-  window.addEventListener("storage", onStoreChange);
-  window.addEventListener(MODEL_STORAGE_EVENT, onStoreChange);
-  return () => {
-    window.removeEventListener("storage", onStoreChange);
-    window.removeEventListener(MODEL_STORAGE_EVENT, onStoreChange);
-  };
-}
-
-function setStoredModel(key: ModelStorageKey, value: string) {
-  localStorage.setItem(key, value);
-  window.dispatchEvent(new Event(MODEL_STORAGE_EVENT));
-}
 
 export function ConfigCard({
   options,
@@ -70,41 +45,6 @@ export function ConfigCard({
   ]);
   const [depth, setDepth] = useState<1 | 3 | 5>(3);
   const [language, setLanguage] = useState("Chinese");
-  const savedDeepLlm = useSyncExternalStore(
-    subscribeModelStorage,
-    () => getStoredModel(DEEP_LLM_STORAGE_KEY),
-    () => null,
-  );
-  const savedQuickLlm = useSyncExternalStore(
-    subscribeModelStorage,
-    () => getStoredModel(QUICK_LLM_STORAGE_KEY),
-    () => null,
-  );
-  const deepLlm = savedDeepLlm && options.model_options.deep.some(([, id]) => id === savedDeepLlm)
-    ? savedDeepLlm
-    : (options.configured_deep_llm ?? "");
-  const quickLlm = savedQuickLlm && options.model_options.quick.some(([, id]) => id === savedQuickLlm)
-    ? savedQuickLlm
-    : (options.configured_quick_llm ?? "");
-  const [modelsOpen, setModelsOpen] = useState(false);
-  const modelsRef = useRef<HTMLDivElement>(null);
-
-  // 弹出卡片：点击外部或按 Esc 关闭
-  useEffect(() => {
-    if (!modelsOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!modelsRef.current?.contains(e.target as Node)) setModelsOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setModelsOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [modelsOpen]);
 
   // 挂载后从后端 DB 回填代码清单（跨浏览器/设备/清缓存都不丢，读完才标记 loaded）。
   // DB 不可达或为空时回退到 localStorage 旧清单，并由下面的写回 effect 迁移进 DB。
@@ -231,12 +171,12 @@ export function ConfigCard({
           research_depth: depth,
           output_language: language,
           llm_provider: null,
-          deep_think_llm: deepLlm || null,
-          quick_think_llm: quickLlm || null,
+          deep_think_llm: null,
+          quick_think_llm: null,
         });
       }}
     >
-      <div ref={modelsRef} className="relative border-b border-border px-3 py-2">
+      <div className="border-b border-border px-3 py-2">
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
@@ -244,76 +184,8 @@ export function ConfigCard({
             </div>
             <div className="mt-0.5 text-sm text-foreground">新分析配置</div>
           </div>
-          <button
-            type="button"
-            onClick={() => setModelsOpen((v) => !v)}
-            aria-expanded={modelsOpen}
-            aria-haspopup="dialog"
-            title="选择模型"
-            className={`glass-control inline-flex size-8 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:border-primary ${
-              modelsOpen
-                ? "border-primary/50 text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <span className="sr-only">选择模型</span>
-            <Cpu className="size-4" aria-hidden="true" />
-          </button>
         </div>
 
-        {modelsOpen && (
-          <div
-            role="dialog"
-            aria-label="模型选择"
-            className="absolute left-2 right-2 top-[calc(100%-0.25rem)] z-50 space-y-3 rounded-lg border border-white/10 bg-popover/98 p-3 shadow-2xl backdrop-blur-2xl backdrop-saturate-150 animate-in fade-in-0 zoom-in-95 duration-150"
-          >
-            <div className="flex items-center justify-between">
-              <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted-foreground">
-                Models
-              </div>
-              <button
-                type="button"
-                onClick={() => setModelsOpen(false)}
-                aria-label="关闭"
-                className="inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:border-primary"
-              >
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
-            </div>
-            <label className="block space-y-1">
-              <span className="text-[0.7rem] text-muted-foreground">深度思考模型</span>
-              <select
-                value={deepLlm}
-                onChange={(e) => {
-                  setStoredModel(DEEP_LLM_STORAGE_KEY, e.target.value);
-                }}
-                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
-              >
-                {options.model_options.deep.map(([label, id]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block space-y-1">
-              <span className="text-[0.7rem] text-muted-foreground">快速思考模型</span>
-              <select
-                value={quickLlm}
-                onChange={(e) => {
-                  setStoredModel(QUICK_LLM_STORAGE_KEY, e.target.value);
-                }}
-                className="glass-control h-9 w-full rounded-md px-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary"
-              >
-                {options.model_options.quick.map(([label, id]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
       </div>
 
       <div className="space-y-4 p-3">
